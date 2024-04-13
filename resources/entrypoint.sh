@@ -138,14 +138,17 @@ dir_init=".config .config/pulse .local .local/share .local/share/zbox"
 dir_init+=" .local/share/zbox/$box_name Downloads"
 uid=$(id -u)
 gid=$(id -g)
-echo_color "$fg_orange" "Ensuring proper directory permissions in $HOME" >> $status_file
+echo_color "$fg_orange" "Ensuring proper permissions for user directories" >> $status_file
 for d in $dir_init; do
   dir=$HOME/$d
   sudo mkdir -p $dir || true
   sudo chown $uid:$gid $dir || true
 done
-if [ -n "$(ls /run/user/$uid 2>/dev/null)" ]; then
-  sudo chown $uid:$gid /run/user/$uid/* 2>/dev/null || true
+# change ownership of user's /run/user/<uid> tree which may have root ownership due to the
+# docker bind mounts
+run_dir=${XDG_RUNTIME_DIR:-/run/user/$uid}
+if [ -n "$(ls $run_dir 2>/dev/null)" ]; then
+  sudo chown $uid:$gid $run_dir/* 2>/dev/null || true
 fi
 
 # run the distribution specific initialization scripts

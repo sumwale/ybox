@@ -396,7 +396,7 @@ def run_base_container(current_user: str, distro: str, docker_cmd: str, env: Env
     group_entry = grp.getgrgid(user_entry.pw_gid)
     print_color(f"Creating container specific image having sudo user '{current_user}'",
             fg=fgcolor.purple)
-    init_result = subprocess.run([docker_cmd, "run", "-it",
+    init_result = subprocess.run([docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR",
         f"--name={env.box_name}", f"-v={env.scripts_dir}:{env.scripts_target_dir}:ro",
         f"--entrypoint={env.scripts_target_dir}/{env.entrypoint_base}", image_name,
         "-u", current_user, "-U", str(user_entry.pw_uid), "-n", user_entry.pw_gecos,
@@ -435,6 +435,7 @@ def start_container(docker_cmd: str, docker_args: list[str], env: Environ) -> st
     status_path.touch(mode=0o600, exist_ok=False)
     add_mount_option(docker_args, env.status_file, env.status_target_file)
 
+    docker_args.append("-e=XDG_RUNTIME_DIR")
     docker_args.append(f"--entrypoint={env.scripts_target_dir}/{env.entrypoint}")
     docker_args.append("--userns=keep-id")
     docker_args.append(env.box_image)

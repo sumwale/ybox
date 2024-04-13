@@ -99,7 +99,7 @@ echo_color "$fg_purple" "Added admin user '$user' to sudoers with NOPASSWD"
 
 # change ownership of user's /run/user/<uid> tree which may have root ownership due to the
 # docker bind mounts
-run_dir=/run/user/$uid
+run_dir=${XDG_RUNTIME_DIR:-/run/user/$uid}
 mkdir -p $run_dir
 chmod 0700 $run_dir
 chown -Rf $uid:$gid $run_dir
