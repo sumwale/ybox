@@ -36,7 +36,7 @@ def config_reader(conf_file: str, top_level: str = "") -> ConfigParser:
         top_level = conf_file
     if "base" in config and "includes" in config["base"]:
         for include in config["base"]["includes"].split(","):
-            if (include := include.strip()):
+            if include := include.strip():
                 inc_conf = config_reader(f"{os.path.dirname(conf_file)}/{include}", top_level)
                 for section in inc_conf.sections():
                     if section not in config.sections():
@@ -57,7 +57,7 @@ def config_postprocess(config: ConfigParser, now: InitNow) -> ConfigParser:
     for section in config.sections():
         conf_section = config[section]
         for key in conf_section:
-            if (val := conf_section[key]):
+            if val := conf_section[key]:
                 # replace ${NOW:...} pattern with appropriately formatted datetime string
                 new_val = re.sub(now_re, lambda mt: now.now.strftime(mt.group(1)), val)
                 new_val = os.path.expandvars(new_val)

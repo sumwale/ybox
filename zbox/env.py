@@ -122,6 +122,12 @@ class Environ:
     def status_target_file(self) -> str:
         return "/usr/local/zbox-status"
 
+    # distribution specific scripts expected to be available for all supported distributions
+    @property
+    @typechecked
+    def distribution_scripts(self) -> list[str]:
+        return ["init-base.sh", "init.sh", "init-user.sh"]
+
 
 @typechecked
 def add_env_option(args: list[str], envvar: str, envval: typing.Optional[str] = None) -> None:

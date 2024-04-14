@@ -134,8 +134,8 @@ fi
 box_name="${@:$OPTIND:1}"
 
 # create/update some common directories that are mounted and may have root permissions
-dir_init=".config .config/pulse .local .local/share .local/share/zbox"
-dir_init+=" .local/share/zbox/$box_name Downloads"
+dir_init=".cache .cache/fontconfig .config .config/pulse .local .local/share"
+dir_init+=" .local/share/zbox .local/share/zbox/$box_name Downloads"
 uid=$(id -u)
 gid=$(id -g)
 echo_color "$fg_orange" "Ensuring proper permissions for user directories" >> $status_file
@@ -155,10 +155,15 @@ fi
 if [ -r "$SCRIPT_DIR/init.sh" ]; then
   echo_color "$fg_orange" "Running distribution's system initialization script" >> $status_file
   sudo bash "$SCRIPT_DIR/init.sh"
-fi
-if [ -r "$SCRIPT_DIR/init-user.sh" ]; then
-  echo_color "$fg_orange" "Running distribution's user initialization script" >> $status_file
-  bash "$SCRIPT_DIR/init-user.sh"
+  if [ -r "$SCRIPT_DIR/init-user.sh" ]; then
+    echo_color "$fg_orange" "Running distribution's user initialization script" >> $status_file
+    bash "$SCRIPT_DIR/init-user.sh"
+  fi
+  # Update the status file to indicate the stoppage and exit because system libraries
+  # may have been installed/updated by the above scripts.
+  # Caller will restart the container after removing the init scripts.
+  echo stopped >> $status_file
+  exit 0
 fi
 
 # process config files, application installs and invoke startup apps
