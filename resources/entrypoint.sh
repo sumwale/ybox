@@ -24,7 +24,7 @@ function show_usage() {
   echo
   echo "Options:"
   echo "  -c CONFIG_LIST   file having list of configuration files to be setup in user's HOME"
-  echo "  -d CONFIG_DIR    target directory having configuration files"
+  echo "  -d CONFIG_DIR    target directory having the configuration files"
   echo "  -a APP_LIST      file having list of applications to be installed"
   echo "                   (each line should start with any additional package manager flags)"
   echo "  -s STARTUP_LIST  file containing list of startup applications for the container"
@@ -124,11 +124,6 @@ done
 
 if [ -n "$config_list" -a -z "$config_dir" ]; then
   echo "$0: missing '-d CONFIG_DIR' option for given CONFIG_LIST -- $config_list"
-  show_usage
-  exit 1
-fi
-if [ -z "$config_list" -a -n "$config_dir" ]; then
-  echo "$0: missing '-c CONFIG_LIST' option for given CONFIG_DIR -- $config_dir"
   show_usage
   exit 1
 fi

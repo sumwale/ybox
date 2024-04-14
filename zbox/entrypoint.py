@@ -90,7 +90,7 @@ def process_startup_section(startup_section: SectionProxy) -> None:
     print(bgcolor.red, "NOT DONE", bgcolor.reset)
 
 # read the config file and apply the settings (the [configs], [apps] and [startup] sections)
-if config_file and (config := config_postprocess(config_reader(config_file))):
+if config_file and (config := config_post_process(config_reader(config_file))):
     if "configs" in config:
         process_configs_section(config["configs"])
     if "apps" in config:
