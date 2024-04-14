@@ -39,14 +39,22 @@ function link_config_files() {
   while read -r config; do
     if [[ "$config" =~ $pattern ]]; then
       home_file="${BASH_REMATCH[1]}"
+      # expand env variables
+      eval home_file="$home_file"
       dest_file="$config_dir/${BASH_REMATCH[2]}"
       # only replace the file if it is already a link (assuming the link target may
       #   have changed in the config_list file)
-      if [ -L "$home_file" ]; then
-        rm -f "$home_file"
-      fi
-      if [ ! -e "$home_file" ]; then
-        ln -s "$dest_file" "$home_file"
+      if [ -e "$dest_file" ]; then
+        if [ -L "$home_file" ]; then
+          rm -f "$home_file"
+        fi
+        home_filedir=$(dirname "$home_file")
+        if [ ! -e "$home_filedir" ]; then
+          mkdir -p "$home_filedir"
+        fi
+        if [ ! -e "$home_file" ]; then
+          ln -s "$dest_file" "$home_file"
+        fi
       fi
     else
       echo_color "$fg_red" "Skipping config line having unknown format: $config" >> $status_file

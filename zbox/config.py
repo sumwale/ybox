@@ -26,6 +26,7 @@ class Configuration:
         self._target_configs_dir = f"{env.target_home}/{data_subdir}/{box_name}/configs"
         self._scripts_dir = f"{self._container_dir}/zbox-scripts"
         self._status_file = f"{self._container_dir}/status"
+        self._config_list = f"{self._scripts_dir}/config.list"
 
     # name of the container
     @property
@@ -104,3 +105,10 @@ class Configuration:
     @typechecked
     def distribution_scripts(self) -> list[str]:
         return ["init-base.sh", "init.sh", "init-user.sh"]
+
+    # file containing list of configuration files to be linked on that container to host
+    # as mentioned in the [configs] section
+    @property
+    @typechecked
+    def config_list(self) -> str:
+        return self._config_list

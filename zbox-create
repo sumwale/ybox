@@ -152,9 +152,12 @@ def get_config_file(f: str, conf: Configuration) -> str:
 def process_sections(config_file: str, env: Environ, conf: Configuration,
         docker_args: list[str]) -> None:
     now = InitNow()
-    # read the config file, recursively reading the includes if present,
-    # then replace the environment variables and the special ${NOW:...} from all values
-    config = config_postprocess(config_reader(config_file), now)
+    # Read the config file, recursively reading the includes if present,
+    # then replace the environment variables and the special ${NOW:...} from all values.
+    # Skip environment variable substitution for the "configs" section since the values
+    # there have to be written as is to 'config.list' file for the container (since the
+    #   $HOME variable can be different inside the container).
+    config = config_postprocess(config_reader(config_file), now, "configs")
     # finally process all the sections and the keys forming the docker/podman command-line
     for section in config.sections():
         if section == "base":
@@ -341,28 +344,26 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
         print(fgcolor.blue, "Creating a copy of paths in [configs]", fgcolor.reset, sep="")
     # write the links to be created in a file that will be passed to container
     # entrypoint to create symlinks from container user's home to the mounted config files
-    with open(f"{conf.scripts_dir}/config.list", "w", encoding="utf-8") as config_list_fd:
+    with open(conf.config_list, "w", encoding="utf-8") as config_list_fd:
         for key in configs_section:
             val = configs_section[key]
+            config_list_fd.write(val)
+            config_list_fd.write("\n")
+            # perform environment variable substitution now which was skipped earlier
+            val = os.path.expandvars(val)
             split_idx = val.find("->")
             if split_idx == -1:
                 sys.exit("Incorrect value format in [configs] section for "
                         f"'{key}'. Required: '{{src}} -> {{dest}}'")
-            config_list_fd.write(val)
-            config_list_fd.write("\n")
             src_path = os.path.realpath(val[:split_idx].strip())
             dest_path = f"{conf.configs_dir}/{val[split_idx + 2:].strip()}"
             if os.access(src_path, os.R_OK):
                 os.makedirs(os.path.dirname(dest_path), exist_ok=True)
                 if os.path.isdir(src_path):
-                    if config_hardlinks:
-                        shutil.copytree(src_path, dest_path, symlinks=False,
-                                copy_function=hardlink)
-                    else:
-                        shutil.copytree(src_path, dest_path, symlinks=False)
+                    copytree(src_path, dest_path, hardlink=config_hardlinks)
                 else:
                     if config_hardlinks:
-                        hardlink(src_path, dest_path, follow_symlinks=True)
+                        os.link(os.path.realpath(src_path), dest_path, follow_symlinks=True)
                     else:
                         shutil.copy2(src_path, dest_path, follow_symlinks=True)
             else:
@@ -371,13 +372,25 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
     # finally mount the configs directory to corresponding directory in the target container
     add_mount_option(args, conf.configs_dir, conf.target_configs_dir, "ro")
 
-# see this issue: os.link(..., follow_symlinks=True) broken on Linux
-# https://github.com/python/cpython/issues/81793
-# (the '*' in signature is from shutil.copy that indicates only keyword args allowed after it)
+# The shutil.copytree(...) method does not work correctly for "symlinks=False" (or at least
+#   not like 'cp -rL' or 'cp -rlL') where it does not create the source symlinked file rather
+# only the target one in the destination directory.
+# This is a simplified version using os.walk(...) that works correctly that always has:
+# a) follow_symlinks=True, and b) ignore_dangling_symlinks=True
 @typechecked
-def hardlink(src: str, dst: str, *, follow_symlinks=True) -> str:
-    os.link(os.path.realpath(src), dst, follow_symlinks=follow_symlinks)
-    return dst
+def copytree(src: str, dest: str, hardlink: bool = False) -> None:
+    for src_dir, _, src_files in os.walk(src, followlinks=True):
+        # substitute 'src' prefix with 'dest'
+        dest_dir = f"{dest}{src_dir[len(src):]}"
+        os.mkdir(dest_dir, mode=0o755)
+        for src_file in src_files:
+            src_path=f"{src_dir}/{src_file}"
+            if os.path.exists(src_path):
+                if hardlink:
+                    os.link(os.path.realpath(src_path), f"{dest_dir}/{src_file}",
+                            follow_symlinks=True)
+                else:
+                    shutil.copy2(src_path, f"{dest_dir}/{src_file}", follow_symlinks=True)
 
 @typechecked
 def setup_zbox_scripts(distro: str, conf: Configuration) -> None:
@@ -451,7 +464,11 @@ def start_container(docker_cmd: str, docker_args: list[str], conf: Configuration
     docker_args.append(f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint}")
     docker_args.append("--userns=keep-id")
     docker_args.append(conf.box_image)
+    if os.access(conf.config_list, os.R_OK):
+        docker_args.extend(["-c", f"{conf.target_scripts_dir}/config.list",
+            "-d", conf.target_configs_dir])
     docker_args.append(conf.box_name)
+
     docker_short_cmd = os.path.basename(docker_cmd)
     launch_result = subprocess.run(docker_args)
     if launch_result.returncode != 0:

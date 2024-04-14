@@ -49,9 +49,11 @@ def config_reader(conf_file: str, top_level: str = "") -> ConfigParser:
                                 conf_section[key] = inc_section[key]
     return config
 
-# replace the environment variables and the special ${NOW:...} from all values
+# Replace the environment variables and the special ${NOW:...} from all values.
+# If 'skip_section' is specified to a non-empty value, then no environment variable
+# substitution is done for that section but the ${NOW...} substitution is still performed.
 @typechecked
-def config_postprocess(config: ConfigParser, now: InitNow) -> ConfigParser:
+def config_postprocess(config: ConfigParser, now: InitNow, skip_section: str) -> ConfigParser:
     # prepare NOW substitution
     now_re = re.compile(r"\${NOW:([^}]*)}")
     for section in config.sections():
@@ -60,7 +62,8 @@ def config_postprocess(config: ConfigParser, now: InitNow) -> ConfigParser:
             if val := conf_section[key]:
                 # replace ${NOW:...} pattern with appropriately formatted datetime string
                 new_val = re.sub(now_re, lambda mt: now.now.strftime(mt.group(1)), val)
-                new_val = os.path.expandvars(new_val)
+                if key != skip_section:
+                    new_val = os.path.expandvars(new_val)
                 if new_val is not val:
                     conf_section[key] = new_val
     return config
