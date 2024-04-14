@@ -1,40 +1,13 @@
 import os
+import sys
 
 import argparse
-import getpass
-import typing
-
-from configparser import SectionProxy
 from typeguard import typechecked
 
-class Environ:
-    def __init__(self):
-        self._home_dir = os.environ['HOME']
-        # local user home might be in a different location than /home but target user in the
-        # container will always be in /home as ensured by zbox/entrypoint.py script
-        self._target_home = "/home/" + getpass.getuser()
-        os.environ["TARGET_HOME"] = self._target_home
-        self._xdg_rtdir = os.environ.get("XDG_RUNTIME_DIR")
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(script_dir))
 
-    # home directory of the current user
-    @property
-    @typechecked
-    def home(self) -> str:
-        return self._home_dir
-
-    # home directory of the container user (which is always $TARGET_HOME=/home/$USER and
-    #   hence can be different from $HOME)
-    @property
-    @typechecked
-    def target_home(self) -> str:
-        return self._target_home
-
-    # $XDG_RUNTIME_DIR in the current session
-    @property
-    @typechecked
-    def xdg_rtdir(self) -> str:
-        return self._xdg_rtdir
-
+from zbox.env import Environ
 
 class Configuration:
     @typechecked
@@ -131,16 +104,3 @@ class Configuration:
     @typechecked
     def distribution_scripts(self) -> list[str]:
         return ["init-base.sh", "init.sh", "init-user.sh"]
-
-
-@typechecked
-def add_env_option(args: list[str], envvar: str, envval: typing.Optional[str] = None) -> None:
-    if envval is None:
-        args.append(f"-e={envvar}")
-    else:
-        args.append(f"-e={envvar}={envval}")
-
-@typechecked
-def process_env_section(env_section: SectionProxy, args: list[str]) -> None:
-    for key in env_section:
-        add_env_option(args, key, env_section[key])
