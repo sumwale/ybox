@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 import sys
@@ -44,6 +45,19 @@ class EnvInterpolation(Interpolation):
             value = os.path.expandvars(value)
         # replace ${NOW:...} pattern with appropriately formatted datetime string
         return re.sub(self._now_re, lambda mt: self._now.now.strftime(mt.group(1)), value)
+
+
+@typechecked
+def get_docker_command(args: argparse.Namespace) -> typing.Optional[str]:
+    # check for podman first then docker
+    if args.docker_path:
+        return args.docker_path
+    elif os.access("/usr/bin/podman", os.X_OK):
+        return "/usr/bin/podman"
+    elif os.access("/usr/bin/docker", os.X_OK):
+        return "/usr/bin/docker"
+    else:
+        return None
 
 
 # read the ini file, recursing into the includes to build the final dictionary

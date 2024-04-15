@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-import argparse
 import grp
 import pwd
 import shutil
@@ -150,9 +149,9 @@ def parse_args() -> argparse.Namespace:
                                 not provided (removing the .ini suffix from <configuration>)""")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
-    parser.add_argument("distribution",
+    parser.add_argument("distribution", type=str,
                         help="short name of the distribution (should be in supported.list)")
-    parser.add_argument("configuration",
+    parser.add_argument("configuration", type=str,
                         help="""the ini configuration file to be used for creating the zbox
                     (should be in <distribution>/confs directory)""")
     return parser.parse_args()
@@ -169,14 +168,8 @@ def process_args(args: argparse.Namespace) -> (str, str):
             box_name = box_name[:-len(ini_suffix)]
         box_name = f"{args.distribution}-{box_name}"
 
-    # check for podman first then docker
-    if args.docker_path:
-        docker_cmd = args.docker_path
-    elif os.access("/usr/bin/podman", os.X_OK):
-        docker_cmd = "/usr/bin/podman"
-    elif os.access("/usr/bin/docker", os.X_OK):
-        docker_cmd = "/usr/bin/docker"
-    else:
+    docker_cmd = get_docker_command(args)
+    if not docker_cmd:
         sys.exit("Neither /usr/bin/podman nor /usr/bin/docker found and no -d option provided")
     return box_name, docker_cmd
 
