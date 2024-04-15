@@ -43,14 +43,9 @@ class Configuration:
         self._app_list = f"{self._scripts_dir}/app.list"
 
     @typechecked
-    def get_config_file(self, conf_file: str, config_subdir: str = "") -> str:
-        # order is first search in provided user's config subdirectory, then in user's
-        # top-level config directory, and then repeat the two for the system config directory
+    def get_config_file(self, conf_file: str) -> str:
+        # order is first search in user's config directory, and then the system config directory
         for config_dir in self._configuration_dirs:
-            if config_subdir:
-                path = f"{config_dir}/{config_subdir}/{conf_file}"
-                if os.access(path, os.R_OK):
-                    return path
             path = f"{config_dir}/{conf_file}"
             if os.access(path, os.R_OK):
                 return path

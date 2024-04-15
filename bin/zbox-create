@@ -39,7 +39,9 @@ def main() -> None:
     setup_zbox_scripts(distro, conf)
 
     # the configuration file used to build the docker/podman command-line
-    config_file = conf.get_config_file(args.configuration, f"{distro}/confs")
+    config_file = args.configuration
+    if not os.access(config_file, os.R_OK):
+        config_file = conf.get_config_file(config_file)
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the configuration file before any actions to ensure it is in proper shape
     shared_root = process_sections(config_file, distro, env, conf, docker_full_args)
@@ -157,7 +159,9 @@ def parse_args() -> argparse.Namespace:
                         help="short name of the distribution (should be in supported.list)")
     parser.add_argument("configuration", type=str,
                         help="""the ini configuration file to be used for creating the zbox
-                    (should be in <distribution>/confs directory)""")
+                                (can be a relative or absolute path, or be in user or system
+                                 configuration directory which are $HOME/.config/zbox and
+                                 /etc/zbox respectively)""")
     return parser.parse_args()
 
 
@@ -167,7 +171,7 @@ def process_args(args: argparse.Namespace) -> (str, str):
     if args.name:
         box_name = args.name
     else:
-        box_name = args.configuration
+        box_name = os.path.basename(args.configuration)
         if box_name.endswith(ini_suffix):
             box_name = box_name[:-len(ini_suffix)]
         box_name = f"{args.distribution}-{box_name}"
