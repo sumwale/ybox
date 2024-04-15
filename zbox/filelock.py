@@ -1,9 +1,9 @@
 import errno
 import fcntl
 import time
-import typing
-
 from datetime import datetime
+from typing import Optional
+
 from typeguard import typechecked
 
 
@@ -40,7 +40,7 @@ class FileLock:
 
     def __enter__(self):
         self._lock_fd = open(self._lock_file, "w+")
-        start_time: typing.Optional[datetime] = None
+        start_time: Optional[datetime] = None
         remaining_time = self._timeout
         while remaining_time != 0:
             try:

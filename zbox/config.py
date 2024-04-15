@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from typing import Optional
 
 from typeguard import typechecked
 
@@ -78,7 +79,7 @@ class Configuration:
     # the target link for /etc/localtime
     @property
     @typechecked
-    def localtime(self) -> str:
+    def localtime(self) -> Optional[str]:
         return self._localtime
 
     # the contents of /etc/timezone
@@ -90,7 +91,7 @@ class Configuration:
     # host directory that is bind mounted as the shared root directory on containers
     @property
     @typechecked
-    def shared_root_host_dir(self) -> str:
+    def shared_root_host_dir(self) -> Optional[str]:
         return self._shared_root_host_dir
 
     # directory where shared root directory is mounted in a container during setup

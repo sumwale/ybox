@@ -3,10 +3,10 @@ import os
 import re
 import subprocess
 import sys
-import typing
 from collections import namedtuple
 from configparser import ConfigParser, Interpolation
 from datetime import datetime
+from typing import Optional
 
 from typeguard import typechecked
 
@@ -71,7 +71,7 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
 
 # read the ini file, recursing into the includes to build the final dictionary
 @typechecked
-def config_reader(conf_file: str, interpolation: typing.Optional[Interpolation],
+def config_reader(conf_file: str, interpolation: Optional[Interpolation],
                   top_level: str = "") -> ConfigParser:
     if not os.access(conf_file, os.R_OK):
         if top_level:
@@ -128,8 +128,8 @@ bgcolor = TermColors("\033[40m", "\033[41m", "\033[42m", "\033[43m", "\033[44m",
 
 
 @typechecked
-def print_color(msg: str, fg: typing.Optional[str] = None,
-                bg: typing.Optional[str] = None, end: str = "\n"):
+def print_color(msg: str, fg: Optional[str] = None,
+                bg: Optional[str] = None, end: str = "\n"):
     if fg:
         if bg:
             full_msg = f"{fg}{bg}{msg}{bgcolor.reset}{fgcolor.reset}"

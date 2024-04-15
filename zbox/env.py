@@ -1,7 +1,7 @@
 import getpass
 import os
-import typing
 from configparser import SectionProxy
+from typing import Optional
 
 from typeguard import typechecked
 
@@ -46,7 +46,7 @@ class ZboxLabel:
 
 
 @typechecked
-def add_env_option(args: list[str], env_var: str, env_val: typing.Optional[str] = None) -> None:
+def add_env_option(args: list[str], env_var: str, env_val: Optional[str] = None) -> None:
     if env_val is None:
         args.append(f"-e={env_var}")
     else:
