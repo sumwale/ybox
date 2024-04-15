@@ -28,7 +28,7 @@ def main() -> None:
     print_color(f"Creating zbox container named '{box_name}'", fg=fgcolor.purple)
     env = Environ()
     conf = Configuration(args, env, box_name)
-    support_list = get_config_file("supported.list", conf)
+    support_list = conf.get_config_file("supported.list")
     distro = args.distribution
     # check that the distribution is in supported.list
     with open(support_list, "r", encoding="utf-8") as supp_file:
@@ -39,7 +39,7 @@ def main() -> None:
     setup_zbox_scripts(distro, conf)
 
     # the configuration file used to build the docker/podman command-line
-    config_file = get_config_file(f"{distro}/confs/{args.configuration}", conf)
+    config_file = conf.get_config_file(args.configuration, f"{distro}/confs")
     docker_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the configuration file before any actions to ensure it is in proper shape
     shared_root = process_sections(config_file, distro, env, conf, docker_args)
@@ -182,15 +182,6 @@ def process_args(args: argparse.Namespace) -> (str, str):
 
 
 @typechecked
-def get_config_file(f: str, conf: Configuration) -> str:
-    for d in conf.configuration_dirs:
-        path = f"{d}/{f}"
-        if os.access(path, os.R_OK):
-            return path
-    sys.exit(f"Configuration file {f} not found in [{', '.join(conf.configuration_dirs)}]")
-
-
-@typechecked
 def process_sections(config_file: str, distro: str, env: Environ, conf: Configuration,
                      docker_args: list[str]) -> bool:
     now = InitNow()
@@ -199,7 +190,8 @@ def process_sections(config_file: str, distro: str, env: Environ, conf: Configur
     # Skip environment variable substitution for the "configs" section since the values
     # there have to be written as is to 'config.list' file for the container (since the
     #   $HOME variable can be different inside the container).
-    config = config_post_process(config_reader(config_file), now, "configs")
+    env_interpolation = EnvInterpolation(now, ["configs"])
+    config = config_reader(config_file, env_interpolation)
     # shared_root is false by default
     shared_root = False
     # hard links are false by default
@@ -477,7 +469,7 @@ def copytree(src: str, dest: str, hardlink: bool = False) -> None:
     for src_dir, _, src_files in os.walk(src, followlinks=True):
         # substitute 'src' prefix with 'dest'
         dest_dir = f"{dest}{src_dir[len(src):]}"
-        os.mkdir(dest_dir, mode=0o755)
+        os.mkdir(dest_dir)
         for src_file in src_files:
             src_path = f"{src_dir}/{src_file}"
             if os.path.exists(src_path):
@@ -497,17 +489,17 @@ def setup_zbox_scripts(distro: str, conf: Configuration) -> None:
     # copy the common scripts
     for script in [conf.entrypoint_base, conf.entrypoint_cp, conf.entrypoint,
                    "entrypoint-common.sh", "prime-run"]:
-        path = get_config_file(f"resources/{script}", conf)
+        path = conf.get_config_file(f"resources/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     # also copy distribution specific scripts
     for script in conf.distribution_scripts:
-        path = get_config_file(f"{distro}/{script}", conf)
+        path = conf.get_config_file(f"{distro}/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
 
 
 @typechecked
 def read_distribution_config(distro: str, conf: Configuration) -> (str, str, ConfigParser):
-    distro_config = config_reader(get_config_file(f"{distro}/distro.ini", conf))
+    distro_config = config_reader(conf.get_config_file(f"{distro}/distro.ini"), None)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
     shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist
