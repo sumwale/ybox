@@ -55,22 +55,21 @@ def main() -> None:
     #    will be used henceforth. The main point of doing #1 is to ensure that a sudo enabled
     #    user is available which matches the current host user so that "--userns" option
     #    will not try to remap the image that can substantially increase the size of image.
-    #    Either way the user created by "--userns" in the container does not have sudo
+    #    Either way, the user created by "--userns" in the container does not have sudo
     #    permissions, so we temporarily need to run such a container as root user in any case.
-    #    Hence, step 1 uses a cleaner and better option that also create separate
+    #    Hence, step 1 uses a cleaner and better option that also creates separate
     #    container-specific images that can be enhanced with more container-specific stuff
     #    later if required. Also change the USER and WORKDIR of the commit to point to the
     #    user added in step 1).
     # 3) Start up the saved image of step 2 and run the distro specific entrypoint script
-    #    that will do basic configuration and package installation (e.g. git/paru/nvim on arch)
+    #    that will do basic configuration and package installation (e.g. git/neovim/... on arch)
     #    followed by the generic "entrypoint.sh" script which will create the configuration
     #    file links (from [configs] section), install required apps (from [apps] section),
-    #    followed by invoking the startup scripts from the [startup] section. The distro
-    #    specific is run as root user (i.e. using sudo) while the generic one is run as user.
-    # 4) The container is now ready to use so 'zbox-enter' will only do a docker/podman exec
+    #    followed by invoking the startup scripts from the [startup] section.
+    # 4) The container is now ready to use so 'zbox-shell' will only do a docker/podman exec
     #    of /bin/bash to open a shell.
     # 5) Mounts and environment variables are set up for step 3 which are automatically also
-    #    are available in step 4.
+    #    available in step 4, and hence no special setup is required in step 4.
     #
     # If 'base.shared_root' is true, the above sequence has the following changes:
     # 1) First acquire a file/process lock so that no other container creation can interfere.
@@ -83,10 +82,10 @@ def main() -> None:
     #    directories to the shared mount point. This copying cannot be done in step 4) above
     #    because the file permissions are different with and without the --userns option.
     # 6) Stop the container and commit the image again with the final shared image name.
-    #    Delete the previous temporary image. Release the file lock acquired in the step 1).
+    #    Delete the previous temporary image. Release the file lock acquired in step 1).
     # 7) Now start the shared image like in step 3) of the previous sequence but with the
     #    additional root directory mounts that were copied in step 5 above.
-    # Finally, end with steps 4) and 5) of previous sequence.
+    # Finally, continue with step 4) onwards of previous sequence.
 
     # handle the shared_root case: acquire file lock and check if shared container image exists
     shared_root_dirs = ""
@@ -119,6 +118,10 @@ def main() -> None:
         # commit the stopped container, remove it, then start new container with the
         # "--userns=keep-id" option for the required container state
         commit_container(current_user, docker_cmd, conf.box_image(False), conf)
+
+    # there is one additional stop/start below because all packages are upgraded by the
+    # entrypoint script to pick up any important fixes which can lead to system libraries
+    # getting upgraded, so it's best to restart container for those to take effect properly
 
     # set up the final container with all the required arguments
     print_color(f"Initializing container for '{distro}' using '{config_file}'",
