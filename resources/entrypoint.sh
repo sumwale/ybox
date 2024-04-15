@@ -66,16 +66,18 @@ function link_config_files() {
 function install_apps() {
   # source PKGMGR_* variables from the configuration file created by 'zbox-create'
   source "$pkgmgr_conf"
-  if [ -z "$PKGMGR_INSTALL" -o \
-       -z "$PKGMGR_REMOVE" -o -z "$PKGMGR_UPDATE_ALL" ]; then
-    echo_color "$fg_red" "$pkgmgr_conf should define all of PKGMGR_INSTALL, PKGMGR_REMOVE and PKGMGR_UPDATE_ALL" >> $status_file
+  if [ -z "$PKGMGR_INSTALL" -o -z "$PKGMGR_CLEANUP" ]; then
+    echo_color "$fg_red" "$pkgmgr_conf should define PKGMGR_INSTALL and PKGMGR_CLEANUP" >> $status_file
     exit 1
   fi
   # install packages line by line
   while read -r pkg_line; do
     echo_color "$fg_orange" "Installing: ${pkg_line:0:40} ..." >> $status_file
-    $PKGMGR_INSTALL $pkg_line
+    eval $PKGMGR_INSTALL $pkg_line
+    echo_color "$fg_green" "Done." >> $status_file
   done < "$app_list"
+  echo_color "$fg_green" "Cleaning up." >> $status_file
+  eval $PKGMGR_CLEANUP
 }
 
 # invoke the startup apps as listed in the container configuration file

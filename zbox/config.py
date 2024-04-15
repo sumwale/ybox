@@ -39,6 +39,7 @@ class Configuration:
         self._scripts_dir = f"{self._container_dir}/zbox-scripts"
         self._status_file = f"{self._container_dir}/status"
         self._config_list = f"{self._scripts_dir}/config.list"
+        self._app_list = f"{self._scripts_dir}/app.list"
 
     # name of the container
     @property
@@ -155,3 +156,9 @@ class Configuration:
     @typechecked
     def config_list(self) -> str:
         return self._config_list
+
+    # file containing list of applications to be installed in the container
+    @property
+    @typechecked
+    def app_list(self) -> str:
+        return self._app_list

@@ -42,7 +42,7 @@ def main() -> None:
     config_file = get_config_file(f"{distro}/confs/{args.configuration}", conf)
     docker_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the configuration file before any actions to ensure it is in proper shape
-    shared_root = process_sections(config_file, env, conf, docker_args)
+    shared_root = process_sections(config_file, distro, env, conf, docker_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -109,7 +109,7 @@ def main() -> None:
                 commit_container(current_user, docker_cmd, conf.box_image(True), conf)
                 remove_image(docker_cmd, tmp_image)
             else:
-                _, shared_root_dirs = read_distribution_config(distro, conf)
+                _, shared_root_dirs, _ = read_distribution_config(distro, conf)
     else:
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
@@ -191,7 +191,7 @@ def get_config_file(f: str, conf: Configuration) -> str:
 
 
 @typechecked
-def process_sections(config_file: str, env: Environ, conf: Configuration,
+def process_sections(config_file: str, distro: str, env: Environ, conf: Configuration,
                      docker_args: list[str]) -> bool:
     now = InitNow()
     # Read the config file, recursively reading the includes if present,
@@ -217,7 +217,9 @@ def process_sections(config_file: str, env: Environ, conf: Configuration,
             process_env_section(config["env"], docker_args)
         elif section == "configs":
             process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
-        elif section != "apps" and section != "appflags" and section != "startup":
+        elif section == "apps":
+            process_apps_section(config["apps"], distro, conf)
+        elif section != "appflags" and section != "startup":
             sys.exit(f"Unknown section [{section}] in '{config_file}' or one of its includes")
     return shared_root
 
@@ -439,6 +441,32 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
     add_mount_option(args, conf.configs_dir, conf.target_configs_dir, "ro")
 
 
+@typechecked
+def process_apps_section(apps_section: SectionProxy, distro: str, conf: Configuration) -> None:
+    # first update the mirrors
+    _, _, distro_config = read_distribution_config(distro, conf)
+    pkgmgr = distro_config["pkgmgr"]
+    install_cmd = pkgmgr["install"]
+    cleanup_cmd = pkgmgr["cleanup"]
+    if not install_cmd:
+        print_color("Skipping app installation since no 'pkgmgr.install' has "
+                    "been defined in distro.ini or is empty", fg=fgcolor.lightgray, bg=bgcolor.red)
+        return
+    # write pkgmgr.conf for entrypoint.sh
+    with open(f"{conf.scripts_dir}/pkgmgr.conf", "w", encoding="utf-8") as pkg_fd:
+        pkg_fd.write(f"PKGMGR_INSTALL='{install_cmd}'\n")
+        pkg_fd.write(f"PKGMGR_CLEANUP='{cleanup_cmd}'\n")
+    with open(conf.app_list, "w", encoding="utf-8") as apps_fd:
+        extra_args = "extra-args="
+        for key in apps_section:
+            apps = apps_section[key].split(";")
+            args = [a[len(extra_args):] for a in apps if a.startswith(extra_args)]
+            args = " ".join(args)
+            if args:
+                apps = [app for app in apps if not app.startswith(extra_args)]
+            apps_fd.write(f"{args} {' '.join(apps)}\n")
+
+
 # The shutil.copytree(...) method does not work correctly for "symlinks=False" (or at least
 #   not like 'cp -rL' or 'cp -rlL') where it does not create the source symlinked file rather
 # only the target one in the destination directory.
@@ -478,19 +506,19 @@ def setup_zbox_scripts(distro: str, conf: Configuration) -> None:
 
 
 @typechecked
-def read_distribution_config(distro: str, conf: Configuration) -> (str, str):
+def read_distribution_config(distro: str, conf: Configuration) -> (str, str, ConfigParser):
     distro_config = config_reader(get_config_file(f"{distro}/distro.ini", conf))
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
     shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist
-    return image_name, shared_root_dirs
+    return image_name, shared_root_dirs, distro_config
 
 
 @typechecked
 def run_base_container(current_user: str, distro: str, docker_cmd: str,
                        conf: Configuration) -> str:
     # determine the base image name
-    image_name, shared_root_dirs = read_distribution_config(distro, conf)
+    image_name, shared_root_dirs, _ = read_distribution_config(distro, conf)
     # refresh the image locally first to decrease update size later
     print_color(f"Refreshing local copy of the base image '{image_name}'", fg=fgcolor.purple)
     pull_result = subprocess.run([docker_cmd, "pull", image_name])
@@ -541,7 +569,7 @@ def run_shared_copy_container(distro: str, docker_cmd: str, image_name: str,
         if response.lower() == "y":
             try:
                 shutil.rmtree(root_host)
-            except Exception:
+            except OSError:
                 # try with sudo
                 sudo_rm = subprocess.run(["sudo", "/bin/rm", "-rf", root_host])
                 if sudo_rm.returncode != 0:
@@ -622,8 +650,11 @@ def start_container(docker_cmd: str, docker_args: list[str], shared_root_dirs: s
     if os.access(conf.config_list, os.R_OK):
         docker_args.extend(["-c", f"{conf.target_scripts_dir}/config.list",
                             "-d", conf.target_configs_dir])
-    docker_args.append(conf.box_name)
+    if os.access(conf.app_list, os.R_OK):
+        docker_args.append("-a")
+        docker_args.append(f"{conf.target_scripts_dir}/app.list")
 
+    docker_args.append(conf.box_name)
     docker_short_cmd = os.path.basename(docker_cmd)
     launch_result = subprocess.run(docker_args)
     if launch_result.returncode != 0:
