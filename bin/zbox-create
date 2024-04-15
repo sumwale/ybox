@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from textwrap import dedent
 
+# noinspection PyUnresolvedReferences
+from bin_util import *
 from zbox.config import Configuration
 from zbox.env import *
 from zbox.filelock import FileLock
