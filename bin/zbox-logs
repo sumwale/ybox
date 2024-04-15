@@ -1,7 +1,5 @@
 #!/usr/bin/python3
 
-import subprocess
-
 # noinspection PyUnresolvedReferences
 from bin_util import *
 from zbox.util import *
@@ -10,10 +8,12 @@ from zbox.util import *
 @typechecked
 def main() -> int:
     args = parse_args()
-    docker_cmd = get_docker_command(args)
+    docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
-    if not docker_cmd:
-        sys.exit("Neither /usr/bin/podman nor /usr/bin/docker found and no -d option provided")
+
+    if not check_running_zbox(docker_cmd, container_name):
+        print_color(f"No active zbox container named '{container_name}' found", fg=fgcolor.red)
+        return 1
 
     if args.follow:
         log_result = subprocess.run([docker_cmd, "container", "logs", "-f", container_name])

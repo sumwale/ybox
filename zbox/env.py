@@ -35,6 +35,16 @@ class Environ:
         return self._xdg_rt_dir
 
 
+class ZboxLabel:
+    """
+    Labels for zbox created objects.
+    """
+    CONTAINER_TYPE = "io.zbox.container.type"
+    CONTAINER_BASE = f"{CONTAINER_TYPE}=base"
+    CONTAINER_COPY = f"{CONTAINER_TYPE}=copy"
+    CONTAINER_PRIMARY = f"{CONTAINER_TYPE}=primary"
+
+
 @typechecked
 def add_env_option(args: list[str], env_var: str, env_val: typing.Optional[str] = None) -> None:
     if env_val is None:

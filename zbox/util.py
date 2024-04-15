@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+import subprocess
 import sys
 import typing
 from collections import namedtuple
@@ -8,6 +9,11 @@ from configparser import ConfigParser, Interpolation
 from datetime import datetime
 
 from typeguard import typechecked
+
+from zbox.env import ZboxLabel
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(script_dir))
 
 
 class InitNow:
@@ -48,7 +54,7 @@ class EnvInterpolation(Interpolation):
 
 
 @typechecked
-def get_docker_command(args: argparse.Namespace) -> typing.Optional[str]:
+def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
     # check for podman first then docker
     if args.docker_path:
         return args.docker_path
@@ -57,7 +63,10 @@ def get_docker_command(args: argparse.Namespace) -> typing.Optional[str]:
     elif os.access("/usr/bin/docker", os.X_OK):
         return "/usr/bin/docker"
     else:
-        return None
+        print_color("Neither /usr/bin/podman nor /usr/bin/docker found "
+                    f"and no {option_name} option provided",
+                    fg=fgcolor.red)
+        sys.exit(1)
 
 
 # read the ini file, recursing into the includes to build the final dictionary
@@ -97,6 +106,16 @@ def config_reader(conf_file: str, interpolation: typing.Optional[Interpolation],
 @typechecked
 def print_config(config: ConfigParser) -> None:
     print({section: dict(config[section]) for section in config.sections()})
+
+
+@typechecked
+def check_running_zbox(docker_cmd: str, box_name: str) -> bool:
+    check_result = subprocess.run(
+        [docker_cmd, "inspect", "--type=container",
+         '--format={{index .Config.Labels "' + ZboxLabel.CONTAINER_TYPE + '"}} {{.State.Status}}',
+         box_name], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return (check_result.returncode == 0 and
+            check_result.stdout.decode("utf-8").rstrip() == "primary running")
 
 
 # colors for printing in terminal

@@ -3,7 +3,6 @@
 import grp
 import pwd
 import shutil
-import subprocess
 import time
 from pathlib import Path
 from textwrap import dedent
@@ -92,7 +91,7 @@ def main() -> None:
     if shared_root:
         os.makedirs(os.path.dirname(conf.shared_root_host_dir), exist_ok=True)
         with FileLock(f"{conf.shared_root_host_dir}-image.lock"):
-            image_exists = subprocess.run([docker_cmd, "image", "inspect",
+            image_exists = subprocess.run([docker_cmd, "inspect", "--type=image",
                                            "--format={{.Id}}", conf.box_image(True)],
                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             # if image already exists, then skip the subsequent steps
@@ -168,9 +167,7 @@ def process_args(args: argparse.Namespace) -> (str, str):
             box_name = box_name[:-len(ini_suffix)]
         box_name = f"{args.distribution}-{box_name}"
 
-    docker_cmd = get_docker_command(args)
-    if not docker_cmd:
-        sys.exit("Neither /usr/bin/podman nor /usr/bin/docker found and no -d option provided")
+    docker_cmd = get_docker_command(args, "-d")
     return box_name, docker_cmd
 
 
@@ -517,6 +514,7 @@ def run_base_container(current_user: str, distro: str, docker_cmd: str,
                 fg=fgcolor.purple)
     docker_run = [docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR", f"--name={conf.box_name}",
                   f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
+                  f"--label={ZboxLabel.CONTAINER_BASE}",
                   f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_base}",
                   image_name, "-u", current_user, "-U", str(user_entry.pw_uid),
                   "-n", user_entry.pw_gecos, "-g", group_entry.gr_name,
@@ -572,6 +570,7 @@ def run_shared_copy_container(distro: str, docker_cmd: str, image_name: str,
     init_result = subprocess.run([docker_cmd, "run", "-it", f"--name={conf.box_name}",
                                   f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
                                   f"-v={root_host}:{conf.shared_root_mount_dir}",
+                                  f"--label={ZboxLabel.CONTAINER_COPY}",
                                   "--userns=keep-id", "--user=0",
                                   f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_cp}",
                                   image_name, shared_root_dirs, conf.shared_root_mount_dir])
@@ -629,6 +628,7 @@ def start_container(docker_full_cmd: list[str], shared_root_dirs: str,
     for lang_var in ["LANG", "LANGUAGE"]:
         docker_full_cmd.append(f"-e={lang_var}")
     docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
+    docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_PRIMARY}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint}")
     docker_full_cmd.append("--userns=keep-id")
     docker_full_cmd.append(conf.box_image(bool(shared_root_dirs)))
@@ -654,10 +654,7 @@ def wait_for_container(docker_cmd: str, conf: Configuration) -> None:
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
         for secs in range(max_wait_secs):
             # check the container status first
-            check_result = subprocess.run([docker_cmd, "inspect", "-f",
-                                           "{{.State.Status}}", box_name], capture_output=True)
-            if (check_result.returncode == 0 and
-                    check_result.stdout.decode("utf-8").startswith("running")):
+            if check_running_zbox(docker_cmd, box_name):
                 while line := status_fd.readline():
                     if line == "started\n":
                         # clear the status file and return
