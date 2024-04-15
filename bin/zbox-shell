@@ -25,7 +25,7 @@ def main() -> int:
 
 @typechecked
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Open a shell on a running zbox container")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-s", "--shell", type=str, default="/bin/bash",

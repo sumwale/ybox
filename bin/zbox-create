@@ -142,7 +142,12 @@ def main() -> None:
 
 @typechecked
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="""Create a new zbox container for given Linux distribution and configured
+                       with given file in INI format. It allows for set up of various aspects of
+                       the zbox including support for X11, Wayland, audio, video acceleration,
+                       NVIDIA, dbus among others. It also allows controlling various parameters
+                       of the container including directories to be shared, logging etc.""")
     parser.add_argument("-n", "--name", type=str,
                         help="""name of the box; default is <distribution>-<configuration> if
                                 not provided (removing the .ini suffix from <configuration>)""")
