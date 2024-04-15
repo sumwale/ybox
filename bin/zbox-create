@@ -41,9 +41,9 @@ def main() -> None:
 
     # the configuration file used to build the docker/podman command-line
     config_file = conf.get_config_file(args.configuration, f"{distro}/confs")
-    docker_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
+    docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the configuration file before any actions to ensure it is in proper shape
-    shared_root = process_sections(config_file, distro, env, conf, docker_args)
+    shared_root = process_sections(config_file, distro, env, conf, docker_full_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -122,25 +122,23 @@ def main() -> None:
     # set up the final container with all the required arguments
     print_color(f"Initializing container for '{distro}' using '{config_file}'",
                 fg=fgcolor.blue)
-    docker_short_cmd = start_container(docker_cmd, docker_args, shared_root_dirs, conf)
+    start_container(docker_full_args, shared_root_dirs, conf)
     print_color("Waiting for the container to initialize (see "
-                f"'{docker_short_cmd} logs -f {box_name}' for detailed progress)",
-                fg=fgcolor.blue)
+                f"'zbox-logs -f {box_name}' for detailed progress)", fg=fgcolor.blue)
     sys.stdout.flush()
     # wait for container to initialize while printing out its progress from conf.status_file
-    wait_for_container(docker_cmd, docker_short_cmd, conf)
+    wait_for_container(docker_cmd, conf)
 
     # remove distribution specific scripts and restart container the final time
     print_color(f"Restarting the final container having '{distro}' specific configuration",
                 fg=fgcolor.purple)
     for script in conf.distribution_scripts:
         os.unlink(f"{conf.scripts_dir}/{script}")
-    restart_container(docker_cmd, docker_short_cmd, conf)
+    restart_container(docker_cmd, conf)
     print_color("Waiting for the container to be ready (see "
-                f"'{docker_short_cmd} logs -f {box_name}' for detailed progress)",
-                fg=fgcolor.blue)
+                f"'zbox-logs -f {box_name}' for detailed progress)", fg=fgcolor.blue)
     sys.stdout.flush()
-    wait_for_container(docker_cmd, docker_short_cmd, conf)
+    wait_for_container(docker_cmd, conf)
 
 
 @typechecked
@@ -617,42 +615,40 @@ def remove_image(docker_cmd: str, box_image: str) -> None:
 
 
 @typechecked
-def start_container(docker_cmd: str, docker_args: list[str], shared_root_dirs: str,
-                    conf: Configuration) -> str:
-    add_mount_option(docker_args, conf.scripts_dir, conf.target_scripts_dir, "ro")
+def start_container(docker_full_cmd: list[str], shared_root_dirs: str,
+                    conf: Configuration) -> None:
+    add_mount_option(docker_full_cmd, conf.scripts_dir, conf.target_scripts_dir, "ro")
     # touch the status file and mount it
     status_path = Path(conf.status_file)
     status_path.unlink(missing_ok=True)
     status_path.touch(mode=0o600, exist_ok=False)
-    add_mount_option(docker_args, conf.status_file, conf.status_target_file)
+    add_mount_option(docker_full_cmd, conf.status_file, conf.status_target_file)
 
     for shared_dir in shared_root_dirs.split(";"):
-        add_mount_option(docker_args, f"{conf.shared_root_host_dir}{shared_dir}", shared_dir)
+        add_mount_option(docker_full_cmd, f"{conf.shared_root_host_dir}{shared_dir}", shared_dir)
     for lang_var in ["LANG", "LANGUAGE"]:
-        docker_args.append(f"-e={lang_var}")
-    docker_args.append("-e=XDG_RUNTIME_DIR")
-    docker_args.append(f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint}")
-    docker_args.append("--userns=keep-id")
-    docker_args.append(conf.box_image(bool(shared_root_dirs)))
+        docker_full_cmd.append(f"-e={lang_var}")
+    docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
+    docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint}")
+    docker_full_cmd.append("--userns=keep-id")
+    docker_full_cmd.append(conf.box_image(bool(shared_root_dirs)))
     if os.access(conf.config_list, os.R_OK):
-        docker_args.extend(["-c", f"{conf.target_scripts_dir}/config.list",
-                            "-d", conf.target_configs_dir])
+        docker_full_cmd.extend(["-c", f"{conf.target_scripts_dir}/config.list",
+                                "-d", conf.target_configs_dir])
     if os.access(conf.app_list, os.R_OK):
-        docker_args.append("-a")
-        docker_args.append(f"{conf.target_scripts_dir}/app.list")
+        docker_full_cmd.append("-a")
+        docker_full_cmd.append(f"{conf.target_scripts_dir}/app.list")
 
-    docker_args.append(conf.box_name)
-    docker_short_cmd = os.path.basename(docker_cmd)
-    launch_result = subprocess.run(docker_args)
+    docker_full_cmd.append(conf.box_name)
+    launch_result = subprocess.run(docker_full_cmd)
     if launch_result.returncode != 0:
         print_color("FAILED to launch container -- see the output above and check "
-                    f"'{docker_short_cmd} logs {conf.box_name}' for details", fg=fgcolor.red)
+                    f"'zbox-logs {conf.box_name}' for details", fg=fgcolor.red)
         sys.exit(1)
-    return docker_short_cmd
 
 
 @typechecked
-def wait_for_container(docker_cmd: str, docker_short_cmd: str, conf: Configuration) -> None:
+def wait_for_container(docker_cmd: str, conf: Configuration) -> None:
     box_name = conf.box_name
     max_wait_secs = 600
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
@@ -677,14 +673,14 @@ def wait_for_container(docker_cmd: str, docker_short_cmd: str, conf: Configurati
                         truncate_file(conf.status_file)
                         return
                 print_color("FAILED waiting for container to be ready -- check "
-                            f"'{docker_short_cmd} logs {box_name}' for details", fg=fgcolor.red)
+                            f"'zbox-logs {box_name}' for details", fg=fgcolor.red)
                 sys.exit(1)
             # using simple poll per second rather than inotify or similar because the
             # initialization will take a good amount of time and second granularity is enough
             time.sleep(1)
     # reading did not end after max_wait_secs
     print_color(f"TIMED OUT waiting for ready container after {max_wait_secs}secs -- check "
-                f"'{docker_short_cmd} logs -f {box_name}' for details", fg=fgcolor.red)
+                f"'zbox-logs -f {box_name}' for details", fg=fgcolor.red)
     sys.exit(1)
 
 
@@ -695,11 +691,11 @@ def truncate_file(f: str) -> None:
 
 
 @typechecked
-def restart_container(docker_cmd: str, docker_short_cmd: str, conf: Configuration) -> None:
+def restart_container(docker_cmd: str, conf: Configuration) -> None:
     launch_result = subprocess.run([docker_cmd, "container", "start", conf.box_name])
     if launch_result.returncode != 0:
         print_color("FAILED to restart container -- see the output above and check "
-                    f"'{docker_short_cmd} logs {conf.box_name}' for details", fg=fgcolor.red)
+                    f"'zbox-logs {conf.box_name}' for details", fg=fgcolor.red)
         sys.exit(1)
 
 
