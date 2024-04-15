@@ -21,6 +21,14 @@ class Configuration:
         self._box_image = f"zbox-local/{distro}/{box_name}"
         self._shared_box_image = f"zbox-shared-local/{distro}"
         self._configuration_dirs = [f"{env.home}/.config/zbox", "/etc/zbox"]
+        # timezone properties
+        self._localtime = None
+        self._timezone = None
+        if os.path.islink("/etc/localtime"):
+            self._localtime = os.readlink("/etc/localtime")
+        if os.path.exists("/etc/timezone"):
+            with open("/etc/timezone") as tz:
+                self._timezone = tz.read().rstrip("\n")
         # user data directory is $HOME/.local/share/zbox
         self._data_dir = ".local/share/zbox"
         self._shared_root_host_dir = f"{env.home}/{self._data_dir}/ROOTS/{distro}"
@@ -50,6 +58,18 @@ class Configuration:
     @typechecked
     def configuration_dirs(self) -> list[str]:
         return self._configuration_dirs
+
+    # the target link for /etc/localtime
+    @property
+    @typechecked
+    def localtime(self) -> str:
+        return self._localtime
+
+    # the contents of /etc/timezone
+    @property
+    @typechecked
+    def timezone(self) -> str:
+        return self._timezone
 
     # host directory that is bind mounted as the shared root directory on containers
     @property

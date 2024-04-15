@@ -10,10 +10,13 @@ uid=1000
 name=zbox
 group=zbox
 gid=1000
+localtime=
+timezone=
 
 function show_usage() {
   echo
-  echo "Usage: $SCRIPT [-u USER] [-U UID] [-n FULLNAME] [-g GROUP] [-G GID] [-h]"
+  echo "Usage: $SCRIPT [-u USER] [-U UID] [-n FULLNAME] [-g GROUP] [-G GID]"
+  echo "       [-l LOCALTIME] [-z TIMEZONE] [-h]"
   echo
   echo "Options:"
   echo "  -u USER       login of the user to add"
@@ -21,6 +24,8 @@ function show_usage() {
   echo "  -n FULLNAME   full name of the user"
   echo "  -g GROUP      primary group of the user to add"
   echo "  -G GID        GID of the primary group of the user"
+  echo "  -l LOCALTIME  the destination link for /etc/localtime"
+  echo "  -z TIMEZONE   the timezone to be written in /etc/timezone"
   echo "  -h            show this help message and exit"
 }
 
@@ -42,7 +47,7 @@ function check_int() {
   fi
 }
 
-while getopts "u:U:n:g:G:h" opt; do
+while getopts "u:U:n:g:G:l:z:h" opt; do
   case "$opt" in
     u)
       check_space "$OPTARG" USER
@@ -63,6 +68,12 @@ while getopts "u:U:n:g:G:h" opt; do
       check_int "$OPTARG" GID
       gid=$OPTARG
       ;;
+    l)
+      localtime="$OPTARG"
+      ;;
+    z)
+      timezone="$OPTARG"
+      ;;
     h)
       show_usage
       exit 0
@@ -73,6 +84,19 @@ while getopts "u:U:n:g:G:h" opt; do
       ;;
   esac
 done
+
+# setup timezone
+if [ -n "$localtime" ]; then
+  echo_color "$fg_blue" "Setting up timezone to $localtime"
+  if [ -e "$localtime" ]; then
+    rm -f /etc/localtime
+    ln -s "$localtime" /etc/localtime
+  fi
+fi
+if [ -n "$timezone" ]; then
+  echo "$timezone" > /etc/timezone
+  chmod 0644 /etc/timezone
+fi
 
 # generate /etc/machine-id which is required by some apps
 /usr/bin/dbus-uuidgen --ensure=/etc/machine-id

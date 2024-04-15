@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import argparse
 import grp
 import pwd
 import shutil
@@ -8,7 +9,7 @@ import time
 from pathlib import Path
 from textwrap import dedent
 
-from zbox.config import *
+from zbox.config import Configuration
 from zbox.env import *
 from zbox.filelock import FileLock
 from zbox.util import *
@@ -401,9 +402,11 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
         shutil.rmtree(conf.configs_dir)
     os.makedirs(conf.configs_dir, exist_ok=True)
     if config_hardlinks:
-        print_color("Creating hard links to paths in [configs]", fg=fgcolor.blue, end="  ...  ")
+        print_color("Creating hard links to paths specified in [configs]", fg=fgcolor.blue,
+                    end="  ...  ")
     else:
-        print_color("Creating a copy of paths in [configs]", fg=fgcolor.blue, end="  ...  ")
+        print_color("Creating a copy of paths specified in [configs]", fg=fgcolor.blue,
+                    end="  ...  ")
     # write the links to be created in a file that will be passed to container
     # entrypoint to create symlinks from container user's home to the mounted config files
     with open(conf.config_list, "w", encoding="utf-8") as config_list_fd:
@@ -499,13 +502,19 @@ def run_base_container(current_user: str, distro: str, docker_cmd: str,
     group_entry = grp.getgrgid(user_entry.pw_gid)
     print_color(f"Creating container specific image having sudo user '{current_user}'",
                 fg=fgcolor.purple)
-    init_result = subprocess.run(
-        [docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR", f"--name={conf.box_name}",
-         f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
-         f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_base}",
-         image_name, "-u", current_user, "-U", str(user_entry.pw_uid),
-         "-n", user_entry.pw_gecos, "-g", group_entry.gr_name,
-         "-G", str(group_entry.gr_gid)])
+    docker_run = [docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR", f"--name={conf.box_name}",
+                  f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
+                  f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_base}",
+                  image_name, "-u", current_user, "-U", str(user_entry.pw_uid),
+                  "-n", user_entry.pw_gecos, "-g", group_entry.gr_name,
+                  "-G", str(group_entry.gr_gid)]
+    if conf.localtime:
+        docker_run.append("-l")
+        docker_run.append(conf.localtime)
+    if conf.timezone:
+        docker_run.append("-z")
+        docker_run.append(conf.timezone)
+    init_result = subprocess.run(docker_run)
     if init_result.returncode != 0:
         print_color("FAILED -- see the output above for details", fg=fgcolor.red)
         sys.exit(1)
@@ -530,7 +539,15 @@ def run_shared_copy_container(distro: str, docker_cmd: str, image_name: str,
             Should the root directory be removed (y/N): """
         response = input(dedent(input_msg))
         if response.lower() == "y":
-            shutil.rmtree(root_host)
+            try:
+                shutil.rmtree(root_host)
+            except Exception:
+                # try with sudo
+                sudo_rm = subprocess.run(["sudo", "/bin/rm", "-rf", root_host])
+                if sudo_rm.returncode != 0:
+                    print_color("FAILED to delete directory -- see the output above for details",
+                                fg=fgcolor.red)
+                    sys.exit(1)
         else:
             print_color(f"Aborting creation of zbox container '{conf.box_name}'", fg=fgcolor.red)
             # remove the temporary image before exit
