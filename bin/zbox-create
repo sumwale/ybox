@@ -126,7 +126,7 @@ def main() -> None:
     # set up the final container with all the required arguments
     print_color(f"Initializing container for '{distro}' using '{config_file}'",
                 fg=fgcolor.blue)
-    start_container(docker_full_args, shared_root_dirs, conf)
+    start_container(docker_full_args, current_user, shared_root_dirs, conf)
     print_color("Waiting for the container to initialize (see "
                 f"'zbox-logs -f {box_name}' for detailed progress)", fg=fgcolor.blue)
     sys.stdout.flush()
@@ -253,6 +253,10 @@ def process_base_section(base_section: SectionProxy, config_file: str,
         elif key == "nvidia":
             if base_section.getboolean("nvidia"):
                 args.append("--device=nvidia.com/gpu=all")
+        elif key == "shm_size":
+            shm_size = base_section["shm_size"]
+            if shm_size:
+                args.append(f"--shm-size={shm_size}")
         elif key == "pids_limit":
             pids_limit = base_section["pids_limit"]
             if pids_limit:
@@ -626,7 +630,7 @@ def remove_image(docker_cmd: str, box_image: str) -> None:
 
 
 @typechecked
-def start_container(docker_full_cmd: list[str], shared_root_dirs: str,
+def start_container(docker_full_cmd: list[str], current_user: str, shared_root_dirs: str,
                     conf: Configuration) -> None:
     add_mount_option(docker_full_cmd, conf.scripts_dir, conf.target_scripts_dir, "ro")
     # touch the status file and mount it
@@ -643,6 +647,10 @@ def start_container(docker_full_cmd: list[str], shared_root_dirs: str,
     docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_PRIMARY}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint}")
     docker_full_cmd.append("--userns=keep-id")
+    # bubblewrap and thereby programs like steam do not work without this
+    # (https://github.com/containers/bubblewrap/issues/380#issuecomment-648169485)
+    user_entry = pwd.getpwnam(current_user)
+    docker_full_cmd.append(f"--user={user_entry.pw_uid}:{user_entry.pw_gid}")
     docker_full_cmd.append(conf.box_image(bool(shared_root_dirs)))
     if os.access(conf.config_list, os.R_OK):
         docker_full_cmd.extend(["-c", f"{conf.target_scripts_dir}/config.list",

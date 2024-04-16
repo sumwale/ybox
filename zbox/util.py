@@ -109,13 +109,19 @@ def print_config(config: ConfigParser) -> None:
 
 
 @typechecked
-def check_running_zbox(docker_cmd: str, box_name: str) -> bool:
+def check_running_zbox(docker_cmd: str, box_name: str, include_all: bool = False) -> bool:
     check_result = subprocess.run(
         [docker_cmd, "inspect", "--type=container",
          '--format={{index .Config.Labels "' + ZboxLabel.CONTAINER_TYPE + '"}} {{.State.Status}}',
          box_name], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    return (check_result.returncode == 0 and
-            check_result.stdout.decode("utf-8").rstrip() == "primary running")
+    if check_result.returncode == 0:
+        result = check_result.stdout.decode("utf-8").rstrip()
+        if include_all:
+            return result.startswith("primary ")
+        else:
+            return result == "primary running"
+    else:
+        return False
 
 
 # colors for printing in terminal

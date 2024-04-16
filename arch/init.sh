@@ -22,22 +22,19 @@ chmod 0755 /usr/local/bin/prime-run
 # generate the configured locale and assume it is UTF-8
 if [ -n "$LANG" ] && ! grep -q "^$LANG UTF-8" /etc/locale.gen; then
   echo "$LANG UTF-8" >> /etc/locale.gen
+  # always add en_US.UTF-8 regardless since some apps seem to depend on it
+  if [ "$LANG" != "en_US.UTF-8" ]; then
+    echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+  fi
   if ! locale-gen; then
     # reinstall glibc to obtain /usr/share/i18/locales/* files and try again
     $PAC -Sy
     $PAC -S glibc
     if ! locale-gen; then
       echo_color "$fg_red" "FAILED to generate locale for $LANG, fallback to en_US.UTF-8" >> $status_file
-      head -n -1 /etc/locale.gen > /etc/locale.gen.new
-      mv -f /etc/locale.gen.new /etc/locale.gen
       LANG=en_US.UTF-8
       LANGUAGE="en_US:en"
       export LANG LANGUAGE
-      echo "$LANG UTF-8" >> /etc/locale.gen
-      if ! locale-gen; then
-        echo_color "$fg_red" "FAILED to generate locale for $LANG" >> $status_file
-        exit 1
-      fi
     fi
   fi
   echo "LANG=$LANG" > /etc/locale.conf

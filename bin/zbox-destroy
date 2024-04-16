@@ -11,15 +11,15 @@ def main() -> int:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    if not check_running_zbox(docker_cmd, container_name):
-        print_color(f"No active zbox container named '{container_name}' found", fg=fgcolor.red)
+    if not check_running_zbox(docker_cmd, container_name, include_all=True):
+        print_color(f"No zbox container named '{container_name}' found", fg=fgcolor.red)
         return 1
 
     print_color(f"Stopping container '{container_name}'", fg=fgcolor.cyan)
     stop_result = subprocess.run([docker_cmd, "container", "stop", container_name])
     if stop_result.returncode != 0:
         print_color(f"FAILED to stop '{container_name}'", fg=fgcolor.red)
-        return 1
+        # continue since the container may already be in stopped state
 
     print_color(f"Removing container '{container_name}'", fg=fgcolor.purple)
     rm_result = subprocess.run([docker_cmd, "container", "rm", container_name])
