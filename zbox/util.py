@@ -18,13 +18,13 @@ sys.path.append(os.path.dirname(script_dir))
 
 class InitNow:
     def __init__(self):
-        self._now = datetime.now()
-        os.environ["NOW"] = str(self._now)
+        self.__now = datetime.now()
+        os.environ["NOW"] = str(self.__now)
 
     @property
     @typechecked
     def now(self) -> datetime:
-        return self._now
+        return self.__now
 
 
 class EnvInterpolation(Interpolation):
@@ -40,17 +40,17 @@ class EnvInterpolation(Interpolation):
 
     @typechecked
     def __init__(self, now: InitNow, skip_expansion: list[str]):
-        self._skip_expansion = skip_expansion
+        self.__skip_expansion = skip_expansion
         # for the NOW substitution
-        self._now = now
-        self._now_re = re.compile(r"\${NOW:([^}]*)}")
+        self.__now = now
+        self.__now_re = re.compile(r"\${NOW:([^}]*)}")
 
     @typechecked
     def before_get(self, parser: ConfigParser, section: str, option: str, value: str, defaults):
-        if section not in self._skip_expansion:
+        if section not in self.__skip_expansion:
             value = os.path.expandvars(value)
         # replace ${NOW:...} pattern with appropriately formatted datetime string
-        return re.sub(self._now_re, lambda mt: self._now.now.strftime(mt.group(1)), value)
+        return re.sub(self.__now_re, lambda mt: self.__now.now.strftime(mt.group(1)), value)
 
 
 @typechecked

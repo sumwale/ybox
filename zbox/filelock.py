@@ -34,17 +34,17 @@ class FileLock:
         :param timeout_secs: lock timeout in seconds (use negative for infinite wait)
         :param poll_interval: polling interval at which to check for lock to be available
         """
-        self._lock_file = lock_file
-        self._timeout = timeout_secs
-        self._poll = poll_interval
+        self.__lock_file = lock_file
+        self.__timeout = timeout_secs
+        self.__poll = poll_interval
 
     def __enter__(self):
-        self._lock_fd = open(self._lock_file, "w+")
+        self.__lock_fd = open(self.__lock_file, "w+")
         start_time: Optional[datetime] = None
-        remaining_time = self._timeout
+        remaining_time = self.__timeout
         while remaining_time != 0:
             try:
-                fcntl.lockf(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.lockf(self.__lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 return
             except OSError as ex:
                 if ex.errno == errno.EACCES or ex.errno == errno.EAGAIN:
@@ -52,17 +52,17 @@ class FileLock:
                     if not start_time:
                         start_time = datetime.now()
                     # wait for poll time, then try again
-                    time.sleep(self._poll)
+                    time.sleep(self.__poll)
                     # treat negative timeout as infinite where remaining_time will never reach 0
                     if remaining_time > 0:
-                        remaining_time -= self._poll
+                        remaining_time -= self.__poll
                         if remaining_time < 0:
                             remaining_time = 0
                 else:
                     raise
         wait_time = (datetime.now() - start_time).total_seconds() if start_time else 0.0
-        raise TimeoutError(f"Failed to lock '{self._lock_file}' in {wait_time} seconds")
+        raise TimeoutError(f"Failed to lock '{self.__lock_file}' in {wait_time} seconds")
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
-        fcntl.lockf(self._lock_fd, fcntl.LOCK_UN)
-        self._lock_fd.close()
+        fcntl.lockf(self.__lock_fd, fcntl.LOCK_UN)
+        self.__lock_fd.close()

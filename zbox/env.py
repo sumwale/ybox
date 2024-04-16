@@ -8,31 +8,31 @@ from typeguard import typechecked
 
 class Environ:
     def __init__(self):
-        self._home_dir = os.environ['HOME']
+        self.__home_dir = os.environ['HOME']
         # local user home might be in a different location than /home but target user in the
         # container will always be in /home as ensured by zbox/entrypoint.py script
-        self._target_home = "/home/" + getpass.getuser()
-        os.environ["TARGET_HOME"] = self._target_home
-        self._xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR")
+        self.__target_home = "/home/" + getpass.getuser()
+        os.environ["TARGET_HOME"] = self.__target_home
+        self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR")
 
     # home directory of the current user
     @property
     @typechecked
     def home(self) -> str:
-        return self._home_dir
+        return self.__home_dir
 
     # home directory of the container user (which is always $TARGET_HOME=/home/$USER and
     #   hence can be different from $HOME)
     @property
     @typechecked
     def target_home(self) -> str:
-        return self._target_home
+        return self.__target_home
 
     # $XDG_RUNTIME_DIR in the current session
     @property
     @typechecked
     def xdg_rt_dir(self) -> str:
-        return self._xdg_rt_dir
+        return self.__xdg_rt_dir
 
 
 class ZboxLabel:
