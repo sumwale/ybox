@@ -4,8 +4,6 @@ import time
 from datetime import datetime
 from typing import Optional
 
-from typeguard import typechecked
-
 
 class FileLock:
     """
@@ -23,7 +21,6 @@ class FileLock:
           <code>
     """
 
-    @typechecked
     def __init__(self, lock_file: str, timeout_secs: float = 300.0, poll_interval: float = 1.0):
         """
         Initialize the lock giving a file which should be a separate lock file from the

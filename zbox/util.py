@@ -8,8 +8,6 @@ from configparser import ConfigParser, Interpolation
 from datetime import datetime
 from typing import Optional
 
-from typeguard import typechecked
-
 from zbox.env import ZboxLabel
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +20,6 @@ class InitNow:
         os.environ["NOW"] = str(self.__now)
 
     @property
-    @typechecked
     def now(self) -> datetime:
         return self.__now
 
@@ -38,22 +35,19 @@ class EnvInterpolation(Interpolation):
     ${NOW:...} substitution is still performed.
     """
 
-    @typechecked
     def __init__(self, now: InitNow, skip_expansion: list[str]):
         self.__skip_expansion = skip_expansion
         # for the NOW substitution
         self.__now = now
         self.__now_re = re.compile(r"\${NOW:([^}]*)}")
 
-    @typechecked
-    def before_get(self, parser: ConfigParser, section: str, option: str, value: str, defaults):
+    def before_get(self, parser, section: str, option: str, value: str, defaults):
         if section not in self.__skip_expansion:
             value = os.path.expandvars(value)
         # replace ${NOW:...} pattern with appropriately formatted datetime string
         return re.sub(self.__now_re, lambda mt: self.__now.now.strftime(mt.group(1)), value)
 
 
-@typechecked
 def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
     # check for podman first then docker
     if args.docker_path:
@@ -70,7 +64,6 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
 
 
 # read the ini file, recursing into the includes to build the final dictionary
-@typechecked
 def config_reader(conf_file: str, interpolation: Optional[Interpolation],
                   top_level: str = "") -> ConfigParser:
     if not os.access(conf_file, os.R_OK):
@@ -103,12 +96,10 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
 
 
 # print the entire contents of a ConfigParser as a nested dictionary
-@typechecked
 def print_config(config: ConfigParser) -> None:
     print({section: dict(config[section]) for section in config.sections()})
 
 
-@typechecked
 def check_running_zbox(docker_cmd: str, box_name: str, include_all: bool = False) -> bool:
     check_result = subprocess.run(
         [docker_cmd, "inspect", "--type=container",
@@ -133,7 +124,6 @@ bgcolor = TermColors("\033[40m", "\033[41m", "\033[42m", "\033[43m", "\033[44m",
                      "\033[45m", "\033[46m", "\033[47m", "\033[00m", "\033[01m", "\033[02m")
 
 
-@typechecked
 def print_color(msg: str, fg: Optional[str] = None,
                 bg: Optional[str] = None, end: str = "\n"):
     if fg:

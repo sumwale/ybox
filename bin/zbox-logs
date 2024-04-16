@@ -5,7 +5,6 @@ from bin_util import *
 from zbox.util import *
 
 
-@typechecked
 def main() -> int:
     args = parse_args()
     docker_cmd = get_docker_command(args, "-d")
@@ -13,7 +12,7 @@ def main() -> int:
 
     if not check_running_zbox(docker_cmd, container_name, include_all=True):
         print_color(f"No zbox container named '{container_name}' found", fg=fgcolor.red)
-        return 1
+        return ""
 
     if args.follow:
         log_result = subprocess.run([docker_cmd, "container", "logs", "-f", container_name])
@@ -26,7 +25,6 @@ def main() -> int:
     return 0
 
 
-@typechecked
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Show logs from a running or stopped zbox container")
