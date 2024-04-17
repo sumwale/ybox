@@ -8,7 +8,7 @@ def main() -> int:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    if not check_running_zbox(docker_cmd, container_name):
+    if not check_zbox_state(docker_cmd, container_name, ["running"]):
         print_color(f"No active zbox container named '{container_name}' found", fg=fgcolor.red)
         return 1
 
@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-s", "--shell", type=str, default="/bin/bash",
                         help="run the given shell (default is /bin/bash)")
-    parser.add_argument("container_name", type=str, help="name of the running box")
+    parser.add_argument("container_name", type=str, help="name of the running zbox")
     return parser.parse_args()
 
 

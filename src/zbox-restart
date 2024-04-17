@@ -1,0 +1,32 @@
+#!/usr/bin/python3
+
+from zbox.util import *
+
+
+def main() -> int:
+    args = parse_args()
+    docker_cmd = get_docker_command(args, "-d")
+    container_name = args.container_name
+
+    if not check_zbox_state(docker_cmd, container_name, expected_states=["exited", "stopped"]):
+        print_color(f"No stopped zbox container named '{container_name}' found", fg=fgcolor.red)
+        return 1
+
+    print_color(f"Restarting zbox container '{container_name}'", fg=fgcolor.cyan)
+    start_result = subprocess.run([docker_cmd, "container", "start", container_name])
+    if start_result.returncode != 0:
+        print_color(f"FAILED to start '{container_name}'", fg=fgcolor.red)
+        return 1
+
+    return 0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Restart a stopped zbox container")
+    parser.add_argument("-d", "--docker-path", type=str,
+                        help="path of docker/podman if not in /usr/bin")
+    parser.add_argument("container_name", type=str, help="name of the stopped zbox")
+    return parser.parse_args()
+
+
+sys.exit(main())

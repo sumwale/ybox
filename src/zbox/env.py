@@ -6,12 +6,16 @@ from typing import Optional
 
 
 class Environ:
+
     def __init__(self):
         self.__home_dir = os.environ['HOME']
         # local user home might be in a different location than /home but target user in the
         # container will always be in /home as ensured by zbox/entrypoint.py script
         self.__target_home = "/home/" + getpass.getuser()
         os.environ["TARGET_HOME"] = self.__target_home
+        data_subdir = ".local/share/zbox"
+        self.__data_dir = f"{self.__home_dir}/{data_subdir}"
+        self.__target_data_dir = f"{self.__home_dir}/{data_subdir}"
         self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR")
         self.__now = datetime.now()
         os.environ["NOW"] = str(self.__now)
@@ -26,6 +30,22 @@ class Environ:
     @property
     def target_home(self) -> str:
         return self.__target_home
+
+    @property
+    def data_dir(self) -> str:
+        """
+        :return: base user directory where runtime data related to all the containers is
+                 stored in subdirectories
+        """
+        return self.__data_dir
+
+    @property
+    def target_data_dir(self) -> str:
+        """
+        :return: base user directory of the container user where runtime data related to all
+                the containers is stored
+        """
+        return self.__data_dir
 
     # $XDG_RUNTIME_DIR in the current session
     @property

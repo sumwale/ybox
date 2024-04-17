@@ -8,7 +8,7 @@ of the container including directories to be shared, logging etc.
 
 Special emphasis is given on security where users can choose to lock down
 or open up the container as required with reasonable defaults out of the
-box. There is no sharing of HOME or no privileged mode container unless
+zbox. There is no sharing of HOME or no privileged mode container unless
 explicitly configured.
 
 Expected usage is for users to group similar applications in a container
@@ -17,7 +17,7 @@ security, features off to minimum required for those set of applications.
 
 As a convenience it provides for some features to make life easier like
 sharing of your application configuration files automatically
-(e.g. .bashrc, .vimrc etc), sharing of 'root' system directories
+(eg .bashrc, .vimrc etc.), sharing of 'root' system directories
 like /usr among containers to reduce disk and memory usage, automatic
 installation and configuration of applications. Separate utilities
 for package management across containers are provided with the idea

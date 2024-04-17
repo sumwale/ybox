@@ -11,6 +11,7 @@ from typing import Tuple
 from zbox.config import Configuration
 from zbox.env import *
 from zbox.filelock import FileLock
+from zbox.state import ZboxStateManagement
 from zbox.util import *
 
 
@@ -42,7 +43,7 @@ def main() -> None:
         config_file = conf.get_config_file(config_file)
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the configuration file before any actions to ensure it is in proper shape
-    shared_root = process_sections(config_file, distro, env, conf, docker_full_args)
+    shared_root, config = process_sections(config_file, distro, env, conf, docker_full_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -142,6 +143,10 @@ def main() -> None:
     sys.stdout.flush()
     wait_for_container(docker_cmd, conf)
 
+    # finally add the state
+    with ZboxStateManagement(env) as state:
+        state.add_container(box_name, distro, config)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -151,7 +156,7 @@ def parse_args() -> argparse.Namespace:
                        NVIDIA, dbus among others. It also allows controlling various parameters
                        of the container including directories to be shared, logging etc.""")
     parser.add_argument("-n", "--name", type=str,
-                        help="""name of the box; default is <distribution>-<configuration> if
+                        help="""name of the zbox; default is <distribution>-<configuration> if
                                 not provided (removing the .ini suffix from <configuration>)""")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
@@ -180,7 +185,7 @@ def process_args(args: argparse.Namespace) -> Tuple[str, str]:
 
 
 def process_sections(config_file: str, distro: str, env: Environ, conf: Configuration,
-                     docker_args: list[str]) -> bool:
+                     docker_args: list[str]) -> Tuple[bool, ConfigParser]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
     # Skip environment variable substitution for the "configs" section since the values
@@ -210,7 +215,7 @@ def process_sections(config_file: str, distro: str, env: Environ, conf: Configur
         elif section != "appflags" and section != "startup":
             raise NotSupportedError(f"Unknown section [{section}] in '{config_file}' "
                                     "or one of its includes")
-    return shared_root
+    return shared_root, config
 
 
 def process_base_section(base_section: SectionProxy, config_file: str,
@@ -647,7 +652,7 @@ def wait_for_container(docker_cmd: str, conf: Configuration) -> None:
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
         for secs in range(max_wait_secs):
             # check the container status first
-            if check_running_zbox(docker_cmd, box_name):
+            if check_zbox_state(docker_cmd, box_name, ["running"]):
                 while line := status_fd.readline():
                     if line == "started\n":
                         # clear the status file and return

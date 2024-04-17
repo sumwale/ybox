@@ -28,17 +28,22 @@ class EnvInterpolation(Interpolation):
     ${NOW:...} substitution is still performed.
     """
 
+    __NOW_RE = re.compile(r"\${NOW:([^}]*)}")
+
     def __init__(self, env: Environ, skip_expansion: list[str]):
         self.__skip_expansion = skip_expansion
         # for the NOW substitution
         self.__now = env.now
-        self.__now_re = re.compile(r"\${NOW:([^}]*)}")
 
-    def before_get(self, parser, section: str, option: str, value: str, defaults):
+    # override before_read rather than before_get because we need expanded vars when writing
+    # into the state.db database too
+    def before_read(self, parser, section: str, option: str, value: str):
+        if not value:
+            return value
         if section not in self.__skip_expansion:
             value = os.path.expandvars(value)
         # replace ${NOW:...} pattern with appropriately formatted datetime string
-        return re.sub(self.__now_re, lambda mt: self.__now.strftime(mt.group(1)), value)
+        return re.sub(self.__NOW_RE, lambda mt: self.__now.strftime(mt.group(1)), value)
 
 
 def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
@@ -50,10 +55,8 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
     elif os.access("/usr/bin/docker", os.X_OK):
         return "/usr/bin/docker"
     else:
-        print_color("Neither /usr/bin/podman nor /usr/bin/docker found "
-                    f"and no {option_name} option provided",
-                    fg=fgcolor.red)
-        raise FileNotFoundError
+        raise FileNotFoundError("Neither /usr/bin/podman nor /usr/bin/docker found "
+                                f"and no '{option_name}' option has been provided")
 
 
 # read the ini file, recursing into the includes to build the final dictionary
@@ -93,19 +96,22 @@ def print_config(config: ConfigParser) -> None:
     print({section: dict(config[section]) for section in config.sections()})
 
 
-def check_running_zbox(docker_cmd: str, box_name: str, include_all: bool = False) -> bool:
+def check_zbox_state(docker_cmd: str, box_name: str, expected_states: list[str]) -> bool:
     check_result = subprocess.run(
         [docker_cmd, "inspect", "--type=container",
          '--format={{index .Config.Labels "' + ZboxLabel.CONTAINER_TYPE + '"}} {{.State.Status}}',
          box_name], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     if check_result.returncode == 0:
         result = check_result.stdout.decode("utf-8").rstrip()
-        if include_all:
-            return result.startswith("primary ")
-        else:
-            return result == "primary running"
-    else:
-        return False
+        primary_zbox = "primary "
+        if result.startswith(primary_zbox):
+            state = result[len(primary_zbox):]
+            if expected_states:
+                return state in expected_states
+            else:
+                return True
+
+    return False
 
 
 # colors for printing in terminal

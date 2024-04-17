@@ -24,13 +24,11 @@ class Configuration:
         if os.path.exists("/etc/timezone"):
             with open("/etc/timezone") as tz:
                 self.__timezone = tz.read().rstrip("\n")
-        # user data directory is $HOME/.local/share/zbox
-        self.__data_dir = ".local/share/zbox"
-        self.__shared_root_host_dir = f"{env.home}/{self.__data_dir}/ROOTS/{distro}"
-        self.__container_dir = f"{env.home}/{self.__data_dir}/{box_name}"
+        self.__shared_root_host_dir = f"{env.data_dir}/ROOTS/{distro}"
+        self.__container_dir = f"{env.data_dir}/{box_name}"
         os.environ["CONTAINER_DIR"] = self.__container_dir
         self.__configs_dir = f"{self.__container_dir}/configs"
-        self.__target_configs_dir = f"{env.target_home}/{self.__data_dir}/{box_name}/configs"
+        self.__target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
         self.__scripts_dir = f"{self.__container_dir}/zbox-scripts"
         self.__status_file = f"{self.__container_dir}/status"
         self.__config_list = f"{self.__scripts_dir}/config.list"
