@@ -5,20 +5,16 @@ import subprocess
 import sys
 from collections import namedtuple
 from configparser import ConfigParser, Interpolation
-from datetime import datetime
 from typing import Optional
 
-from .env import ZboxLabel
+from .env import Environ, ZboxLabel
 
 
-class InitNow:
-    def __init__(self):
-        self.__now = datetime.now()
-        os.environ["NOW"] = str(self.__now)
+class NotSupportedError(Exception):
+    """Raised when an operation or configuration is not supported or invalid."""
 
-    @property
-    def now(self) -> datetime:
-        return self.__now
+    def __init__(self, msg: str):
+        self.msg = msg
 
 
 class EnvInterpolation(Interpolation):
@@ -32,17 +28,17 @@ class EnvInterpolation(Interpolation):
     ${NOW:...} substitution is still performed.
     """
 
-    def __init__(self, now: InitNow, skip_expansion: list[str]):
+    def __init__(self, env: Environ, skip_expansion: list[str]):
         self.__skip_expansion = skip_expansion
         # for the NOW substitution
-        self.__now = now
+        self.__now = env.now
         self.__now_re = re.compile(r"\${NOW:([^}]*)}")
 
     def before_get(self, parser, section: str, option: str, value: str, defaults):
         if section not in self.__skip_expansion:
             value = os.path.expandvars(value)
         # replace ${NOW:...} pattern with appropriately formatted datetime string
-        return re.sub(self.__now_re, lambda mt: self.__now.now.strftime(mt.group(1)), value)
+        return re.sub(self.__now_re, lambda mt: self.__now.strftime(mt.group(1)), value)
 
 
 def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
@@ -65,10 +61,10 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
                   top_level: str = "") -> ConfigParser:
     if not os.access(conf_file, os.R_OK):
         if top_level:
-            sys.exit(f"Config file '{conf_file}' among the includes of '{top_level}' "
-                     "does not exist or not readable")
+            raise FileNotFoundError(f"Config file '{conf_file}' among the includes of "
+                                    f"'{top_level}' does not exist or not readable")
         else:
-            sys.exit(f"Config file '{conf_file}' does not exist or not readable")
+            raise FileNotFoundError(f"Config file '{conf_file}' does not exist or not readable")
     config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
     config.optionxform = str  # type: ignore
     config.read(conf_file)

@@ -31,7 +31,7 @@ def main() -> None:
     # check that the distribution is in supported.list
     with open(support_list, "r", encoding="utf-8") as supp_file:
         if distro not in supp_file.read().splitlines():
-            sys.exit(f"Distribution '{distro}' not supported in {support_list}")
+            raise NotSupportedError(f"Distribution '{distro}' not supported in {support_list}")
 
     # setup entrypoint and related scripts to share with the container on a mount point
     setup_zbox_scripts(distro, conf)
@@ -181,13 +181,12 @@ def process_args(args: argparse.Namespace) -> Tuple[str, str]:
 
 def process_sections(config_file: str, distro: str, env: Environ, conf: Configuration,
                      docker_args: list[str]) -> bool:
-    now = InitNow()
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
     # Skip environment variable substitution for the "configs" section since the values
     # there have to be written as is to 'config.list' file for the container (since the
     #   $HOME variable can be different inside the container).
-    env_interpolation = EnvInterpolation(now, ["configs"])
+    env_interpolation = EnvInterpolation(env, ["configs"])
     config = config_reader(config_file, env_interpolation)
     # shared_root is false by default
     shared_root = False
@@ -209,7 +208,8 @@ def process_sections(config_file: str, distro: str, env: Environ, conf: Configur
         elif section == "apps":
             process_apps_section(config["apps"], distro, conf)
         elif section != "appflags" and section != "startup":
-            sys.exit(f"Unknown section [{section}] in '{config_file}' or one of its includes")
+            raise NotSupportedError(f"Unknown section [{section}] in '{config_file}' "
+                                    "or one of its includes")
     return shared_root
 
 
@@ -267,7 +267,8 @@ def process_base_section(base_section: SectionProxy, config_file: str,
             for log_dir in log_dirs:
                 os.makedirs(log_dir, exist_ok=True)
         elif key != "includes" and key != "dbus_sys":
-            sys.exit(f"Unknown key '{key}' in the [base] of {config_file} or its includes")
+            raise NotSupportedError(f"Unknown key '{key}' in the [base] of {config_file} "
+                                    "or its includes")
     return shared_root, config_hardlinks
 
 
@@ -350,7 +351,8 @@ def process_security_section(sec_section: SectionProxy, config_file: str,
             if sec_section.getboolean(key):
                 args.append("--security-opt=no-new-privileges")
         else:
-            sys.exit(f"Unknown key '{key}' in the [security] of {config_file} or its includes")
+            raise NotSupportedError(f"Unknown key '{key}' in the [security] of {config_file} "
+                                    "or its includes")
 
 
 def add_sec_option_if_exists(args: list[str], sec_section: SectionProxy, key: str) -> None:
@@ -401,8 +403,8 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
             val = os.path.expandvars(val)
             split_idx = val.find("->")
             if split_idx == -1:
-                sys.exit("Incorrect value format in [configs] section for "
-                         f"'{key}'. Required: '{{src}} -> {{dest}}'")
+                raise NotSupportedError("Incorrect value format in [configs] section for "
+                                        f"'{key}'. Required: '{{src}} -> {{dest}}'")
             src_path = os.path.realpath(val[:split_idx].strip())
             dest_path = f"{conf.configs_dir}/{val[split_idx + 2:].strip()}"
             if os.access(src_path, os.R_OK):

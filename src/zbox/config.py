@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 from typing import Optional
 
 from .env import Environ
@@ -44,7 +43,7 @@ class Configuration:
             if os.access(path, os.R_OK):
                 return path
         search_dirs = ', '.join(self.__configuration_dirs)
-        sys.exit(f"Configuration file '{conf_file}' not found in [{search_dirs}]")
+        raise FileNotFoundError(f"Configuration file '{conf_file}' not found in [{search_dirs}]")
 
     # name of the container
     @property

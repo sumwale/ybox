@@ -1,6 +1,7 @@
 import getpass
 import os
 from configparser import SectionProxy
+from datetime import datetime
 from typing import Optional
 
 
@@ -12,6 +13,8 @@ class Environ:
         self.__target_home = "/home/" + getpass.getuser()
         os.environ["TARGET_HOME"] = self.__target_home
         self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR")
+        self.__now = datetime.now()
+        os.environ["NOW"] = str(self.__now)
 
     # home directory of the current user
     @property
@@ -28,6 +31,10 @@ class Environ:
     @property
     def xdg_rt_dir(self) -> str:
         return self.__xdg_rt_dir
+
+    @property
+    def now(self) -> datetime:
+        return self.__now
 
 
 class ZboxLabel:
