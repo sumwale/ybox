@@ -6,9 +6,8 @@ import shutil
 import time
 from pathlib import Path
 from textwrap import dedent
+from typing import Tuple
 
-# noinspection PyUnresolvedReferences
-from bin_util import *
 from zbox.config import Configuration
 from zbox.env import *
 from zbox.filelock import FileLock
@@ -166,7 +165,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def process_args(args: argparse.Namespace) -> (str, str):
+def process_args(args: argparse.Namespace) -> Tuple[str, str]:
     ini_suffix = ".ini"
     if args.name:
         box_name = args.name
@@ -215,7 +214,7 @@ def process_sections(config_file: str, distro: str, env: Environ, conf: Configur
 
 
 def process_base_section(base_section: SectionProxy, config_file: str,
-                         env: Environ, args: list[str]) -> (bool, bool):
+                         env: Environ, args: list[str]) -> Tuple[bool, bool]:
     # shared root is true by default
     shared_root = True
     # hard links are false by default
@@ -442,10 +441,9 @@ def process_apps_section(apps_section: SectionProxy, distro: str, conf: Configur
         for key in apps_section:
             apps = apps_section[key].split(";")
             args = [a[len(extra_args):] for a in apps if a.startswith(extra_args)]
-            args = " ".join(args)
             if args:
                 apps = [app for app in apps if not app.startswith(extra_args)]
-            apps_fd.write(f"{args} {' '.join(apps)}\n")
+            apps_fd.write(f"{' '.join(args)} {' '.join(apps)}\n")
 
 
 # The shutil.copytree(...) method does not work correctly for "symlinks=False" (or at least
@@ -484,7 +482,7 @@ def setup_zbox_scripts(distro: str, conf: Configuration) -> None:
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
 
 
-def read_distribution_config(distro: str, conf: Configuration) -> (str, str, ConfigParser):
+def read_distribution_config(distro: str, conf: Configuration) -> Tuple[str, str, ConfigParser]:
     distro_config = config_reader(conf.get_config_file(f"{distro}/distro.ini"), None)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist

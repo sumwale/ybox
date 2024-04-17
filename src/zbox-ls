@@ -1,7 +1,5 @@
 #!/usr/bin/python3
 
-# noinspection PyUnresolvedReferences
-from bin_util import *
 from zbox.util import *
 
 

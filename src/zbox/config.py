@@ -3,10 +3,7 @@ import os
 import sys
 from typing import Optional
 
-from zbox.env import Environ
-
-script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.dirname(script_dir))
+from .env import Environ
 
 
 class Configuration:
@@ -72,12 +69,12 @@ class Configuration:
 
     # the contents of /etc/timezone
     @property
-    def timezone(self) -> str:
+    def timezone(self) -> Optional[str]:
         return self.__timezone
 
     # host directory that is bind mounted as the shared root directory on containers
     @property
-    def shared_root_host_dir(self) -> Optional[str]:
+    def shared_root_host_dir(self) -> str:
         return self.__shared_root_host_dir
 
     # directory where shared root directory is mounted in a container during setup

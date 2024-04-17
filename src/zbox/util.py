@@ -8,10 +8,7 @@ from configparser import ConfigParser, Interpolation
 from datetime import datetime
 from typing import Optional
 
-from zbox.env import ZboxLabel
-
-script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.dirname(script_dir))
+from .env import ZboxLabel
 
 
 class InitNow:
@@ -60,7 +57,7 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
         print_color("Neither /usr/bin/podman nor /usr/bin/docker found "
                     f"and no {option_name} option provided",
                     fg=fgcolor.red)
-        sys.exit(1)
+        raise FileNotFoundError
 
 
 # read the ini file, recursing into the includes to build the final dictionary
@@ -73,7 +70,7 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
         else:
             sys.exit(f"Config file '{conf_file}' does not exist or not readable")
     config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
-    config.optionxform = str
+    config.optionxform = str  # type: ignore
     config.read(conf_file)
     if not top_level:
         top_level = conf_file
