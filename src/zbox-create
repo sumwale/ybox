@@ -145,7 +145,7 @@ def main() -> None:
 
     # finally add the state
     with ZboxStateManagement(env) as state:
-        state.add_container(box_name, distro, config)
+        state.register_container(box_name, distro, shared_root, config)
 
 
 def parse_args() -> argparse.Namespace:

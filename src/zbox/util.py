@@ -13,9 +13,6 @@ from .env import Environ, ZboxLabel
 class NotSupportedError(Exception):
     """Raised when an operation or configuration is not supported or invalid."""
 
-    def __init__(self, msg: str):
-        self.msg = msg
-
 
 class EnvInterpolation(Interpolation):
     """
