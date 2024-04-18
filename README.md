@@ -1,6 +1,6 @@
 Create and manage docker/podman containers hosting different Linux
 distribution images. Manage their packages and applications directly
-from your host machine and easily configure the containers with a
+from your host machine and easily configure the containers with
 simple INI files. It allows for set up of various aspects of
 the container including support for X11, Wayland, audio, video acceleration,
 NVIDIA, dbus among others. It also allows controlling various parameters

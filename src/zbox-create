@@ -37,13 +37,13 @@ def main() -> None:
     # setup entrypoint and related scripts to share with the container on a mount point
     setup_zbox_scripts(distro, conf)
 
-    # the configuration file used to build the docker/podman command-line
-    config_file = args.configuration
-    if not os.access(config_file, os.R_OK):
-        config_file = conf.get_config_file(config_file)
+    # the profile used to build the docker/podman command-line
+    profile = args.profile
+    if not os.access(profile, os.R_OK):
+        profile = conf.get_config_file(profile)
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
-    # process the configuration file before any actions to ensure it is in proper shape
-    shared_root, config = process_sections(config_file, distro, env, conf, docker_full_args)
+    # process the profile before any actions to ensure it is in proper shape
+    shared_root, config = process_sections(profile, distro, env, conf, docker_full_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -123,7 +123,7 @@ def main() -> None:
     # getting upgraded, so it's best to restart container for those to take effect properly
 
     # set up the final container with all the required arguments
-    print_color(f"Initializing container for '{distro}' using '{config_file}'",
+    print_color(f"Initializing container for '{distro}' using '{profile}'",
                 fg=fgcolor.blue)
     start_container(docker_full_args, current_user, shared_root_dirs, conf)
     print_color("Waiting for the container to initialize (see "
@@ -133,8 +133,7 @@ def main() -> None:
     wait_for_container(docker_cmd, conf)
 
     # remove distribution specific scripts and restart container the final time
-    print_color(f"Restarting the final container having '{distro}' specific configuration",
-                fg=fgcolor.purple)
+    print_color(f"Restarting the final container '{box_name}'", fg=fgcolor.purple)
     for script in conf.distribution_scripts:
         os.unlink(f"{conf.scripts_dir}/{script}")
     restart_container(docker_cmd, conf)
@@ -156,14 +155,14 @@ def parse_args() -> argparse.Namespace:
                        NVIDIA, dbus among others. It also allows controlling various parameters
                        of the container including directories to be shared, logging etc.""")
     parser.add_argument("-n", "--name", type=str,
-                        help="""name of the zbox; default is <distribution>-<configuration> if
-                                not provided (removing the .ini suffix from <configuration>)""")
+                        help="""name of the zbox; default is zbox-<distribution>_<profile>
+                                if not provided (removing the .ini suffix from <profile> file)""")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("distribution", type=str,
                         help="short name of the distribution (should be in supported.list)")
-    parser.add_argument("configuration", type=str,
-                        help="""the ini configuration file to be used for creating the zbox
+    parser.add_argument("profile", type=str,
+                        help="""the profile defined in INI file to use for creating the zbox
                                 (can be a relative or absolute path, or be in user or system
                                  configuration directory which are $HOME/.config/zbox and
                                  /etc/zbox respectively)""")
@@ -175,16 +174,16 @@ def process_args(args: argparse.Namespace) -> Tuple[str, str]:
     if args.name:
         box_name = args.name
     else:
-        box_name = os.path.basename(args.configuration)
+        box_name = os.path.basename(args.profile)
         if box_name.endswith(ini_suffix):
             box_name = box_name[:-len(ini_suffix)]
-        box_name = f"{args.distribution}-{box_name}"
+        box_name = f"zbox-{args.distribution}_{box_name}"
 
     docker_cmd = get_docker_command(args, "-d")
     return box_name, docker_cmd
 
 
-def process_sections(config_file: str, distro: str, env: Environ, conf: Configuration,
+def process_sections(profile: str, distro: str, env: Environ, conf: Configuration,
                      docker_args: list[str]) -> Tuple[bool, ConfigParser]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
@@ -192,7 +191,7 @@ def process_sections(config_file: str, distro: str, env: Environ, conf: Configur
     # there have to be written as is to 'config.list' file for the container (since the
     #   $HOME variable can be different inside the container).
     env_interpolation = EnvInterpolation(env, ["configs"])
-    config = config_reader(config_file, env_interpolation)
+    config = config_reader(profile, env_interpolation)
     # shared_root is false by default
     shared_root = False
     # hard links are false by default
@@ -201,9 +200,9 @@ def process_sections(config_file: str, distro: str, env: Environ, conf: Configur
     for section in config.sections():
         if section == "base":
             shared_root, config_hardlinks = process_base_section(
-                config["base"], config_file, env, docker_args)
+                config["base"], profile, env, docker_args)
         elif section == "security":
-            process_security_section(config["security"], config_file, docker_args)
+            process_security_section(config["security"], profile, docker_args)
         elif section == "mounts":
             process_mounts_section(config["mounts"], docker_args)
         elif section == "env":
@@ -213,12 +212,12 @@ def process_sections(config_file: str, distro: str, env: Environ, conf: Configur
         elif section == "apps":
             process_apps_section(config["apps"], distro, conf)
         elif section != "appflags" and section != "startup":
-            raise NotSupportedError(f"Unknown section [{section}] in '{config_file}' "
+            raise NotSupportedError(f"Unknown section [{section}] in '{profile}' "
                                     "or one of its includes")
     return shared_root, config
 
 
-def process_base_section(base_section: SectionProxy, config_file: str,
+def process_base_section(base_section: SectionProxy, profile: str,
                          env: Environ, args: list[str]) -> Tuple[bool, bool]:
     # shared root is true by default
     shared_root = True
@@ -272,7 +271,7 @@ def process_base_section(base_section: SectionProxy, config_file: str,
             for log_dir in log_dirs:
                 os.makedirs(log_dir, exist_ok=True)
         elif key != "includes" and key != "dbus_sys":
-            raise NotSupportedError(f"Unknown key '{key}' in the [base] of {config_file} "
+            raise NotSupportedError(f"Unknown key '{key}' in the [base] of {profile} "
                                     "or its includes")
     return shared_root, config_hardlinks
 
@@ -338,7 +337,7 @@ def add_multi_opt(args: list[str], section: SectionProxy, key: str, opt: str) ->
             args.append(f"--{opt}={opt_val}")
 
 
-def process_security_section(sec_section: SectionProxy, config_file: str,
+def process_security_section(sec_section: SectionProxy, profile: str,
                              args: list[str]) -> None:
     sec_options = ["label", "apparmor", "seccomp", "mask", "umask", "proc_opts"]
     single_options = ["seccomp_policy", "ipc", "cgroup_parent", "cgroupns", "cgroups"]
@@ -356,7 +355,7 @@ def process_security_section(sec_section: SectionProxy, config_file: str,
             if sec_section.getboolean(key):
                 args.append("--security-opt=no-new-privileges")
         else:
-            raise NotSupportedError(f"Unknown key '{key}' in the [security] of {config_file} "
+            raise NotSupportedError(f"Unknown key '{key}' in the [security] of {profile} "
                                     "or its includes")
 
 
@@ -373,7 +372,7 @@ def add_option_if_exists(args: list[str], section: SectionProxy, key: str, opt: 
 def process_mounts_section(mounts_section: SectionProxy, args: list[str]) -> None:
     for key in mounts_section:
         # keys here are only symbolic names and serve no purpose other than allowing
-        # later configuration files to override previous ones
+        # later profile files to override previous ones
         if val := mounts_section[key]:
             if "=" in val or "," in val:
                 args.append(f"--mount={val}")
