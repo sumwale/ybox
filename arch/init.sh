@@ -60,7 +60,7 @@ fi
 # install packages most users will need for working comfortably
 echo_color "$fg_cyan" "Installing base set of packages" >> $status_file
 $PAC -S --needed lesspipe bash-completion bc base-devel man-db man-pages \
-  pulseaudio-alsa neovim eza ncdu fd bat libva-utils mesa-utils vulkan-tools \
+  pulseaudio-alsa neovim eza ncdu fd bat libva-utils mesa-utils vulkan-tools tree starship \
   cantarell-fonts ttf-fira-code noto-fonts kitty-terminfo rxvt-unicode-terminfo \
   rio-terminfo wezterm-terminfo wget aria2 btop realtime-privileges shared-mime-info
 $PAC -S --needed --asdeps git ed unzip fastjar python-pynvim xsel intel-media-driver \

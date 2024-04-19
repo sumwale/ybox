@@ -14,8 +14,8 @@ if ! pacman -Q paru 2>/dev/null >/dev/null; then
   cd ..
   $PARU -Rs paru-bin-debug
 fi
-echo_color "$fg_cyan" "Installing neovim-symlinks" >> $status_file
-$PARU -S --needed neovim-symlinks libtree
+echo_color "$fg_cyan" "Installing neovim-symlinks libtree autojump" >> $status_file
+$PARU -S --needed neovim-symlinks libtree autojump
 echo_color "$fg_cyan" "Clearing package cache and refreshing package database" >> $status_file
 yes | paru -Sccd
 $PARU -Syu

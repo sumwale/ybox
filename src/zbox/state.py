@@ -60,8 +60,11 @@ class ZboxStateManagement:
         with StringIO() as config:
             parser.write(config)
             config.flush()
-            self.__conn.execute("INSERT INTO containers VALUES (?, ?, ?, ?)",
-                                (container_name, distribution, shared_root, config.getvalue()))
+            config_str = config.getvalue()
+            self.__conn.execute("INSERT INTO containers VALUES (?, ?, ?, ?) ON CONFLICT(name) "
+                                "DO UPDATE SET distribution=?, shared_root=?, configuration=?",
+                                (container_name, distribution, shared_root, config_str,
+                                 distribution, shared_root, config_str))
             self.__conn.commit()
 
     def unregister_container(self, container_name: str) -> bool:
@@ -124,7 +127,7 @@ class ZboxStateManagement:
         """
         args = [(package, container_name, package_flags, package_flags) for package in packages]
         self.__conn.executemany("INSERT INTO packages VALUES (?, ?, ?) "
-                                "ON CONFLICT(name, container) DO UPDATE SET flags = ?", args)
+                                "ON CONFLICT(name, container) DO UPDATE SET flags=?", args)
         self.__conn.commit()
 
     def unregister_packages(self, container_name: str, packages: list[str]) -> None:

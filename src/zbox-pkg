@@ -1,0 +1,99 @@
+#!/usr/bin/python3
+
+from zbox.util import *
+
+
+def main() -> int:
+    args = parse_args()
+    docker_cmd = get_docker_command(args, "-d")
+    container_name = args.zbox
+
+    if not container_name:
+        containers: list[str] = []
+        # check running containers
+        running_result = subprocess.run([docker_cmd, "container", "ls", "--format={{ .Names }}",
+                                         f"--filter=label={ZboxLabel.CONTAINER_PRIMARY}"],
+                                        capture_output=True)
+        if running_result.returncode == 0:
+            containers = running_result.stdout.decode("utf-8").splitlines()
+        if args.quiet:
+            # use running container if there is only one of them
+            if len(containers) == 1:
+                container_name = containers[0]
+            else:
+                print_color(f"Expected one active zbox container but found {len(containers)}",
+                            fg=fgcolor.red)
+                return 1
+        else:
+            container_msg = ""
+            if len(containers) > 0:
+                container_msg = f" among [{containers[0]}] {' '.join(containers[1:])}"
+            while not container_name:
+                container_name = input(f"Please provide the container to use{container_msg}: ")
+                if not container_name and len(containers) > 0:
+                    container_name = containers[0]
+
+    if not check_zbox_state(docker_cmd, container_name, expected_states=["running"]):
+        print_color(f"No active zbox container named '{container_name}' found", fg=fgcolor.red)
+        return 1
+
+    return args.func(args, docker_cmd, container_name)
+
+
+def install_package(args: argparse.Namespace, docker_cmd: str, container_name: str) -> int:
+    print_color(f"Installing '{args.package}' in '{container_name}'", fg=fgcolor.blue)
+    # TODO: SW: read the command from distro.ini
+    install_result = subprocess.run(
+        [docker_cmd, "exec", "-it", container_name, "paru", "-S", "--needed", args.package])
+    # TODO: register in the state
+    return install_result.returncode
+
+
+def uninstall_package(args: argparse.Namespace, docker_cmd: str, container_name: str) -> int:
+    print(f"SW: Will uninstall {args.package} in {container_name} using {docker_cmd}")
+    return 0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Package management across zbox containers")
+    operations = parser.add_subparsers(title="Operations", required=True, metavar="OPERATION",
+                                       help="DESCRIPTION")
+    add_install(operations.add_parser("install", help="install a package with dependencies"))
+    add_uninstall(operations.add_parser("uninstall", help="uninstall a package and "
+                                                          "optionally its dependencies"))
+    # parser.add_argument("operation", type=str,
+    #                    choices=("install", "uninstall", "update", "list", "info", "search",
+    #                             "mark", "clean", "repair"),
+    #                    help="the package operation to perform")
+    return parser.parse_args()
+
+
+def add_common_args(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-d", "--docker-path", type=str,
+                           help="path of docker/podman if not in /usr/bin")
+    subparser.add_argument("-z", "--zbox", type=str,
+                           help="the zbox container to use for package operations")
+    subparser.add_argument("-q", "--quiet", action="store_true",
+                           help="proceed without asking any questions")
+
+
+def add_install(subparser: argparse.ArgumentParser) -> None:
+    add_common_args(subparser)
+    subparser.add_argument("-o", "--opt-deps", type=str,
+                           help="install optional dependencies (or recommendations)")
+    subparser.add_argument("package", type=str, help="the package to install")
+    subparser.set_defaults(func=install_package)
+
+
+def add_uninstall(subparser: argparse.ArgumentParser) -> None:
+    add_common_args(subparser)
+    subparser.add_argument("-p", "--purge", type=str,
+                           help="remove everything including system configuration files "
+                                "of the package")
+    subparser.add_argument("-r", "--remove-deps", type=str,
+                           help="uninstall unused dependencies in addition to the package")
+    subparser.add_argument("package", type=str, help="the package to uninstall")
+    subparser.set_defaults(func=uninstall_package)
+
+
+sys.exit(main())
