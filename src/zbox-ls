@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import sys
+
 from zbox.util import *
 
 
@@ -22,7 +24,7 @@ def main() -> int:
         docker_args.append("--no-trunc")
     log_result = subprocess.run(docker_args)
     if log_result.returncode != 0:
-        print_color("FAILED to list zbox containers", fg=fgcolor.red)
+        print_error("FAILED to list zbox containers")
         return 1
 
     return 0

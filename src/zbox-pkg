@@ -1,5 +1,10 @@
 #!/usr/bin/python3
 
+import sys
+from configparser import SectionProxy
+
+from zbox.config import ZboxConfiguration
+from zbox.state import ZboxStateManagement
 from zbox.util import *
 
 
@@ -21,8 +26,7 @@ def main() -> int:
             if len(containers) == 1:
                 container_name = containers[0]
             else:
-                print_color(f"Expected one active zbox container but found {len(containers)}",
-                            fg=fgcolor.red)
+                print_error(f"Expected one active zbox container but found {len(containers)}")
                 return 1
         else:
             container_msg = ""
@@ -34,22 +38,46 @@ def main() -> int:
                     container_name = containers[0]
 
     if not check_zbox_state(docker_cmd, container_name, expected_states=["running"]):
-        print_color(f"No active zbox container named '{container_name}' found", fg=fgcolor.red)
+        print_error(f"No active zbox container named '{container_name}' found")
         return 1
 
-    return args.func(args, docker_cmd, container_name)
+    env = Environ()
+    with ZboxStateManagement(env) as state:
+        if (config := state.get_container_configuration(container_name)) is None:
+            print_error(f"No state for zbox container '{container_name}' found!")
+            return 1
+        conf = ZboxConfiguration(env, config[0], container_name)
+        env_interpolation = EnvInterpolation(env, [])
+        distro_config = config_reader(conf.get_config_file(f"{conf.distribution}/distro.ini"),
+                                      env_interpolation)
+        pkgmgr = distro_config["pkgmgr"]
+        return args.func(args, pkgmgr, docker_cmd, container_name)
 
 
-def install_package(args: argparse.Namespace, docker_cmd: str, container_name: str) -> int:
-    print_color(f"Installing '{args.package}' in '{container_name}'", fg=fgcolor.blue)
-    # TODO: SW: read the command from distro.ini
-    install_result = subprocess.run(
-        [docker_cmd, "exec", "-it", container_name, "paru", "-S", "--needed", args.package])
+def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
+                    container_name: str) -> int:
+    print_info(f"Installing '{args.package}' in '{container_name}'")
+    quiet_flag = pkgmgr[PkgMgr.quiet_flag.name] if args.quiet else ""
+    if args.opt_deps:
+        # find the optional dependencies recursively, remove the ones already installed and
+        # ask the user to choose the ones to install
+        opt_deps_cmd = pkgmgr[PkgMgr.opt_deps.name]
+        deps_result = subprocess.run([docker_cmd, "exec", "-it", container_name,
+                                      "/bin/bash", "-c", f"{opt_deps_cmd} {args.package}"])
+        # expected format of output of above is -- PKG: <name>::::<description>::::<level>
+        if deps_result.returncode != 0:
+            print_error(f"FAILED to determine optional dependencies of {args.package} -- "
+                        "see above output for details")
+
+    install_cmd = pkgmgr[PkgMgr.install.name].format(quiet=quiet_flag)
+    install_result = subprocess.run([docker_cmd, "exec", "-it", container_name,
+                                     "/bin/bash", "-c", f"{install_cmd} {args.package}"])
     # TODO: register in the state
     return install_result.returncode
 
 
-def uninstall_package(args: argparse.Namespace, docker_cmd: str, container_name: str) -> int:
+def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
+                      container_name: str) -> int:
     print(f"SW: Will uninstall {args.package} in {container_name} using {docker_cmd}")
     return 0
 

@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import sys
+
 from zbox.util import *
 
 
@@ -9,12 +11,12 @@ def main() -> int:
     container_name = args.container_name
 
     if not check_zbox_state(docker_cmd, container_name, ["running"]):
-        print_color(f"No active zbox container named '{container_name}' found", fg=fgcolor.red)
+        print_error(f"No active zbox container named '{container_name}' found")
         return 1
 
     run_result = subprocess.run([docker_cmd, "exec", "-it", container_name, args.shell])
     if run_result.returncode != 0:
-        print_color(f"FAILED in {args.shell} execution on '{container_name}'", fg=fgcolor.red)
+        print_error(f"FAILURE in {args.shell} execution on '{container_name}'")
         return 1
 
     return 0

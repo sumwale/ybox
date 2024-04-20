@@ -1,0 +1,8 @@
+# these values are from the current upstream:
+# https://github.com/pylint-dev/pylint/blob/main/pylintrc
+
+[DESIGN]
+# Maximum number of arguments for function / method
+max-args = 9
+# Maximum number of branch for function / method body
+max-branches = 20

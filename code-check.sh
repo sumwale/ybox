@@ -7,7 +7,8 @@ if [ "$1" = "-l" ]; then
   PYLINT=1
 fi
 
-for f in zbox/*.py zbox-*; do
+export MYPYPATH=./src
+for f in src/zbox/*.py src/zbox-* arch/pkg*; do
   echo -------------------------------------------
   echo Output of mypy on $f
   echo -------------------------------------------
@@ -15,7 +16,8 @@ for f in zbox/*.py zbox-*; do
 done
 
 if [ -n "$PYLINT" ]; then
-  for f in zbox/*.py zbox-*; do
+  export PYTHONPATH=./src
+  for f in src/zbox/*.py src/zbox-* arch/pkg*; do
     echo -------------------------------------------
     echo -------------------------------------------
     echo

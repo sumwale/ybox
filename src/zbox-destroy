@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import sys
+
 from zbox.state import ZboxStateManagement
 from zbox.util import *
 
@@ -10,31 +12,30 @@ def main() -> int:
     container_name = args.container_name
 
     if not check_zbox_state(docker_cmd, container_name, expected_states=[]):
-        print_color(f"No zbox container named '{container_name}' found", fg=fgcolor.red)
+        print_error(f"No zbox container named '{container_name}' found")
         return 1
 
     print_color(f"Stopping zbox container '{container_name}'", fg=fgcolor.cyan)
     stop_result = subprocess.run([docker_cmd, "container", "stop", container_name])
     if stop_result.returncode != 0:
-        print_color(f"FAILED to stop '{container_name}'", fg=fgcolor.red)
+        print_error(f"FAILED to stop '{container_name}'")
         # continue since the container may already be in stopped state
 
-    print_color(f"Removing zbox container '{container_name}'", fg=fgcolor.purple)
+    print_warn(f"Removing zbox container '{container_name}'")
     rm_args = [docker_cmd, "container", "rm"]
     if args.force:
         rm_args.append("--force")
     rm_args.append(container_name)
     rm_result = subprocess.run(rm_args)
     if rm_result.returncode != 0:
-        print_color(f"FAILED to remove '{container_name}'", fg=fgcolor.red)
+        print_error(f"FAILED to remove '{container_name}'")
         return 1
 
     # remove the state from the database
-    print_color(f"Clearing zbox state for '{container_name}'", fg=fgcolor.purple)
+    print_warn(f"Clearing zbox state for '{container_name}'")
     with ZboxStateManagement(Environ()) as state:
         if not state.unregister_container(container_name):
-            print_color(f"No entry found for '{container_name}' in the state database",
-                        fg=fgcolor.red)
+            print_error(f"No entry found for '{container_name}' in the state database")
             return 1
 
     return 0

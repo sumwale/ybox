@@ -3,12 +3,13 @@
 import grp
 import pwd
 import shutil
+import sys
 import time
 from pathlib import Path
 from textwrap import dedent
 from typing import Tuple
 
-from zbox.config import Configuration
+from zbox.config import ZboxConfiguration
 from zbox.env import *
 from zbox.filelock import FileLock
 from zbox.state import ZboxStateManagement
@@ -24,18 +25,20 @@ from zbox.util import *
 def main() -> None:
     args = parse_args()
     box_name, docker_cmd = process_args(args)
-    print_color(f"Creating zbox container named '{box_name}'", fg=fgcolor.purple)
+    print_color(f"Creating zbox container named '{box_name}'", fg=fgcolor.green)
     env = Environ()
-    conf = Configuration(args, env, box_name)
-    support_list = conf.get_config_file("supported.list")
     distro = args.distribution
+    conf = ZboxConfiguration(env, distro, box_name)
+    support_list = conf.get_config_file("supported.list")
     # check that the distribution is in supported.list
     with open(support_list, "r", encoding="utf-8") as supp_file:
         if distro not in supp_file.read().splitlines():
             raise NotSupportedError(f"Distribution '{distro}' not supported in {support_list}")
 
+    # read the distribution specific configuration
+    base_image_name, shared_root_dirs, distro_config = read_distribution_config(env, conf)
     # setup entrypoint and related scripts to share with the container on a mount point
-    setup_zbox_scripts(distro, conf)
+    setup_zbox_scripts(conf, distro_config)
 
     # the profile used to build the docker/podman command-line
     profile = args.profile
@@ -43,7 +46,7 @@ def main() -> None:
         profile = conf.get_config_file(profile)
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the profile before any actions to ensure it is in proper shape
-    shared_root, config = process_sections(profile, distro, env, conf, docker_full_args)
+    shared_root, config = process_sections(profile, env, conf, distro_config, docker_full_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -87,7 +90,6 @@ def main() -> None:
     # Finally, continue with step 4) onwards of previous sequence.
 
     # handle the shared_root case: acquire file lock and check if shared container image exists
-    shared_root_dirs = ""
     if shared_root:
         os.makedirs(os.path.dirname(conf.shared_root_host_dir), exist_ok=True)
         with FileLock(f"{conf.shared_root_host_dir}-image.lock"):
@@ -98,22 +100,21 @@ def main() -> None:
             if image_exists.returncode != 0:
                 # run the "base" container with appropriate arguments for the current user to
                 # the 'entrypoint-base.sh' script to create the user and group in the container
-                shared_root_dirs = run_base_container(current_user, distro, docker_cmd, conf)
+                run_base_container(base_image_name, current_user, docker_cmd, conf)
                 # commit the stopped container with a temporary name, then remove the container
                 tmp_image = f"{conf.box_image(False)}__zbox_tmp"
                 commit_container(current_user, docker_cmd, tmp_image, conf)
                 # start a container using the temporary image with "--userns" option to make
                 # a copy of the container root directories to the shared location
-                run_shared_copy_container(distro, docker_cmd, tmp_image, shared_root_dirs, conf)
+                run_shared_copy_container(docker_cmd, tmp_image, shared_root_dirs, conf)
                 # finally commit this container with the name of the shared image
                 commit_container(current_user, docker_cmd, conf.box_image(True), conf)
                 remove_image(docker_cmd, tmp_image)
-            else:
-                _, shared_root_dirs, _ = read_distribution_config(distro, conf)
     else:
+        shared_root_dirs = ""
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
-        run_base_container(current_user, distro, docker_cmd, conf)
+        run_base_container(base_image_name, current_user, docker_cmd, conf)
         # commit the stopped container, remove it, then start new container with the
         # "--userns=keep-id" option for the required container state
         commit_container(current_user, docker_cmd, conf.box_image(False), conf)
@@ -123,22 +124,21 @@ def main() -> None:
     # getting upgraded, so it's best to restart container for those to take effect properly
 
     # set up the final container with all the required arguments
-    print_color(f"Initializing container for '{distro}' using '{profile}'",
-                fg=fgcolor.blue)
+    print_info(f"Initializing container for '{distro}' using '{profile}'")
     start_container(docker_full_args, current_user, shared_root_dirs, conf)
-    print_color("Waiting for the container to initialize (see "
-                f"'zbox-logs -f {box_name}' for detailed progress)", fg=fgcolor.blue)
+    print_info("Waiting for the container to initialize (see "
+               f"'zbox-logs -f {box_name}' for detailed progress)")
     sys.stdout.flush()
     # wait for container to initialize while printing out its progress from conf.status_file
     wait_for_container(docker_cmd, conf)
 
     # remove distribution specific scripts and restart container the final time
-    print_color(f"Restarting the final container '{box_name}'", fg=fgcolor.purple)
+    print_warn(f"Restarting the final container '{box_name}'")
     for script in conf.distribution_scripts:
         os.unlink(f"{conf.scripts_dir}/{script}")
     restart_container(docker_cmd, conf)
-    print_color("Waiting for the container to be ready (see "
-                f"'zbox-logs -f {box_name}' for detailed progress)", fg=fgcolor.blue)
+    print_info("Waiting for the container to be ready (see "
+               f"'zbox-logs -f {box_name}' for detailed progress)")
     sys.stdout.flush()
     wait_for_container(docker_cmd, conf)
 
@@ -183,7 +183,8 @@ def process_args(args: argparse.Namespace) -> Tuple[str, str]:
     return box_name, docker_cmd
 
 
-def process_sections(profile: str, distro: str, env: Environ, conf: Configuration,
+def process_sections(profile: str, env: Environ, conf: ZboxConfiguration,
+                     distro_config: ConfigParser,
                      docker_args: list[str]) -> Tuple[bool, ConfigParser]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
@@ -210,7 +211,7 @@ def process_sections(profile: str, distro: str, env: Environ, conf: Configuratio
         elif section == "configs":
             process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
         elif section == "apps":
-            process_apps_section(config["apps"], distro, conf)
+            process_apps_section(config["apps"], conf, distro_config)
         elif section != "appflags" and section != "startup":
             raise NotSupportedError(f"Unknown section [{section}] in '{profile}' "
                                     "or one of its includes")
@@ -381,7 +382,7 @@ def process_mounts_section(mounts_section: SectionProxy, args: list[str]) -> Non
 
 
 def process_configs_section(configs_section: SectionProxy, config_hardlinks: bool,
-                            conf: Configuration, args: list[str]) -> None:
+                            conf: ZboxConfiguration, args: list[str]) -> None:
     # copy or link the mentioned files in [configs] section which can be either files
     # or directories (recursively copy/link in the latter case)
     # this is refreshed on every container start
@@ -391,11 +392,9 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
         shutil.rmtree(conf.configs_dir)
     os.makedirs(conf.configs_dir, exist_ok=True)
     if config_hardlinks:
-        print_color("Creating hard links to paths specified in [configs]", fg=fgcolor.blue,
-                    end="  ...  ")
+        print_info("Creating hard links to paths specified in [configs]", end="  ...  ")
     else:
-        print_color("Creating a copy of paths specified in [configs]", fg=fgcolor.blue,
-                    end="  ...  ")
+        print_info("Creating a copy of paths specified in [configs]", end="  ...  ")
     # write the links to be created in a file that will be passed to container
     # entrypoint to create symlinks from container user's home to the mounted config files
     with open(conf.config_list, "w", encoding="utf-8") as config_list_fd:
@@ -421,22 +420,23 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                     else:
                         shutil.copy2(src_path, dest_path, follow_symlinks=True)
             else:
-                print_color(f"Skipping inaccessible configuration path '{src_path}'",
-                            fg=fgcolor.red)
-    print_color("DONE", fg=fgcolor.blue)
+                print_error(f"Skipping inaccessible configuration path '{src_path}'")
+    print_info("DONE")
     # finally mount the configs directory to corresponding directory in the target container
     add_mount_option(args, conf.configs_dir, conf.target_configs_dir, "ro")
 
 
-def process_apps_section(apps_section: SectionProxy, distro: str, conf: Configuration) -> None:
+def process_apps_section(apps_section: SectionProxy, conf: ZboxConfiguration,
+                         distro_config: ConfigParser) -> None:
     # first update the mirrors
-    _, _, distro_config = read_distribution_config(distro, conf)
     pkgmgr = distro_config["pkgmgr"]
-    install_cmd = pkgmgr["install"]
-    cleanup_cmd = pkgmgr["cleanup"]
+    quiet_flag = pkgmgr[PkgMgr.quiet_flag.name]
+    install_cmd = pkgmgr[PkgMgr.install.name].format(quiet=quiet_flag)
+    cleanup_cmd = pkgmgr[PkgMgr.cleanup.name]
     if not install_cmd:
         print_color("Skipping app installation since no 'pkgmgr.install' has "
-                    "been defined in distro.ini or is empty", fg=fgcolor.lightgray, bg=bgcolor.red)
+                    "been defined in distro.ini or is empty",
+                    fg=fgcolor.lightgray, bg=bgcolor.red)
         return
     # write pkgmgr.conf for entrypoint.sh
     with open(f"{conf.scripts_dir}/pkgmgr.conf", "w", encoding="utf-8") as pkg_fd:
@@ -472,7 +472,7 @@ def copytree(src: str, dest: str, hardlink: bool = False) -> None:
                     shutil.copy2(src_path, f"{dest_dir}/{src_file}", follow_symlinks=True)
 
 
-def setup_zbox_scripts(distro: str, conf: Configuration) -> None:
+def setup_zbox_scripts(conf: ZboxConfiguration, distro_config: ConfigParser) -> None:
     # first create local mount directory having entrypoint and other scripts
     if os.path.exists(conf.scripts_dir):
         shutil.rmtree(conf.scripts_dir)
@@ -484,33 +484,41 @@ def setup_zbox_scripts(distro: str, conf: Configuration) -> None:
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     # also copy distribution specific scripts
     for script in conf.distribution_scripts:
-        path = conf.get_config_file(f"{distro}/{script}")
+        path = conf.get_config_file(f"{conf.distribution}/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
+    base_section = distro_config["base"]
+    if "scripts" in base_section:
+        for script in base_section["scripts"].split(";"):
+            path = conf.get_config_file(f"{conf.distribution}/{script}")
+            shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
+        # finally copy the zbox python module which may be used by distribution scripts
+        src_dir = os.path.dirname(os.path.realpath(__file__))
+        copytree(f"{src_dir}/zbox", f"{conf.scripts_dir}/zbox")
 
 
-def read_distribution_config(distro: str, conf: Configuration) -> Tuple[str, str, ConfigParser]:
-    distro_config = config_reader(conf.get_config_file(f"{distro}/distro.ini"), None)
+def read_distribution_config(env: Environ,
+                             conf: ZboxConfiguration) -> Tuple[str, str, ConfigParser]:
+    env_interpolation = EnvInterpolation(env, [])
+    distro_config = config_reader(conf.get_config_file(f"{conf.distribution}/distro.ini"),
+                                  env_interpolation)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
     shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist
     return image_name, shared_root_dirs, distro_config
 
 
-def run_base_container(current_user: str, distro: str, docker_cmd: str,
-                       conf: Configuration) -> str:
-    # determine the base image name
-    image_name, shared_root_dirs, _ = read_distribution_config(distro, conf)
+def run_base_container(image_name: str, current_user: str, docker_cmd: str,
+                       conf: ZboxConfiguration) -> None:
     # refresh the image locally first to decrease update size later
-    print_color(f"Refreshing local copy of the base image '{image_name}'", fg=fgcolor.purple)
+    print_warn(f"Refreshing local copy of the base image '{image_name}'")
     pull_result = subprocess.run([docker_cmd, "pull", image_name])
     if pull_result.returncode != 0:
-        print_color("FAILED -- see the output above for details", fg=fgcolor.red)
-        print_color("Continuing with the local copy of the image", fg=fgcolor.purple)
+        print_error("FAILED -- see the output above for details")
+        print_warn("Continuing with the local copy of the image")
     # get current user and group details to pass to the entrypoint script
     user_entry = pwd.getpwnam(current_user)
     group_entry = grp.getgrgid(user_entry.pw_gid)
-    print_color(f"Creating container specific image having sudo user '{current_user}'",
-                fg=fgcolor.purple)
+    print_warn(f"Creating container specific image having sudo user '{current_user}'")
     docker_run = [docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR", f"--name={conf.box_name}",
                   f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
                   f"--label={ZboxLabel.CONTAINER_BASE}",
@@ -526,26 +534,23 @@ def run_base_container(current_user: str, distro: str, docker_cmd: str,
         docker_run.append(conf.timezone)
     init_result = subprocess.run(docker_run)
     if init_result.returncode != 0:
-        print_color("FAILED -- see the output above for details", fg=fgcolor.red)
+        print_error("FAILED -- see the output above for details")
         sys.exit(1)
-    # return value is the semicolon separated list of directories to be mounted in the
-    # shared location for the final containers
-    return shared_root_dirs
 
 
-def run_shared_copy_container(distro: str, docker_cmd: str, image_name: str,
-                              shared_root_dirs: str, conf: Configuration) -> None:
+def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs: str,
+                              conf: ZboxConfiguration) -> None:
     root_host = conf.shared_root_host_dir
     # if shared root copy exists locally, then prompt user to delete it or else exit
     if os.path.exists(root_host):
         input_msg = f"""
-            The shared root directory for '{distro}' already exists in:
+            The shared root directory for '{conf.distribution}' already exists in:
                 {root_host}
-            However, the corresponding zbox container image for '{distro}' does not exist.
-            This can happen if an old copy of shared root directory is lying around and
+            However, the corresponding zbox container image for '{conf.distribution}' does not
+            exist. This can happen if an old copy of shared root directory is lying around and
             is usually safe to remove, but you should be sure that no other zbox is running
-            for '{distro}' with 'shared_root' configuration that is using that directory.
-            Should the root directory be removed (y/N): """
+            for '{conf.distribution}' with 'shared_root' configuration that is using that
+            directory. Should the root directory be removed (y/N): """
         response = input(dedent(input_msg))
         if response.lower() == "y":
             try:
@@ -554,11 +559,10 @@ def run_shared_copy_container(distro: str, docker_cmd: str, image_name: str,
                 # try with sudo
                 sudo_rm = subprocess.run(["sudo", "/bin/rm", "-rf", root_host])
                 if sudo_rm.returncode != 0:
-                    print_color("FAILED to delete directory -- see the output above for details",
-                                fg=fgcolor.red)
+                    print_error("FAILED to delete directory -- see the output above for details")
                     sys.exit(1)
         else:
-            print_color(f"Aborting creation of zbox container '{conf.box_name}'", fg=fgcolor.red)
+            print_error(f"Aborting creation of zbox container '{conf.box_name}'")
             # remove the temporary image before exit
             remove_image(docker_cmd, image_name)
             sys.exit(1)
@@ -573,30 +577,28 @@ def run_shared_copy_container(distro: str, docker_cmd: str, image_name: str,
                                   f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_cp}",
                                   image_name, shared_root_dirs, conf.shared_root_mount_dir])
     if init_result.returncode != 0:
-        print_color("FAILED -- see the output above for details", fg=fgcolor.red)
+        print_error("FAILED -- see the output above for details")
         sys.exit(1)
 
 
 def print_subprocess_output(result: subprocess.CompletedProcess) -> None:
     print_color(result.stdout.decode("utf-8"))
-    print_color(result.stderr.decode("utf-8"), fg=fgcolor.orange)
+    print_warn(result.stderr.decode("utf-8"))
 
 
 def commit_container(current_user: str, docker_cmd: str, box_image: str,
-                     conf: Configuration) -> None:
+                     conf: ZboxConfiguration) -> None:
     commit_result = subprocess.run([docker_cmd, "commit", f"-c=USER={current_user}",
                                     f"-c=WORKDIR=/home/{current_user}", conf.box_name,
                                     box_image], capture_output=True)
     if commit_result.returncode != 0:
         print_subprocess_output(commit_result)
-        print_color("FAILED in container commit -- see the output above for details",
-                    fg=fgcolor.red)
+        print_error("FAILED in container commit -- see the output above for details")
         sys.exit(1)
 
     remove_result = subprocess.run([docker_cmd, "container", "rm", conf.box_name])
     if remove_result.returncode != 0:
-        print_color("FAILED in container rm -- see the output above for details",
-                    fg=fgcolor.red)
+        print_error("FAILED in container rm -- see the output above for details")
         sys.exit(1)
 
 
@@ -604,12 +606,11 @@ def remove_image(docker_cmd: str, box_image: str) -> None:
     rm_result = subprocess.run([docker_cmd, "image", "rm", box_image], capture_output=True)
     if rm_result.returncode != 0:
         print_subprocess_output(rm_result)
-        print_color("FAILED in image remove -- see the output above for details",
-                    fg=fgcolor.red)
+        print_error("FAILED in image remove -- see the output above for details")
 
 
 def start_container(docker_full_cmd: list[str], current_user: str, shared_root_dirs: str,
-                    conf: Configuration) -> None:
+                    conf: ZboxConfiguration) -> None:
     add_mount_option(docker_full_cmd, conf.scripts_dir, conf.target_scripts_dir, "ro")
     # touch the status file and mount it
     status_path = Path(conf.status_file)
@@ -640,12 +641,12 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     docker_full_cmd.append(conf.box_name)
     launch_result = subprocess.run(docker_full_cmd)
     if launch_result.returncode != 0:
-        print_color("FAILED to launch container -- see the output above and check "
-                    f"'zbox-logs {conf.box_name}' for details", fg=fgcolor.red)
+        print_error("FAILED to launch container -- see the output above and check "
+                    f"'zbox-logs {conf.box_name}' for details")
         sys.exit(1)
 
 
-def wait_for_container(docker_cmd: str, conf: Configuration) -> None:
+def wait_for_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
     box_name = conf.box_name
     max_wait_secs = 600
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
@@ -666,15 +667,15 @@ def wait_for_container(docker_cmd: str, conf: Configuration) -> None:
                         # clear the status file and return
                         truncate_file(conf.status_file)
                         return
-                print_color("FAILED waiting for container to be ready -- check "
-                            f"'zbox-logs {box_name}' for details", fg=fgcolor.red)
+                print_error("FAILED waiting for container to be ready -- check "
+                            f"'zbox-logs {box_name}' for details")
                 sys.exit(1)
             # using simple poll per second rather than inotify or similar because the
             # initialization will take a good amount of time and second granularity is enough
             time.sleep(1)
     # reading did not end after max_wait_secs
-    print_color(f"TIMED OUT waiting for ready container after {max_wait_secs}secs -- check "
-                f"'zbox-logs -f {box_name}' for details", fg=fgcolor.red)
+    print_error(f"TIMED OUT waiting for ready container after {max_wait_secs}secs -- check "
+                f"'zbox-logs -f {box_name}' for details")
     sys.exit(1)
 
 
@@ -683,11 +684,11 @@ def truncate_file(f: str) -> None:
         fd.truncate(0)
 
 
-def restart_container(docker_cmd: str, conf: Configuration) -> None:
+def restart_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
     launch_result = subprocess.run([docker_cmd, "container", "start", conf.box_name])
     if launch_result.returncode != 0:
-        print_color("FAILED to restart container -- see the output above and check "
-                    f"'zbox-logs {conf.box_name}' for details", fg=fgcolor.red)
+        print_error("FAILED to restart container -- see the output above and check "
+                    f"'zbox-logs {conf.box_name}' for details")
         sys.exit(1)
 
 

@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import sys
+
 from zbox.util import *
 
 
@@ -9,15 +11,21 @@ def main() -> int:
     container_name = args.container_name
 
     if not check_zbox_state(docker_cmd, container_name, expected_states=[]):
-        print_color(f"No zbox container named '{container_name}' found", fg=fgcolor.red)
+        print_error(f"No zbox container named '{container_name}' found")
         return 1
 
     if args.follow:
-        log_result = subprocess.run([docker_cmd, "container", "logs", "-f", container_name])
+        try:
+            log_result = subprocess.run([docker_cmd, "container", "logs", "-f", container_name])
+            exit_code = log_result.returncode
+        except KeyboardInterrupt:
+            exit_code = 0  # pretend everything is fine
+            pass
     else:
         log_result = subprocess.run([docker_cmd, "container", "logs", container_name])
-    if log_result.returncode != 0:
-        print_color(f"FAILED to show logs of '{container_name}'", fg=fgcolor.red)
+        exit_code = log_result.returncode
+    if exit_code != 0:
+        print_error(f"FAILED to show logs of '{container_name}'")
         return 1
 
     return 0

@@ -2,9 +2,9 @@ import argparse
 import os
 import re
 import subprocess
-import sys
 from collections import namedtuple
 from configparser import ConfigParser, Interpolation
+from enum import Enum, auto
 from typing import Optional
 
 from .env import Environ, ZboxLabel
@@ -12,6 +12,19 @@ from .env import Environ, ZboxLabel
 
 class NotSupportedError(Exception):
     """Raised when an operation or configuration is not supported or invalid."""
+
+
+class PkgMgr(Enum):
+    install = auto()
+    opt_deps = auto()
+    uninstall = auto()
+    uninstall_w_deps = auto()
+    quiet_flag = auto()
+    update_all = auto()
+    cleanup = auto()
+    info = auto()
+    list = auto()
+    list_all = auto()
 
 
 class EnvInterpolation(Interpolation):
@@ -111,6 +124,20 @@ def check_zbox_state(docker_cmd: str, box_name: str, expected_states: list[str])
     return False
 
 
+def run_and_get_output(cmd: str, capture_output: bool = True, exit_on_error: bool = True) -> str:
+    result = subprocess.run(cmd.split(), capture_output=capture_output)
+    if result.returncode != 0:
+        if exit_on_error:
+            print_error(f"FAILURE in '{cmd}'")
+            if capture_output:
+                print(result.stdout.decode("utf-8"))
+                print(result.stderr.decode("utf-8"))
+            raise ChildProcessError
+        else:
+            return ""
+    return result.stdout.decode("utf-8") if capture_output else ""
+
+
 # colors for printing in terminal
 TermColors = namedtuple("TermColors",
                         "black red green orange blue purple cyan lightgray reset bold disable")
@@ -131,6 +158,17 @@ def print_color(msg: str, fg: Optional[str] = None,
         full_msg = f"{bg}{msg}{bgcolor.reset}"
     else:
         full_msg = msg
-    print(full_msg, end=end)
-    if end != "\n":
-        sys.stdout.flush()
+    # force flush the output if it doesn't end in a newline
+    print(full_msg, end=end, flush=(end != "\n"))
+
+
+def print_error(msg: str, end: str = "\n"):
+    print_color(msg, fg=fgcolor.red, end=end)
+
+
+def print_warn(msg: str, end: str = "\n"):
+    print_color(msg, fg=fgcolor.purple, end=end)
+
+
+def print_info(msg: str, end: str = "\n"):
+    print_color(msg, fg=fgcolor.blue, end=end)
