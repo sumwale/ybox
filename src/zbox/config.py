@@ -1,10 +1,22 @@
 import os
-from typing import Optional, Tuple
+from typing import Optional
 
 from .env import Environ
 
 
 class ZboxConfiguration:
+    class _ContainerConfig:
+        def __init__(self, env: Environ, box_name: str):
+            container_dir = f"{env.data_dir}/{box_name}"
+            os.environ["ZBOX_CONTAINER_DIR"] = container_dir
+            self.configs_dir = f"{container_dir}/configs"
+            self.target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
+            self.scripts_dir = f"{container_dir}/zbox-scripts"
+            self.target_scripts_dir = "/usr/local/zbox"
+            os.environ["ZBOX_TARGET_SCRIPTS_DIR"] = self.target_scripts_dir
+            self.status_file = f"{container_dir}/status"
+            self.config_list = f"{self.scripts_dir}/config.list"
+            self.app_list = f"{self.scripts_dir}/app.list"
 
     def __init__(self, env: Environ, distribution: str, box_name: str):
         # set up the additional environment variables
@@ -21,19 +33,10 @@ class ZboxConfiguration:
         if os.path.islink("/etc/localtime"):
             self.__localtime = os.readlink("/etc/localtime")
         if os.path.exists("/etc/timezone"):
-            with open("/etc/timezone") as tz:
-                self.__timezone = tz.read().rstrip("\n")
+            with open("/etc/timezone", encoding="utf-8") as timezone:
+                self.__timezone = timezone.read().rstrip("\n")
         self.__shared_root_host_dir = f"{env.data_dir}/ROOTS/{distribution}"
-        self.__container_dir = f"{env.data_dir}/{box_name}"
-        os.environ["ZBOX_CONTAINER_DIR"] = self.__container_dir
-        self.__configs_dir = f"{self.__container_dir}/configs"
-        self.__target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
-        self.__scripts_dir = f"{self.__container_dir}/zbox-scripts"
-        self.__target_scripts_dir = "/usr/local/zbox"
-        os.environ["ZBOX_TARGET_SCRIPTS_DIR"] = self.__target_scripts_dir
-        self.__status_file = f"{self.__container_dir}/status"
-        self.__config_list = f"{self.__scripts_dir}/config.list"
-        self.__app_list = f"{self.__scripts_dir}/app.list"
+        self.__container_conf = self._ContainerConfig(env, box_name)
 
     def get_config_file(self, conf_file: str) -> str:
         # order is first search in user's config directory, and then the system config directory
@@ -64,11 +67,6 @@ class ZboxConfiguration:
         """
         return self.__shared_box_image if shared_root else self.__box_image
 
-    @property
-    def configuration_dirs(self) -> Tuple[str, str]:
-        """local and global directories having configuration files for the containers"""
-        return self.__configuration_dirs
-
     # the target link for /etc/localtime
     @property
     def localtime(self) -> Optional[str]:
@@ -89,20 +87,15 @@ class ZboxConfiguration:
     def shared_root_mount_dir(self) -> str:
         return "/zbox-root"
 
-    # base user directory where runtime data related to the container is stored
-    @property
-    def container_dir(self) -> str:
-        return self.__container_dir
-
     # user directory where configuration files specified in [configs] are copied for sharing
     @property
     def configs_dir(self) -> str:
-        return self.__configs_dir
+        return self.__container_conf.configs_dir
 
     # target container directory where shared [configs] are mounted in the container
     @property
     def target_configs_dir(self) -> str:
-        return self.__target_configs_dir
+        return self.__container_conf.target_configs_dir
 
     # entrypoint script name for the base container
     @property
@@ -122,17 +115,17 @@ class ZboxConfiguration:
     # local directory where scripts to be shared with container are copied
     @property
     def scripts_dir(self) -> str:
-        return self.__scripts_dir
+        return self.__container_conf.scripts_dir
 
     # target container directory where shared scripts are mounted
     @property
     def target_scripts_dir(self) -> str:
-        return self.__target_scripts_dir
+        return self.__container_conf.target_scripts_dir
 
     # local status file to communicate when the container is ready for use
     @property
     def status_file(self) -> str:
-        return self.__status_file
+        return self.__container_conf.status_file
 
     # target location where status_file is mounted in container
     @property
@@ -148,9 +141,9 @@ class ZboxConfiguration:
     # as mentioned in the [configs] section
     @property
     def config_list(self) -> str:
-        return self.__config_list
+        return self.__container_conf.config_list
 
     # file containing list of applications to be installed in the container
     @property
     def app_list(self) -> str:
-        return self.__app_list
+        return self.__container_conf.app_list

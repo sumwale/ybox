@@ -1,26 +1,19 @@
 #!/usr/bin/python3
 
-import sys
+import argparse
 
-from zbox.util import *
+from zbox.util import fgcolor, get_docker_command, run_command, print_color, verify_zbox_state
 
 
-def main() -> int:
+def main() -> None:
     args = parse_args()
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    if not check_zbox_state(docker_cmd, container_name, expected_states=["exited", "stopped"]):
-        print_error(f"No stopped zbox container named '{container_name}' found")
-        return 1
+    verify_zbox_state(docker_cmd, container_name, ["exited", "stopped"], error_msg=" stopped ")
 
     print_color(f"Restarting zbox container '{container_name}'", fg=fgcolor.cyan)
-    start_result = subprocess.run([docker_cmd, "container", "start", container_name])
-    if start_result.returncode != 0:
-        print_error(f"FAILED to start '{container_name}'")
-        return 1
-
-    return 0
+    run_command([docker_cmd, "container", "start", container_name], error_msg="container start")
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,4 +24,4 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-sys.exit(main())
+main()

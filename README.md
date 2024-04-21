@@ -24,3 +24,24 @@ for package management across containers are provided with the idea
 being that the whole setup feels like a native package manager on
 isolated containers having access to whole slew of applications from
 huge repositories like Arch Linux with AUR.
+
+
+### Examples
+
+(these are in the src directory)
+
+zbox-create arch basic.ini
+
+Create a zbox for Arch Linux running the basic profile. By default the name of
+the container will be "zbox-arch\_basic" which can be changed with the -n/--name option.
+You need to have linked configuration files/directories from top-level zbox to your
+configuration directory in ~/.config/zbox first i.e. ln -s <zbox-checkout>/\* ~/.config/zbox/.
+
+
+zbox-shell zbox-arch\_basic
+
+Open a shell into the above box
+
+zbox-destroy zbox-arch\_basic
+
+Destroy the basic but does not delete any home files or installation files (latter if shared\_root is true).

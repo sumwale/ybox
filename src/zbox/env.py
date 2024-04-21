@@ -15,7 +15,7 @@ class Environ:
         os.environ["TARGET_HOME"] = self.__target_home
         data_subdir = ".local/share/zbox"
         self.__data_dir = f"{self.__home_dir}/{data_subdir}"
-        self.__target_data_dir = f"{self.__home_dir}/{data_subdir}"
+        self.__target_data_dir = f"{self.__target_home}/{data_subdir}"
         self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR")
         self.__now = datetime.now()
         os.environ["NOW"] = str(self.__now)
@@ -45,7 +45,7 @@ class Environ:
         :return: base user directory of the container user where runtime data related to all
                 the containers is stored
         """
-        return self.__data_dir
+        return self.__target_data_dir
 
     # $XDG_RUNTIME_DIR in the current session
     @property

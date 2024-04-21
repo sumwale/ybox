@@ -1,11 +1,15 @@
 #!/usr/bin/python3
 
+import argparse
+import subprocess
 import sys
 from configparser import SectionProxy
 
 from zbox.config import ZboxConfiguration
+from zbox.env import Environ
 from zbox.state import ZboxStateManagement
-from zbox.util import *
+from zbox.util import EnvInterpolation, PkgMgr, ZboxLabel, config_reader
+from zbox.util import get_docker_command, print_error, print_info, run_command, verify_zbox_state
 
 
 def main() -> int:
@@ -14,13 +18,10 @@ def main() -> int:
     container_name = args.zbox
 
     if not container_name:
-        containers: list[str] = []
         # check running containers
-        running_result = subprocess.run([docker_cmd, "container", "ls", "--format={{ .Names }}",
-                                         f"--filter=label={ZboxLabel.CONTAINER_PRIMARY}"],
-                                        capture_output=True)
-        if running_result.returncode == 0:
-            containers = running_result.stdout.decode("utf-8").splitlines()
+        containers = run_command([docker_cmd, "container", "ls", "--format={{ .Names }}",
+                                  f"--filter=label={ZboxLabel.CONTAINER_PRIMARY}"],
+                                 capture_output=True, error_msg="container ls").splitlines()
         if args.quiet:
             # use running container if there is only one of them
             if len(containers) == 1:
@@ -37,9 +38,7 @@ def main() -> int:
                 if not container_name and len(containers) > 0:
                     container_name = containers[0]
 
-    if not check_zbox_state(docker_cmd, container_name, expected_states=["running"]):
-        print_error(f"No active zbox container named '{container_name}' found")
-        return 1
+    verify_zbox_state(docker_cmd, container_name, ["running"], error_msg=" active ")
 
     env = Environ()
     with ZboxStateManagement(env) as state:
@@ -57,23 +56,25 @@ def main() -> int:
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
                     container_name: str) -> int:
     print_info(f"Installing '{args.package}' in '{container_name}'")
-    quiet_flag = pkgmgr[PkgMgr.quiet_flag.name] if args.quiet else ""
+    quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.name] if args.quiet else ""
+    install_cmd = pkgmgr[PkgMgr.INSTALL.name].format(quiet=quiet_flag)
+    # don't exit on error here because the caller may have further actions to perform before exit
+    code = run_command([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
+                        f"{install_cmd} {args.package}"], exit_on_error=False,
+                       error_msg=f"installing '{args.package}'")
+    # TODO: register in the state
     if args.opt_deps:
-        # find the optional dependencies recursively, remove the ones already installed and
+        # find the optional dependencies recursively, removing the ones already installed and
         # ask the user to choose the ones to install
-        opt_deps_cmd = pkgmgr[PkgMgr.opt_deps.name]
-        deps_result = subprocess.run([docker_cmd, "exec", "-it", container_name,
-                                      "/bin/bash", "-c", f"{opt_deps_cmd} {args.package}"])
+        opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS.name]
+        deps_result = subprocess.run([docker_cmd, "exec", "-it", container_name, "/bin/bash",
+                                      "-c", f"{opt_deps_cmd} {args.package}"], check=False)
         # expected format of output of above is -- PKG: <name>::::<description>::::<level>
         if deps_result.returncode != 0:
             print_error(f"FAILED to determine optional dependencies of {args.package} -- "
                         "see above output for details")
 
-    install_cmd = pkgmgr[PkgMgr.install.name].format(quiet=quiet_flag)
-    install_result = subprocess.run([docker_cmd, "exec", "-it", container_name,
-                                     "/bin/bash", "-c", f"{install_cmd} {args.package}"])
-    # TODO: register in the state
-    return install_result.returncode
+    return int(code)
 
 
 def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,

@@ -1,44 +1,38 @@
 #!/usr/bin/python3
 
+import argparse
 import sys
 
+from zbox.env import Environ
 from zbox.state import ZboxStateManagement
-from zbox.util import *
+from zbox.util import fgcolor, get_docker_command, print_color, print_error, print_warn
+from zbox.util import run_command, verify_zbox_state
 
 
-def main() -> int:
+def main() -> None:
     args = parse_args()
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    if not check_zbox_state(docker_cmd, container_name, expected_states=[]):
-        print_error(f"No zbox container named '{container_name}' found")
-        return 1
-
+    verify_zbox_state(docker_cmd, container_name, expected_states=[])
     print_color(f"Stopping zbox container '{container_name}'", fg=fgcolor.cyan)
-    stop_result = subprocess.run([docker_cmd, "container", "stop", container_name])
-    if stop_result.returncode != 0:
-        print_error(f"FAILED to stop '{container_name}'")
-        # continue since the container may already be in stopped state
+    # continue even if this fails since the container may already be in stopped state
+    run_command([docker_cmd, "container", "stop", container_name],
+                exit_on_error=False, error_msg=f"stopping '{container_name}'")
 
     print_warn(f"Removing zbox container '{container_name}'")
     rm_args = [docker_cmd, "container", "rm"]
     if args.force:
         rm_args.append("--force")
     rm_args.append(container_name)
-    rm_result = subprocess.run(rm_args)
-    if rm_result.returncode != 0:
-        print_error(f"FAILED to remove '{container_name}'")
-        return 1
+    run_command(rm_args, error_msg=f"removing '{container_name}'")
 
     # remove the state from the database
     print_warn(f"Clearing zbox state for '{container_name}'")
     with ZboxStateManagement(Environ()) as state:
         if not state.unregister_container(container_name):
             print_error(f"No entry found for '{container_name}' in the state database")
-            return 1
-
-    return 0
+            sys.exit(1)
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,4 +46,4 @@ def parse_args() -> argparse.Namespace:
 
 
 # sys.tracebacklimit = 0
-sys.exit(main())
+main()

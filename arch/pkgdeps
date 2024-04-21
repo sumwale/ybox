@@ -10,7 +10,7 @@ from typing import Tuple
 
 import ijson  # type: ignore
 
-from zbox.util import fgcolor, print_color, print_error, print_warn, run_and_get_output
+from zbox.util import fgcolor, print_color, print_error, print_warn, run_command
 
 _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
 _AUR_META_CACHE_DIR = f"{os.environ['HOME']}/.cache/{os.path.basename(__file__)}"
@@ -38,7 +38,7 @@ def main() -> None:
                 fg=fgcolor.orange)
     # first get the list of all installed packages to eliminate installed packages
     # (include their provides too)
-    installed_packages = set(run_and_get_output(r"/usr/bin/expac %n\t%S").split())
+    installed_packages = set(run_command(r"/usr/bin/expac %n\t%S", capture_output=True).split())
     # next build a map of all packages in pacman database from their provides, dependencies and
     # optional dependencies; the map key will be original package name and their provides mapped
     # to a tuple having the name, description with list of required and optional dependencies
@@ -54,8 +54,8 @@ def main() -> None:
 
 def build_pacman_db_map(arch_packages: dict[str, list[PackageAlternate]]) -> None:
     # the separator '::::' is just something that does not appear in descriptions (at least so far)
-    for package_list in run_and_get_output(
-            r"/usr/bin/expac -S %n::::%d::::%S::::%E::::%o").split("\n"):
+    for package_list in run_command(r"/usr/bin/expac -S %n::::%d::::%S::::%E::::%o",
+                                    capture_output=True).splitlines():
         if not package_list:
             continue
         package_info = package_list.split("::::")
@@ -81,11 +81,9 @@ def refresh_aur_metadata() -> None:
         meta_file = Path(_AUR_META_FILE)
         meta_file.unlink(missing_ok=True)
         # delete any partial file in case of download failure
-        try:
-            run_and_get_output(_FETCH_AUR_META, capture_output=False)
-        except ChildProcessError:
+        if (code := run_command(_FETCH_AUR_META, exit_on_error=False)) != "0":
             meta_file.unlink(missing_ok=True)
-            sys.exit(1)
+            sys.exit(code)
 
 
 # using ijson instead of the standard json because latter always loads the entire
@@ -121,7 +119,7 @@ def find_opt_deps(package: str, installed: set[str],
     package = package.lower()
     # add package to installed list so that we do not recurse for it again
     installed.add(package)
-    # search all packages to obtain the required and optional dependencies
+    # search all_packages to obtain the required and optional dependencies
     if not (alternates := all_packages.get(package)):
         if level == 1:
             print_color(f"Searching '{package}' and dependencies in AUR", fg=fgcolor.orange)
@@ -154,8 +152,7 @@ def find_opt_deps(package: str, installed: set[str],
     if required:
         for pkg in required:
             if pkg not in installed:
-                find_opt_deps(pkg, installed, all_packages, opt_deps,
-                              max_level, level + 1)
+                find_opt_deps(pkg, installed, all_packages, opt_deps, max_level, level + 1)
 
 
 def search_alternates(package_name: str, alternates: list[PackageAlternate]) -> PackageAlternate:

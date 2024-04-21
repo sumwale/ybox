@@ -3,7 +3,6 @@
 import grp
 import pwd
 import shutil
-import sys
 import time
 from pathlib import Path
 from textwrap import dedent
@@ -94,7 +93,7 @@ def main() -> None:
         os.makedirs(os.path.dirname(conf.shared_root_host_dir), exist_ok=True)
         with FileLock(f"{conf.shared_root_host_dir}-image.lock"):
             image_exists = subprocess.run([docker_cmd, "inspect", "--type=image",
-                                           "--format={{.Id}}", conf.box_image(True)],
+                                           "--format={{.Id}}", conf.box_image(True)], check=False,
                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             # if image already exists, then skip the subsequent steps
             if image_exists.returncode != 0:
@@ -430,9 +429,9 @@ def process_apps_section(apps_section: SectionProxy, conf: ZboxConfiguration,
                          distro_config: ConfigParser) -> None:
     # first update the mirrors
     pkgmgr = distro_config["pkgmgr"]
-    quiet_flag = pkgmgr[PkgMgr.quiet_flag.name]
-    install_cmd = pkgmgr[PkgMgr.install.name].format(quiet=quiet_flag)
-    cleanup_cmd = pkgmgr[PkgMgr.cleanup.name]
+    quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.name]
+    install_cmd = pkgmgr[PkgMgr.INSTALL.name].format(quiet=quiet_flag)
+    cleanup_cmd = pkgmgr[PkgMgr.CLEANUP.name]
     if not install_cmd:
         print_color("Skipping app installation since no 'pkgmgr.install' has "
                     "been defined in distro.ini or is empty",
@@ -511,10 +510,9 @@ def run_base_container(image_name: str, current_user: str, docker_cmd: str,
                        conf: ZboxConfiguration) -> None:
     # refresh the image locally first to decrease update size later
     print_warn(f"Refreshing local copy of the base image '{image_name}'")
-    pull_result = subprocess.run([docker_cmd, "pull", image_name])
-    if pull_result.returncode != 0:
-        print_error("FAILED -- see the output above for details")
-        print_warn("Continuing with the local copy of the image")
+    if run_command([docker_cmd, "pull", image_name], exit_on_error=False,
+                   error_msg=f"pulling {image_name}") != 0:
+        print_warn("Trying to continue with local copy of the image")
     # get current user and group details to pass to the entrypoint script
     user_entry = pwd.getpwnam(current_user)
     group_entry = grp.getgrgid(user_entry.pw_gid)
@@ -532,10 +530,7 @@ def run_base_container(image_name: str, current_user: str, docker_cmd: str,
     if conf.timezone:
         docker_run.append("-z")
         docker_run.append(conf.timezone)
-    init_result = subprocess.run(docker_run)
-    if init_result.returncode != 0:
-        print_error("FAILED -- see the output above for details")
-        sys.exit(1)
+    run_command(docker_run, error_msg="running container with base image")
 
 
 def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs: str,
@@ -557,10 +552,7 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs
                 shutil.rmtree(root_host)
             except OSError:
                 # try with sudo
-                sudo_rm = subprocess.run(["sudo", "/bin/rm", "-rf", root_host])
-                if sudo_rm.returncode != 0:
-                    print_error("FAILED to delete directory -- see the output above for details")
-                    sys.exit(1)
+                run_command(["sudo", "/bin/rm", "-rf", root_host], error_msg="deleting directory")
         else:
             print_error(f"Aborting creation of zbox container '{conf.box_name}'")
             # remove the temporary image before exit
@@ -569,44 +561,27 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs
     os.makedirs(root_host)
     # the entrypoint-cp.sh script requires two arguments: first is the semicolon separated
     # list of directories to be copied, and second the target directory
-    init_result = subprocess.run([docker_cmd, "run", "-it", f"--name={conf.box_name}",
-                                  f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
-                                  f"-v={root_host}:{conf.shared_root_mount_dir}",
-                                  f"--label={ZboxLabel.CONTAINER_COPY}",
-                                  "--userns=keep-id", "--user=0",
-                                  f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_cp}",
-                                  image_name, shared_root_dirs, conf.shared_root_mount_dir])
-    if init_result.returncode != 0:
-        print_error("FAILED -- see the output above for details")
-        sys.exit(1)
-
-
-def print_subprocess_output(result: subprocess.CompletedProcess) -> None:
-    print_color(result.stdout.decode("utf-8"))
-    print_warn(result.stderr.decode("utf-8"))
+    run_command([docker_cmd, "run", "-it", f"--name={conf.box_name}",
+                 f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
+                 f"-v={root_host}:{conf.shared_root_mount_dir}",
+                 f"--label={ZboxLabel.CONTAINER_COPY}", "--userns=keep-id", "--user=0",
+                 f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_cp}",
+                 image_name, shared_root_dirs, conf.shared_root_mount_dir],
+                error_msg="running container for copying shared root")
 
 
 def commit_container(current_user: str, docker_cmd: str, box_image: str,
                      conf: ZboxConfiguration) -> None:
-    commit_result = subprocess.run([docker_cmd, "commit", f"-c=USER={current_user}",
-                                    f"-c=WORKDIR=/home/{current_user}", conf.box_name,
-                                    box_image], capture_output=True)
-    if commit_result.returncode != 0:
-        print_subprocess_output(commit_result)
-        print_error("FAILED in container commit -- see the output above for details")
-        sys.exit(1)
+    run_command([docker_cmd, "commit", f"-c=USER={current_user}",
+                 f"-c=WORKDIR=/home/{current_user}", conf.box_name, box_image],
+                error_msg="container commit")
 
-    remove_result = subprocess.run([docker_cmd, "container", "rm", conf.box_name])
-    if remove_result.returncode != 0:
-        print_error("FAILED in container rm -- see the output above for details")
-        sys.exit(1)
+    run_command([docker_cmd, "container", "rm", conf.box_name], error_msg="container rm")
 
 
 def remove_image(docker_cmd: str, box_image: str) -> None:
-    rm_result = subprocess.run([docker_cmd, "image", "rm", box_image], capture_output=True)
-    if rm_result.returncode != 0:
-        print_subprocess_output(rm_result)
-        print_error("FAILED in image remove -- see the output above for details")
+    run_command([docker_cmd, "image", "rm", box_image], exit_on_error=False,
+                error_msg="image remove")
 
 
 def start_container(docker_full_cmd: list[str], current_user: str, shared_root_dirs: str,
@@ -626,7 +601,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_PRIMARY}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint}")
     docker_full_cmd.append("--userns=keep-id")
-    # bubblewrap and thereby programs like steam do not work without this
+    # bubblewrap and thereby programs like steam do not work without --user
     # (https://github.com/containers/bubblewrap/issues/380#issuecomment-648169485)
     user_entry = pwd.getpwnam(current_user)
     docker_full_cmd.append(f"--user={user_entry.pw_uid}:{user_entry.pw_gid}")
@@ -637,13 +612,12 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     if os.access(conf.app_list, os.R_OK):
         docker_full_cmd.append("-a")
         docker_full_cmd.append(f"{conf.target_scripts_dir}/app.list")
-
     docker_full_cmd.append(conf.box_name)
-    launch_result = subprocess.run(docker_full_cmd)
-    if launch_result.returncode != 0:
-        print_error("FAILED to launch container -- see the output above and check "
-                    f"'zbox-logs {conf.box_name}' for details")
-        sys.exit(1)
+
+    if (code := run_command(docker_full_cmd, exit_on_error=False,
+                            error_msg="container launch")) != "0":
+        print_error(f"Also check 'zbox-logs {conf.box_name}' for details")
+        sys.exit(code)
 
 
 def wait_for_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
@@ -652,7 +626,7 @@ def wait_for_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
         for secs in range(max_wait_secs):
             # check the container status first
-            if check_zbox_state(docker_cmd, box_name, ["running"]):
+            if verify_zbox_state(docker_cmd, box_name, ["running"], exit_on_error=False):
                 while line := status_fd.readline():
                     if line == "started\n":
                         # clear the status file and return
@@ -685,11 +659,10 @@ def truncate_file(f: str) -> None:
 
 
 def restart_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
-    launch_result = subprocess.run([docker_cmd, "container", "start", conf.box_name])
-    if launch_result.returncode != 0:
-        print_error("FAILED to restart container -- see the output above and check "
-                    f"'zbox-logs {conf.box_name}' for details")
-        sys.exit(1)
+    if (code := run_command([docker_cmd, "container", "start", conf.box_name], exit_on_error=False,
+                            error_msg="container restart")) != "0":
+        print_error("Also check 'zbox-logs {conf.box_name}' for details")
+        sys.exit(code)
 
 
 main()
