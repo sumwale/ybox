@@ -47,7 +47,7 @@ def main() -> int:
             return 1
         conf = ZboxConfiguration(env, config[0], container_name)
         env_interpolation = EnvInterpolation(env, [])
-        distro_config = config_reader(conf.get_config_file(f"{conf.distribution}/distro.ini"),
+        distro_config = config_reader(conf.search_config_file(f"{conf.distribution}/distro.ini"),
                                       env_interpolation)
         pkgmgr = distro_config["pkgmgr"]
         return args.func(args, pkgmgr, docker_cmd, container_name)
@@ -56,8 +56,8 @@ def main() -> int:
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
                     container_name: str) -> int:
     print_info(f"Installing '{args.package}' in '{container_name}'")
-    quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.name] if args.quiet else ""
-    install_cmd = pkgmgr[PkgMgr.INSTALL.name].format(quiet=quiet_flag)
+    quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG] if args.quiet else ""
+    install_cmd = pkgmgr[PkgMgr.INSTALL].format(quiet=quiet_flag)
     # don't exit on error here because the caller may have further actions to perform before exit
     code = run_command([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
                         f"{install_cmd} {args.package}"], exit_on_error=False,
@@ -66,7 +66,7 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     if args.opt_deps:
         # find the optional dependencies recursively, removing the ones already installed and
         # ask the user to choose the ones to install
-        opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS.name]
+        opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS]
         deps_result = subprocess.run([docker_cmd, "exec", "-it", container_name, "/bin/bash",
                                       "-c", f"{opt_deps_cmd} {args.package}"], check=False)
         # expected format of output of above is -- PKG: <name>::::<description>::::<level>

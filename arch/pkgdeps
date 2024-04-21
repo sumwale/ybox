@@ -6,7 +6,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import ijson  # type: ignore
 
@@ -19,7 +19,7 @@ _AUR_META_FILE = f"{_AUR_META_CACHE_DIR}/packages-meta-ext-v1.json.gz"
 _FETCH_AUR_META = f"/usr/bin/aria2c -x8 -j8 -s8 -k1M -d{_AUR_META_CACHE_DIR} {_AUR_META_URL}"
 _REFRESH_AGE = 24.0 * 60 * 60  # consider AUR metadata file as stale after a day
 
-PackageAlternate = Tuple[str, str, list[str] | None, list[str] | None]
+PackageAlternate = Tuple[str, str, Optional[list[str]], Optional[list[str]]]
 
 
 def main() -> None:
