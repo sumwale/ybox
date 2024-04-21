@@ -24,6 +24,9 @@ class ZboxLabel(str, Enum):
     Labels for zbox created objects.
     """
     CONTAINER_TYPE = "io.zbox.container.type"
+    CONTAINER_DISTRIBUTION = "io.zbox.container.distribution"
+
+    # zbox container types (first two are temporary ones)
     CONTAINER_BASE = f"{CONTAINER_TYPE}=base"
     CONTAINER_COPY = f"{CONTAINER_TYPE}=copy"
     CONTAINER_PRIMARY = f"{CONTAINER_TYPE}=primary"
@@ -34,10 +37,12 @@ class PkgMgr(str, Enum):
     Package manager actions that are defined for each Linux distribution in its distro.ini file.
     """
     INSTALL = "install"
-    OPT_DEPS = "opt_deps"
-    UNINSTALL = "uninstall"
-    UNINSTALL_W_DEPS = "uninstall_w_deps"
     QUIET_FLAG = "quiet_flag"
+    OPT_DEPS = "opt_deps"
+    OPT_DEP_FLAG = "opt_dep_flag"
+    UNINSTALL = "uninstall"
+    PURGE_FLAG = "purge_flag"
+    PURGE_DEPS_FLAG = "purge_deps_flag"
     UPDATE_ALL = "update_all"
     CLEANUP = "cleanup"
     INFO = "info"

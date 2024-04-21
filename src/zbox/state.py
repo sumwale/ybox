@@ -130,6 +130,11 @@ class ZboxStateManagement:
                                 "ON CONFLICT(name, container) DO UPDATE SET flags=?", args)
         self.__conn.commit()
 
+    @staticmethod
+    def optional_package_flag(package: str) -> str:
+        """get the package flag to use for an optional dependency"""
+        return f"optional({package})"
+
     def unregister_packages(self, container_name: str, packages: list[str]) -> None:
         """
         Unregister one or more packages for a given container.

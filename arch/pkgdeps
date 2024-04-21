@@ -34,7 +34,7 @@ def main() -> None:
     # i.e. the package and its new dependencies skipping the already installed dependencies,
     # otherwise the list can be too long and become pointless for the end-user
 
-    print_color(f"Searching '{args.package}' and dependencies in base Arch repositories",
+    print_color(f"Searching dependencies of '{args.package}' in base Arch repositories",
                 fg=fgcolor.orange)
     # first get the list of all installed packages to eliminate installed packages
     # (include their provides too)
@@ -48,8 +48,10 @@ def main() -> None:
     opt_deps: dict[str, Tuple[str, int]] = {}
     find_opt_deps(args.package, installed_packages, all_packages, opt_deps, args.level)
     # format below is expected by zbox-pkg
-    for key, val in opt_deps.items():
-        print(f"PKG: {key}::::{val[0]}::::{val[1]}")
+    if opt_deps:
+        print("Found optional dependencies")
+        for key, val in opt_deps.items():
+            print(f"PKG: {key}::::{val[0]}::::{val[1]}")
 
 
 def build_pacman_db_map(arch_packages: dict[str, list[PackageAlternate]]) -> None:
@@ -122,7 +124,7 @@ def find_opt_deps(package: str, installed: set[str],
     # search all_packages to obtain the required and optional dependencies
     if not (alternates := all_packages.get(package)):
         if level == 1:
-            print_color(f"Searching '{package}' and dependencies in AUR", fg=fgcolor.orange)
+            print_color(f"Searching dependencies of '{package}' in AUR", fg=fgcolor.orange)
             # fetch AUR metadata, populate into all_packages and try again
             refresh_aur_metadata()
             build_aur_db_map(all_packages)

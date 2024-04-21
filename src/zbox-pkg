@@ -4,12 +4,15 @@ import argparse
 import subprocess
 import sys
 from configparser import SectionProxy
+from typing import Tuple
+
+from simple_term_menu import TerminalMenu  # type: ignore
 
 from zbox.config import ZboxConfiguration
 from zbox.env import Environ
 from zbox.state import ZboxStateManagement
-from zbox.util import EnvInterpolation, PkgMgr, ZboxLabel, config_reader
-from zbox.util import get_docker_command, print_error, print_info, run_command, verify_zbox_state
+from zbox.util import EnvInterpolation, PkgMgr, ZboxLabel, config_reader, get_docker_command
+from zbox.util import print_error, print_info, print_warn, run_command, verify_zbox_state
 
 
 def main() -> int:
@@ -50,35 +53,116 @@ def main() -> int:
         distro_config = config_reader(conf.search_config_file(f"{conf.distribution}/distro.ini"),
                                       env_interpolation)
         pkgmgr = distro_config["pkgmgr"]
-        return args.func(args, pkgmgr, docker_cmd, container_name)
+        return args.func(args, pkgmgr, docker_cmd, container_name, state)
 
 
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                    container_name: str) -> int:
-    print_info(f"Installing '{args.package}' in '{container_name}'")
-    quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG] if args.quiet else ""
-    install_cmd = pkgmgr[PkgMgr.INSTALL].format(quiet=quiet_flag)
-    # don't exit on error here because the caller may have further actions to perform before exit
-    code = run_command([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
-                        f"{install_cmd} {args.package}"], exit_on_error=False,
-                       error_msg=f"installing '{args.package}'")
-    # TODO: register in the state
-    if args.opt_deps:
-        # find the optional dependencies recursively, removing the ones already installed and
-        # ask the user to choose the ones to install
-        opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS]
-        deps_result = subprocess.run([docker_cmd, "exec", "-it", container_name, "/bin/bash",
-                                      "-c", f"{opt_deps_cmd} {args.package}"], check=False)
-        # expected format of output of above is -- PKG: <name>::::<description>::::<level>
-        if deps_result.returncode != 0:
-            print_error(f"FAILED to determine optional dependencies of {args.package} -- "
-                        "see above output for details")
+                    container_name: str, state: ZboxStateManagement) -> int:
+    package = args.package
+    quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value] if args.quiet else ""
+    # restore the {opt_dep} placeholder in the installation command which will be replaced
+    # before actual execution by _install_package(...)
+    install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="{opt_dep}")
+    opt_deps_cmd, opt_dep_flag = (pkgmgr[PkgMgr.OPT_DEPS.value], pkgmgr[
+        PkgMgr.OPT_DEP_FLAG.value]) if args.opt_deps else ("", "")
+    (code, opt_deps) = _install_package(package, install_cmd, docker_cmd, container_name,
+                                        opt_deps_cmd, opt_dep_flag)
+    if code == 0:
+        state.register_packages(container_name, packages=[package])
+        if opt_deps:
+            state.register_packages(container_name, packages=opt_deps,
+                                    package_flags=state.optional_package_flag(package))
 
-    return int(code)
+    return code
+
+
+def _install_package(package: str, install_cmd: str, docker_cmd: str, container_name: str,
+                     opt_deps_cmd: str, opt_dep_flag: str) -> Tuple[int, list[str]]:
+    print_info(f"Installing '{package}' in '{container_name}'")
+    # need to determine optional dependencies before installation else second level or higher
+    # dependencies will never be found (as the dependencies are already installed)
+    optional_deps: list[Tuple[str, str, int]] = []
+    selected_deps: list[str] = []
+    if opt_deps_cmd:
+        optional_deps = get_optional_deps(package, docker_cmd, container_name, opt_deps_cmd)
+    if opt_dep_flag and not opt_deps_cmd:  # the case when installing dependency
+        resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
+    else:
+        resolved_install_cmd = install_cmd.format(opt_dep="")
+    # don't exit on error here because the caller may have further actions to perform before exit
+    code = int(run_command([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
+                            f"{resolved_install_cmd} {package}"], exit_on_error=False,
+                           error_msg=f"installing '{package}'"))
+    if code == 0 and optional_deps:
+        selected_deps = select_optional_deps(package, optional_deps)
+        for dep in selected_deps:
+            _install_package(dep, install_cmd, docker_cmd, container_name,
+                             opt_deps_cmd="", opt_dep_flag=opt_dep_flag)
+
+    return code, selected_deps
+
+
+def get_optional_deps(package: str, docker_cmd: str, container_name: str,
+                      opt_deps_cmd: str) -> list[tuple[str, str, int]]:
+    # find the optional dependencies recursively, removing the ones already installed and
+    # ask the user to choose the ones to install
+    optional_deps: list[Tuple[str, str, int]] = []
+    pkg_start = "Found optional dependencies"
+    pkg_prefix = "PKG: "
+    # Expected format of output below is -- PKG: <name>::::<description>::::<level>.
+    # This is preceded by a line "Found optional dependencies"
+    # Print other lines on output as is which are for informational purpose.
+    # Code below does progressive display of output like download progress.
+    with subprocess.Popen([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
+                           f"{opt_deps_cmd} {package}"], stdout=subprocess.PIPE) as deps_result:
+        line = bytearray()
+        eol = b"\n"[0]  # end of line
+        buffered = 0
+        # silence mypy error (see https://github.com/python/typeshed/issues/3831)
+        assert deps_result.stdout is not None
+        # readline does not work for in-place updates like from aria2
+        for char in iter(lambda: deps_result.stdout.read(1), b""):
+            # for output in deps_result.stdout:
+            sys.stdout.buffer.write(char)
+            buffered += 1
+            if char[0] == eol:
+                sys.stdout.flush()
+                buffered = 0
+                output = line.decode("utf-8")
+                line.clear()
+                if output.startswith(pkg_start):  # output can have a trailing '\r'
+                    break
+            else:
+                line.append(char[0])
+                if buffered >= 4:  # flush frequently to show download progress, for example
+                    sys.stdout.flush()
+                    buffered = 0
+        sys.stdout.flush()
+        for pkg_out in iter(deps_result.stdout.readline, b""):
+            output = pkg_out.decode("utf-8")
+            name, desc, level = output[len(pkg_prefix):].split("::::")
+            optional_deps.append((name, desc, int(level.strip())))
+
+        if deps_result.wait(60) != 0:
+            print_warn(f"FAILED to determine optional dependencies of {package} -- "
+                       "see above output for details. Skipping optional dependencies.")
+            optional_deps = []
+
+    return optional_deps
+
+
+def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list[str]:
+    menu_options = [f"{'*' if level <= 1 else ''} {name} ({desc})" for name, desc, level in deps]
+    print_info(f"Select optional dependencies of {package} "
+               "(starred ones are the immediate dependencies):")
+    terminal_menu = TerminalMenu(menu_options, multi_select=True, show_multi_select_hint=True,
+                                 multi_select_select_on_accept=False, multi_select_empty_ok=True)
+    selection = terminal_menu.show()
+    return [deps[index][0] for index in selection] if selection else []
 
 
 def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                      container_name: str) -> int:
+                      container_name: str, state: ZboxStateManagement) -> int:
     print(f"SW: Will uninstall {args.package} in {container_name} using {docker_cmd}")
     return 0
 
@@ -108,7 +192,7 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
 
 def add_install(subparser: argparse.ArgumentParser) -> None:
     add_common_args(subparser)
-    subparser.add_argument("-o", "--opt-deps", type=str,
+    subparser.add_argument("-o", "--opt-deps", action="store_true",
                            help="install optional dependencies (or recommendations)")
     subparser.add_argument("package", type=str, help="the package to install")
     subparser.set_defaults(func=install_package)

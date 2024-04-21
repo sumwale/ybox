@@ -450,9 +450,9 @@ def process_apps_section(apps_section: SectionProxy, conf: ZboxConfiguration,
                          distro_config: ConfigParser) -> None:
     # first update the mirrors
     pkgmgr = distro_config["pkgmgr"]
-    quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG]
-    install_cmd = pkgmgr[PkgMgr.INSTALL].format(quiet=quiet_flag)
-    cleanup_cmd = pkgmgr[PkgMgr.CLEANUP]
+    quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
+    install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="")
+    cleanup_cmd = pkgmgr[PkgMgr.CLEANUP.value]
     if not install_cmd:
         print_color("Skipping app installation since no 'pkgmgr.install' has "
                     "been defined in distro.ini or is empty",
@@ -596,7 +596,6 @@ def commit_container(current_user: str, docker_cmd: str, box_image: str,
     run_command([docker_cmd, "commit", f"-c=USER={current_user}",
                  f"-c=WORKDIR=/home/{current_user}", conf.box_name, box_image],
                 error_msg="container commit")
-
     run_command([docker_cmd, "container", "rm", conf.box_name], error_msg="container rm")
 
 
@@ -620,6 +619,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
         docker_full_cmd.append(f"-e={lang_var}")
     docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
     docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_PRIMARY}")
+    docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_DISTRIBUTION}={conf.distribution}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint}")
     docker_full_cmd.append("--userns=keep-id")
     # bubblewrap and thereby programs like steam do not work without --user
