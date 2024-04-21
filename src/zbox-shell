@@ -1,12 +1,13 @@
 #!/usr/bin/python3
 
 import argparse
+import sys
 
 from zbox.util import get_docker_command, run_command, verify_zbox_state
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str]) -> None:
+    args = parse_args(argv)
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
@@ -16,14 +17,15 @@ def main() -> None:
                 error_msg=f"{args.shell} execution on '{container_name}'")
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Open a shell on a running zbox container")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-s", "--shell", type=str, default="/bin/bash",
                         help="run the given shell (default is /bin/bash)")
     parser.add_argument("container_name", type=str, help="name of the running zbox")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-main()
+if __name__ == "__main__":
+    main(sys.argv[1:])

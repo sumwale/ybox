@@ -1,12 +1,13 @@
 #!/usr/bin/python3
 
 import argparse
+import sys
 
 from zbox.util import get_docker_command, run_command, ZboxLabel
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str]) -> None:
+    args = parse_args(argv)
     docker_cmd = get_docker_command(args, "-d")
 
     docker_args = [docker_cmd, "container", "ls"]
@@ -25,7 +26,7 @@ def main() -> None:
     run_command(docker_args, error_msg="listing zbox containers")
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="List zbox containers")
     parser.add_argument("-a", "--all", action="store_true",
                         help="""show all containers including stopped and temporary ones;
@@ -41,7 +42,8 @@ def parse_args() -> argparse.Namespace:
                                   https://docs.docker.com/reference/cli/docker/container/ls)""")
     parser.add_argument("-l", "--long-format", action="store_true",
                         help="display extended information and without truncating fields")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-main()
+if __name__ == "__main__":
+    main(sys.argv[1:])

@@ -30,8 +30,8 @@ from zbox.util import print_info, print_warn, print_error, run_command, verify_z
 #
 # Configuration files should be in $HOME/.config/zbox or /etc/zbox.
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str]) -> None:
+    args = parse_args(argv)
     box_name, docker_cmd = process_args(args)
     print_color(f"Creating zbox container named '{box_name}'", fg=fgcolor.green)
     env = Environ()
@@ -101,11 +101,11 @@ def main() -> None:
     if shared_root:
         os.makedirs(os.path.dirname(conf.shared_root_host_dir), exist_ok=True)
         with FileLock(f"{conf.shared_root_host_dir}-image.lock"):
-            image_exists = subprocess.run([docker_cmd, "inspect", "--type=image",
-                                           "--format={{.Id}}", conf.box_image(True)], check=False,
-                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             # if image already exists, then skip the subsequent steps
-            if image_exists.returncode != 0:
+            if subprocess.run([docker_cmd, "inspect", "--type=image",
+                               "--format={{.Id}}", conf.box_image(True)], check=False,
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL).returncode != 0:
                 # run the "base" container with appropriate arguments for the current user to
                 # the 'entrypoint-base.sh' script to create the user and group in the container
                 run_base_container(base_image_name, current_user, docker_cmd, conf)
@@ -141,7 +141,7 @@ def main() -> None:
     wait_for_container(docker_cmd, conf)
 
     # remove distribution specific scripts and restart container the final time
-    print_warn(f"Restarting the final container '{box_name}'")
+    print_info(f"Restarting the final container '{box_name}'")
     for script in conf.distribution_scripts:
         os.unlink(f"{conf.scripts_dir}/{script}")
     restart_container(docker_cmd, conf)
@@ -155,7 +155,7 @@ def main() -> None:
         state.register_container(box_name, distro, shared_root, config)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="""Create a new zbox container for given Linux distribution and configured
                        with given file in INI format. It allows for set up of various aspects of
@@ -174,7 +174,7 @@ def parse_args() -> argparse.Namespace:
                                 (can be a relative or absolute path, or be in user or system
                                  configuration directory which are $HOME/.config/zbox and
                                  /etc/zbox respectively)""")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def process_args(args: argparse.Namespace) -> Tuple[str, str]:
@@ -530,7 +530,7 @@ def read_distribution_config(env: Environ,
 def run_base_container(image_name: str, current_user: str, docker_cmd: str,
                        conf: ZboxConfiguration) -> None:
     # refresh the image locally first to decrease update size later
-    print_warn(f"Refreshing local copy of the base image '{image_name}'")
+    print_info(f"Refreshing local copy of the base image '{image_name}'")
     if run_command([docker_cmd, "pull", image_name], exit_on_error=False,
                    error_msg=f"pulling {image_name}") != 0:
         print_warn("Trying to continue with local copy of the image")
@@ -686,4 +686,5 @@ def restart_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
         sys.exit(code)
 
 
-main()
+if __name__ == "__main__":
+    main(sys.argv[1:])

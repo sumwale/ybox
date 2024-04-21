@@ -1,12 +1,13 @@
 #!/usr/bin/python3
 
 import argparse
+import sys
 
 from zbox.util import fgcolor, get_docker_command, run_command, print_color, verify_zbox_state
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str]) -> None:
+    args = parse_args(argv)
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
@@ -16,12 +17,13 @@ def main() -> None:
     run_command([docker_cmd, "container", "start", container_name], error_msg="container start")
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Restart a stopped zbox container")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("container_name", type=str, help="name of the stopped zbox")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-main()
+if __name__ == "__main__":
+    main(sys.argv[1:])

@@ -168,6 +168,7 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
     menu_options = [f"{'*' if level <= 1 else ''} {name} ({desc})" for name, desc, level in deps]
     print_info(f"Select optional dependencies of {package} "
                "(starred ones are the immediate dependencies):")
+    # don't select on <Enter> (multi_select_select_on_accept) and allow for empty selection
     terminal_menu = TerminalMenu(menu_options, multi_select=True, show_multi_select_hint=True,
                                  multi_select_select_on_accept=False, multi_select_empty_ok=True)
     selection = terminal_menu.show()

@@ -22,13 +22,13 @@ _REFRESH_AGE = 24.0 * 60 * 60  # consider AUR metadata file as stale after a day
 PackageAlternate = Tuple[str, str, Optional[list[str]], Optional[list[str]]]
 
 
-def main() -> None:
+def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(
         description="Recursively find optional dependencies of a package")
     parser.add_argument("-l", "--level", type=int, default=2,
                         help="maximum level to search for optional dependencies")
     parser.add_argument("package", type=str, help="name of the package")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # find optional dependencies of only the new packages that are going to be installed
     # i.e. the package and its new dependencies skipping the already installed dependencies,
@@ -165,4 +165,5 @@ def search_alternates(package_name: str, alternates: list[PackageAlternate]) -> 
     return alternates[0]
 
 
-main()
+if __name__ == "__main__":
+    main(sys.argv[1:])

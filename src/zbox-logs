@@ -1,12 +1,13 @@
 #!/usr/bin/python3
 
 import argparse
+import sys
 
 from zbox.util import get_docker_command, print_info, run_command, verify_zbox_state
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str]) -> None:
+    args = parse_args(argv)
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
@@ -24,7 +25,7 @@ def main() -> None:
         print_info("Interrupt")
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Show logs from a running or stopped zbox container")
     parser.add_argument("-d", "--docker-path", type=str,
@@ -32,7 +33,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-f", "--follow", action="store_true",
                         help="follow log output like 'tail -f'")
     parser.add_argument("container_name", type=str, help="name of the running zbox")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-main()
+if __name__ == "__main__":
+    main(sys.argv[1:])

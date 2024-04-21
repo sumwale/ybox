@@ -1,5 +1,9 @@
 #!/usr/bin/python3
 
+"""
+Package management utility for zbox containers.
+"""
+
 import argparse
 import sys
 from configparser import SectionProxy
@@ -12,8 +16,8 @@ from zbox.util import EnvInterpolation, ZboxLabel, config_reader, get_docker_com
 from zbox.util import print_error, print_warn, run_command, verify_zbox_state
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.zbox
 
@@ -65,7 +69,7 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
     return 0
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Package management across zbox containers")
     operations = parser.add_subparsers(title="Operations", required=True, metavar="OPERATION",
                                        help="DESCRIPTION")
@@ -76,7 +80,7 @@ def parse_args() -> argparse.Namespace:
     #                    choices=("install", "uninstall", "update", "list", "info", "search",
     #                             "mark", "clean", "repair"),
     #                    help="the package operation to perform")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def add_common_args(subparser: argparse.ArgumentParser) -> None:
@@ -107,4 +111,5 @@ def add_uninstall(subparser: argparse.ArgumentParser) -> None:
     subparser.set_defaults(func=uninstall_package)
 
 
-sys.exit(main())
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
