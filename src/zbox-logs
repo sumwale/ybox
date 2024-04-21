@@ -2,7 +2,7 @@
 
 import argparse
 
-from zbox.util import get_docker_command, run_command, verify_zbox_state
+from zbox.util import get_docker_command, print_info, run_command, verify_zbox_state
 
 
 def main() -> None:
@@ -12,15 +12,16 @@ def main() -> None:
 
     verify_zbox_state(docker_cmd, container_name, expected_states=[])
 
-    error_msg = f"showing logs '{container_name}'"
+    docker_args = [docker_cmd, "container", "logs"]
     if args.follow:
-        try:
-            run_command([docker_cmd, "container", "logs", "-f", container_name],
-                        error_msg=error_msg)
-        except KeyboardInterrupt:
-            pass  # pretend everything is fine for user interruption during follow
-    else:
-        run_command([docker_cmd, "container", "logs", container_name], error_msg=error_msg)
+        docker_args.append("-f")
+    docker_args.append(container_name)
+    try:
+        run_command(docker_args, error_msg=f"showing logs '{container_name}'")
+    except KeyboardInterrupt:
+        # allow for user interruption during follow or otherwise for a large log
+        print()
+        print_info("Interrupt")
 
 
 def parse_args() -> argparse.Namespace:
