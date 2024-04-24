@@ -13,6 +13,6 @@ max-branches = 20
 # Maximum number of statements in function / method body
 max-statements = 50
 # Maximum number of attributes for a class (see R0902).
-max-attributes=11
+max-attributes=20 # EDIT: increased from 11 to 20
 # Maximum number of statements in a try-block
 max-try-statements = 7

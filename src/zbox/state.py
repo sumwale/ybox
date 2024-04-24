@@ -155,9 +155,8 @@ class ZboxStateManagement:
                             for the container
         :param local_copies: map of package name to list of locally copied files (typically
                              desktop files and binary executables that invoke container ones)
-        :param package_type: additional type information for the above package, if any
+        :param package_type: additional type information for the package, if any
         """
-
         if not package:
             print_error("Empty package provided to register_package!")
             return

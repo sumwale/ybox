@@ -133,6 +133,13 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     # Print other lines on output as is which are for informational purpose.
     # Code below does progressive display of output which is required for showing stuff like
     # download progress properly.
+    # The following alternatives were considered:
+    #  1) print PKG: lines to stderr: this works only if "-t" is removed from docker exec
+    #          otherwise both stdout and stderr are combined to tty, but if it is removed
+    #          then you can no longer see the progressive download due to buffering
+    #  2) redirect PKG: lines somewhere else like a common file: this can be done but will
+    #          likely be more messy than the code below (e.g. handle concurrent executions),
+    #          but still can be considered in future
     with subprocess.Popen([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
                            f"{opt_deps_cmd} {package}"], stdout=subprocess.PIPE) as deps_result:
         line = bytearray()
@@ -210,7 +217,7 @@ def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd
         return []
     # skip on errors below and do not fail the installation
     package_files = run_command(
-        [docker_cmd, "exec", "-t", conf.box_name, "/bin/bash", "-c", f"{list_cmd} {package}"],
+        [docker_cmd, "exec", conf.box_name, "/bin/bash", "-c", f"{list_cmd} {package}"],
         capture_output=True, exit_on_error=False, error_msg=f"listing files of '{package}'")
     if isinstance(package_files, int):
         return []
@@ -268,7 +275,6 @@ def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Patte
     wrapper_name = f"zbox.{conf.box_name}.{filename}"
     tmp_file = Path(f"/tmp/{wrapper_name}")
     tmp_file.unlink(missing_ok=True)
-    print_info(f"Linking container desktop file {file}")
     if run_command([docker_cmd, "cp", f"{conf.box_name}:{file}", str(tmp_file)],
                    exit_on_error=False, error_msg=f"file copy of '{package}'") != 0:
         return box_config

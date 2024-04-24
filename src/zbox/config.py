@@ -34,7 +34,16 @@ class ZboxConfiguration:
             with open("/etc/timezone", "r", encoding="utf-8") as timezone:
                 self.__timezone = timezone.read().rstrip("\n")
         self.__shared_root_host_dir = f"{env.data_dir}/ROOTS/{distribution}"
-        self.__container_conf = self._ContainerConfig(env, box_name)
+        container_dir = f"{env.data_dir}/{box_name}"
+        os.environ["ZBOX_CONTAINER_DIR"] = container_dir
+        self.__configs_dir = f"{container_dir}/configs"
+        self.__target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
+        self.__scripts_dir = f"{container_dir}/zbox-scripts"
+        self.__target_scripts_dir = "/usr/local/zbox"
+        os.environ["ZBOX_TARGET_SCRIPTS_DIR"] = self.target_scripts_dir
+        self.__status_file = f"{container_dir}/status"
+        self.__config_list = f"{self.scripts_dir}/config.list"
+        self.__app_list = f"{self.scripts_dir}/app.list"
 
     def search_config_file(self, conf_file: str) -> str:
         """
@@ -96,27 +105,27 @@ class ZboxConfiguration:
     def configs_dir(self) -> str:
         """user directory where configuration files specified in [configs] are copied or
            hard-linked for sharing with the container"""
-        return self.__container_conf.configs_dir
+        return self.__configs_dir
 
     @property
     def target_configs_dir(self) -> str:
         """target container directory where shared [configs] are mounted in the container"""
-        return self.__container_conf.target_configs_dir
+        return self.__target_configs_dir
 
     @property
     def scripts_dir(self) -> str:
         """local directory where scripts to be shared with container are copied"""
-        return self.__container_conf.scripts_dir
+        return self.__scripts_dir
 
     @property
     def target_scripts_dir(self) -> str:
         """target container directory where shared scripts are mounted"""
-        return self.__container_conf.target_scripts_dir
+        return self.__target_scripts_dir
 
     @property
     def status_file(self) -> str:
         """local status file to communicate when the container is ready for use"""
-        return self.__container_conf.status_file
+        return self.__status_file
 
     # file containing list of configuration files to be linked on that container to host
     # as mentioned in the [configs] section
@@ -124,38 +133,12 @@ class ZboxConfiguration:
     def config_list(self) -> str:
         """file containing list of configuration files to be linked on that container to host
             as mentioned in the [configs] section"""
-        return self.__container_conf.config_list
+        return self.__config_list
 
     @property
     def app_list(self) -> str:
         """file containing list of applications to be installed in the container"""
-        return self.__container_conf.app_list
-
-    class _ContainerConfig:
-        """Container specific paths are set up in this class"""
-
-        def __init__(self, env: Environ, box_name: str):
-            container_dir = f"{env.data_dir}/{box_name}"
-            os.environ["ZBOX_CONTAINER_DIR"] = container_dir
-            self.configs_dir = f"{container_dir}/configs"
-            self.target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
-            self.scripts_dir = f"{container_dir}/zbox-scripts"
-            self.target_scripts_dir = "/usr/local/zbox"
-            os.environ["ZBOX_TARGET_SCRIPTS_DIR"] = self.target_scripts_dir
-            self.status_file = f"{container_dir}/status"
-            self.__config_list = f"{self.scripts_dir}/config.list"
-            self.__app_list = f"{self.scripts_dir}/app.list"
-
-        @property
-        def config_list(self) -> str:
-            """file containing list of configuration files to be linked on that container to host
-                as mentioned in the [configs] section"""
-            return self.__config_list
-
-        @property
-        def app_list(self) -> str:
-            """file containing list of applications to be installed in the container"""
-            return self.__app_list
+        return self.__app_list
 
 
 class FixedPaths:
