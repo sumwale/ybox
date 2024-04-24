@@ -16,6 +16,7 @@ class ZboxConfiguration:
     """
 
     def __init__(self, env: Environ, distribution: str, box_name: str):
+        self.__env = env
         # set up the additional environment variables
         os.environ["ZBOX_DISTRIBUTION_NAME"] = distribution
         os.environ["ZBOX_CONTAINER_NAME"] = box_name
@@ -30,7 +31,7 @@ class ZboxConfiguration:
         if os.path.islink("/etc/localtime"):
             self.__localtime = os.readlink("/etc/localtime")
         if os.path.exists("/etc/timezone"):
-            with open("/etc/timezone", encoding="utf-8") as timezone:
+            with open("/etc/timezone", "r", encoding="utf-8") as timezone:
                 self.__timezone = timezone.read().rstrip("\n")
         self.__shared_root_host_dir = f"{env.data_dir}/ROOTS/{distribution}"
         self.__container_conf = self._ContainerConfig(env, box_name)
@@ -50,6 +51,11 @@ class ZboxConfiguration:
                 return path
         search_dirs = ', '.join(self.__configuration_dirs)
         raise FileNotFoundError(f"Configuration file '{conf_file}' not found in [{search_dirs}]")
+
+    @property
+    def env(self) -> Environ:
+        """the `Environ` object used for this configuration"""
+        return self.__env
 
     @property
     def distribution(self) -> str:
@@ -87,11 +93,6 @@ class ZboxConfiguration:
         return self.__shared_root_host_dir
 
     @property
-    def shared_root_mount_dir(self) -> str:
-        """directory where shared root directory is mounted in a container during setup"""
-        return "/zbox-root"
-
-    @property
     def configs_dir(self) -> str:
         """user directory where configuration files specified in [configs] are copied or
            hard-linked for sharing with the container"""
@@ -101,22 +102,6 @@ class ZboxConfiguration:
     def target_configs_dir(self) -> str:
         """target container directory where shared [configs] are mounted in the container"""
         return self.__container_conf.target_configs_dir
-
-    @property
-    def entrypoint_base(self) -> str:
-        """entrypoint script name for the base container (which is booted to configure
-           the final container)"""
-        return "entrypoint-base.sh"
-
-    @property
-    def entrypoint_cp(self) -> str:
-        """entrypoint script name for the "copy" container that copies files to shared root"""
-        return "entrypoint-cp.sh"
-
-    @property
-    def entrypoint(self) -> str:
-        """entrypoint script name for the final zbox container"""
-        return "entrypoint.sh"
 
     @property
     def scripts_dir(self) -> str:
@@ -132,16 +117,6 @@ class ZboxConfiguration:
     def status_file(self) -> str:
         """local status file to communicate when the container is ready for use"""
         return self.__container_conf.status_file
-
-    @property
-    def status_target_file(self) -> str:
-        """target location where status_file is mounted in container"""
-        return self.__container_conf.status_target_file
-
-    @property
-    def distribution_scripts(self) -> list[str]:
-        """distribution specific scripts expected to be present for all supported distributions"""
-        return self.__container_conf.distribution_scripts
 
     # file containing list of configuration files to be linked on that container to host
     # as mentioned in the [configs] section
@@ -168,15 +143,68 @@ class ZboxConfiguration:
             self.target_scripts_dir = "/usr/local/zbox"
             os.environ["ZBOX_TARGET_SCRIPTS_DIR"] = self.target_scripts_dir
             self.status_file = f"{container_dir}/status"
-            self.config_list = f"{self.scripts_dir}/config.list"
-            self.app_list = f"{self.scripts_dir}/app.list"
+            self.__config_list = f"{self.scripts_dir}/config.list"
+            self.__app_list = f"{self.scripts_dir}/app.list"
 
         @property
-        def status_target_file(self) -> str:
-            """target location where status_file is mounted in container"""
-            return "/usr/local/zbox-status"
+        def config_list(self) -> str:
+            """file containing list of configuration files to be linked on that container to host
+                as mentioned in the [configs] section"""
+            return self.__config_list
 
         @property
-        def distribution_scripts(self) -> list[str]:
-            """scripts expected to be present for all supported distributions"""
-            return ["init-base.sh", "init.sh", "init-user.sh"]
+        def app_list(self) -> str:
+            """file containing list of applications to be installed in the container"""
+            return self.__app_list
+
+
+class FixedPaths:
+    """
+    Defines fixed file/path names used by zbox that are not configurable.
+    """
+
+    @staticmethod
+    def entrypoint_common() -> str:
+        """common methods and actions for all the entrypoint scripts"""
+        return "entrypoint-common.sh"
+
+    @staticmethod
+    def entrypoint_base() -> str:
+        """entrypoint script name for the base container (which is booted to configure
+           the final container)"""
+        return "entrypoint-base.sh"
+
+    @staticmethod
+    def entrypoint_cp() -> str:
+        """entrypoint script name for the "copy" container that copies files to shared root"""
+        return "entrypoint-cp.sh"
+
+    @staticmethod
+    def entrypoint() -> str:
+        """entrypoint script name for the final zbox container"""
+        return "entrypoint.sh"
+
+    @staticmethod
+    def shared_root_mount_dir() -> str:
+        """directory where shared root directory is mounted in a container during setup"""
+        return "/zbox-root"
+
+    @staticmethod
+    def status_target_file() -> str:
+        """target location where status_file is mounted in container"""
+        return "/usr/local/zbox-status"
+
+    @staticmethod
+    def distribution_scripts() -> list[str]:
+        """distribution specific scripts expected to be present for all supported distributions"""
+        return ["init-base.sh", "init.sh", "init-user.sh"]
+
+    @staticmethod
+    def container_desktop_dirs() -> set[str]:
+        """directories on the container that has desktop files that may need to be wrapped"""
+        return {"/usr/share/applications"}
+
+    @staticmethod
+    def container_executable_dirs() -> set[str]:
+        """directories on the container that has executables that may need to be wrapped"""
+        return {"/usr/bin", "/usr/sbin", "/bin", "/sbin"}

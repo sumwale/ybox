@@ -38,7 +38,8 @@ def main(argv: list[str]) -> None:
                 fg=fgcolor.orange)
     # first get the list of all installed packages to eliminate installed packages
     # (include their provides too)
-    installed_packages = set(run_command(r"/usr/bin/expac %n\t%S", capture_output=True).split())
+    installed_packages = set(
+        str(run_command(r"/usr/bin/expac %n\t%S", capture_output=True)).split())
     # next build a map of all packages in pacman database from their provides, dependencies and
     # optional dependencies; the map key will be original package name and their provides mapped
     # to a tuple having the name, description with list of required and optional dependencies
@@ -56,8 +57,8 @@ def main(argv: list[str]) -> None:
 
 def build_pacman_db_map(arch_packages: dict[str, list[PackageAlternate]]) -> None:
     # the separator '::::' is just something that does not appear in descriptions (at least so far)
-    for package_list in run_command(r"/usr/bin/expac -S %n::::%d::::%S::::%E::::%o",
-                                    capture_output=True).splitlines():
+    for package_list in str(run_command(r"/usr/bin/expac -S %n::::%d::::%S::::%E::::%o",
+                                        capture_output=True)).splitlines():
         if not package_list:
             continue
         package_info = package_list.split("::::")
@@ -83,7 +84,7 @@ def refresh_aur_metadata() -> None:
         meta_file = Path(_AUR_META_FILE)
         meta_file.unlink(missing_ok=True)
         # delete any partial file in case of download failure
-        if (code := run_command(_FETCH_AUR_META, exit_on_error=False)) != "0":
+        if (code := int(run_command(_FETCH_AUR_META, exit_on_error=False))) != 0:
             meta_file.unlink(missing_ok=True)
             sys.exit(code)
 

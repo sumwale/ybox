@@ -48,6 +48,7 @@ class PkgMgr(str, Enum):
     INFO = "info"
     LIST = "list"
     LIST_ALL = "list_all"
+    LIST_FILES = "list_files"
 
 
 class EnvInterpolation(Interpolation):
@@ -112,7 +113,7 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
     :param conf_file: the configuration file to be read
     :param interpolation: if provided then used for value interpolation
     :param top_level: the top-level configuration file; don't pass this when calling
-                      externally (or set the same as `conf_file` argument)
+                      externally (or set it the same as `conf_file` argument)
     :return: instance of `configparser.ConfigParser` built after parsing the given file as
              well as any includes recursively
     """
@@ -121,9 +122,8 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
             raise FileNotFoundError(f"Config file '{conf_file}' among the includes of "
                                     f"'{top_level}' does not exist or not readable")
         raise FileNotFoundError(f"Config file '{conf_file}' does not exist or not readable")
-    config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
-    config.optionxform = str  # type: ignore
-    config.read(conf_file)
+    with open(conf_file, "r", encoding="utf-8") as conf_fd:
+        config = ini_file_reader(conf_fd, interpolation)
     if not top_level:
         top_level = conf_file
     if not (includes := config.get("base", "includes", fallback="")):
@@ -135,7 +135,7 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
             include) else f"{os.path.dirname(conf_file)}/{include}"
         inc_conf = config_reader(inc_file, interpolation, top_level)
         for section in inc_conf.sections():
-            if section not in config.sections():
+            if not config.has_section(section):
                 config[section] = inc_conf[section]
             else:
                 conf_section = config[section]
@@ -143,6 +143,22 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
                 for key in inc_section:
                     if key not in conf_section:
                         conf_section[key] = inc_section[key]
+    return config
+
+
+def ini_file_reader(file, interpolation: Optional[Interpolation]) -> ConfigParser:
+    """
+    Read an INI file from a given file handle. It applies some basic rules that are used
+    for all zbox configurations like allowing no values, only '=' as delimiters and
+    case-sensitive keys.
+
+    :param file: file handle for the INI format data
+    :param interpolation: if provided then used for value interpolation
+    :return: instance of `configparser.ConfigParser` built after parsing the given file
+    """
+    config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
+    config.optionxform = str  # type: ignore
+    config.read_file(file)
     return config
 
 
@@ -187,7 +203,7 @@ def verify_zbox_state(docker_cmd: str, box_name: str, expected_states: list[str]
 
 
 def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
-                exit_on_error: bool = True, error_msg: Optional[str] = None) -> str:
+                exit_on_error: bool = True, error_msg: Optional[str] = None) -> Union[str, int]:
     """
     Helper wrapper around `subprocess.run` to display failure message (in red foreground color)
     for the case of failure, exit on failure and capturing and returning output if required.
@@ -214,10 +230,10 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
         if exit_on_error:
             sys.exit(result.returncode)
         else:
-            return str(result.returncode)
+            return result.returncode
     if capture_output and result.stderr:
         print_warn(result.stderr.decode("utf-8"))
-    return result.stdout.decode("utf-8") if capture_output else str(result.returncode)
+    return result.stdout.decode("utf-8") if capture_output else result.returncode
 
 
 def print_subprocess_output(result: subprocess.CompletedProcess) -> None:

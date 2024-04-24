@@ -4,6 +4,7 @@ Useful user environment settings.
 
 import getpass
 import os
+import site
 from datetime import datetime
 
 
@@ -20,12 +21,15 @@ class Environ:
         # container will always be in /home as ensured by zbox/entrypoint.py script
         self.__target_home = "/home/" + getpass.getuser()
         os.environ["TARGET_HOME"] = self.__target_home
-        data_subdir = ".local/share/zbox"
-        self.__data_dir = f"{self.__home_dir}/{data_subdir}"
-        self.__target_data_dir = f"{self.__target_home}/{data_subdir}"
+        user_base = site.getuserbase()
+        target_user_base = self.__target_home + "/.local"
+        self.__data_dir = f"{user_base}/share/zbox"
+        self.__target_data_dir = f"{target_user_base}/share/zbox"
         self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR")
         self.__now = datetime.now()
         os.environ["NOW"] = str(self.__now)
+        self.__user_applications_dir = f"{user_base}/share/applications"
+        self.__user_executables_dir = f"{user_base}/bin"
 
     @property
     def home(self) -> str:
@@ -61,3 +65,13 @@ class Environ:
     def now(self) -> datetime:
         """current time as captured during Environ object creation"""
         return self.__now
+
+    @property
+    def user_applications_dir(self) -> str:
+        """User's local applications directory that holds the .desktop files"""
+        return self.__user_applications_dir
+
+    @property
+    def user_executables_dir(self) -> str:
+        """User's local executables directory which should be in the $PATH"""
+        return self.__user_executables_dir

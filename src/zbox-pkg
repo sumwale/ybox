@@ -23,9 +23,9 @@ def main(argv: list[str]) -> int:
 
     if not container_name:
         # check running containers
-        containers = run_command([docker_cmd, "container", "ls", "--format={{ .Names }}",
-                                  f"--filter=label={ZboxLabel.CONTAINER_PRIMARY}"],
-                                 capture_output=True, error_msg="container ls").splitlines()
+        containers = str(run_command([docker_cmd, "container", "ls", "--format={{ .Names }}",
+                                      f"--filter=label={ZboxLabel.CONTAINER_PRIMARY}"],
+                                     capture_output=True, error_msg="container ls")).splitlines()
         if args.quiet:
             # use running container if there is only one of them
             if len(containers) == 1:
@@ -60,12 +60,12 @@ def main(argv: list[str]) -> int:
         distro_config = config_reader(conf.search_config_file(f"{conf.distribution}/distro.ini"),
                                       env_interpolation)
         pkgmgr = distro_config["pkgmgr"]
-        return args.func(args, pkgmgr, docker_cmd, container_name, state)
+        return args.func(args, pkgmgr, docker_cmd, conf, config[1], state)
 
 
 def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                      container_name: str, state: ZboxStateManagement) -> int:
-    print(f"SW: Will uninstall {args.package} in {container_name} using {docker_cmd}")
+                      conf: ZboxConfiguration, box_conf: str, state: ZboxStateManagement) -> int:
+    print(f"SW: Will uninstall {args.package} in {conf.box_name} using {docker_cmd}")
     return 0
 
 
@@ -96,6 +96,15 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
     add_common_args(subparser)
     subparser.add_argument("-o", "--opt-deps", action="store_true",
                            help="install optional dependencies (or recommendations)")
+    subparser.add_argument("-s", "--skip-executables", action="store_true",
+                           help="skip creating wrappers for invoking executables installed by "
+                                "the package; default is to create wrapper executables in user's "
+                                "$HOME/.local/bin directory (or using $PYTHONUSERBASE)")
+    subparser.add_argument("-S", "--skip-desktop-files", action="store_true",
+                           help="skip creating wrapper desktop files for those installed by the "
+                                "package and its optional dependencies; default is to create "
+                                "wrapper desktop files in user's $HOME/.local/share/applications "
+                                "(or using $PYTHONUSERBASE)")
     subparser.add_argument("package", type=str, help="the package to install")
     subparser.set_defaults(func=install_package)
 

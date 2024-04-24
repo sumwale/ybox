@@ -3,15 +3,15 @@
 
 [DESIGN]
 # Maximum number of arguments for function / method
-max-args = 9
+max-args = 10 # EDIT: increased from 9 to 10
 # Maximum number of locals for function / method body
-max-locals = 20 # EDIT: increased from 19 to 20
+max-locals = 30 # EDIT: increased from 19 to 30
 # Maximum number of return / yield for function / method body
 max-returns=11
 # Maximum number of branch for function / method body
 max-branches = 20
 # Maximum number of statements in function / method body
-max-statements = 50
+max-statements = 60 # EDIT: increased from 50 to 60
 # Maximum number of attributes for a class (see R0902).
 max-attributes=11
 # Maximum number of statements in a try-block

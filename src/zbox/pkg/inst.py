@@ -3,23 +3,30 @@ Methods for package installation on a running zbox container.
 """
 
 import argparse
+import io
+import os
+import re
 import subprocess
 import sys
-from configparser import SectionProxy
-from typing import Tuple
+from configparser import ConfigParser, SectionProxy
+from pathlib import Path
+from typing import Optional, Tuple
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
+from zbox.config import FixedPaths, ZboxConfiguration
 from zbox.state import ZboxStateManagement
-from zbox.util import PkgMgr, print_info, print_warn, run_command
+from zbox.util import PkgMgr, print_info, print_warn, run_command, ini_file_reader
 
 
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                    container_name: str, state: ZboxStateManagement) -> int:
+                    conf: ZboxConfiguration, box_conf: str, state: ZboxStateManagement) -> int:
     """
     Install package specified by `args.package` on a zbox container with given docker/podman
-    command. Additional flags honored are `args.quiet` to bypass user confirmation during install
-    and `args.opt_deps` to also allow installing optional dependencies of the package.
+    command. Additional flags honored are `args.quiet` to bypass user confirmation during install,
+    `args.opt_deps` to also allow installing optional dependencies of the package,
+    `args.skip_executables` to skip creating wrapper executables for the package executables,
+    `args.skip_desktop_files` to skip creating wrapper desktop files for the package ones.
 
     When the `args.opt_deps` flag is enabled, then the package databases are searched for
     optional dependencies of the package as well as those of the new required dependencies
@@ -28,73 +35,79 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     presented to the user allows choosing the optional dependencies to be installed after
     the main package installation has completed successfully.
 
-    :param args: arguments having `package`, `quiet` and `opt_deps` attributes
+    :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param container_name: name of the zbox container
+    :param conf: the `ZboxConfiguration` of the container
+    :param box_conf: the resolved INI format configuration of the container as a string
     :param state: instance of the `ZboxStateManagement` class having the state of all zboxes
 
     :return: integer exit status of install command where 0 represents success
     """
-    package = args.package
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value] if args.quiet else ""
     # restore the {opt_dep} placeholder in the installation command which will be replaced
     # before actual execution by _install_package(...)
     install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="{opt_dep}")
+    list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
     opt_deps_cmd, opt_dep_flag = (pkgmgr[PkgMgr.OPT_DEPS.value], pkgmgr[
         PkgMgr.OPT_DEP_FLAG.value]) if args.opt_deps else ("", "")
-    (code, opt_deps) = _install_package(package, install_cmd, docker_cmd, container_name,
-                                        opt_deps_cmd, opt_dep_flag)
-    if code == 0:
-        state.register_packages(container_name, packages=[package])
-        if opt_deps:
-            state.register_packages(container_name, packages=opt_deps,
-                                    package_flags=state.optional_package_flag(package))
-
-    return code
+    return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,
+                            box_conf, state, opt_deps_cmd, opt_dep_flag)
 
 
-def _install_package(package: str, install_cmd: str, docker_cmd: str, container_name: str,
-                     opt_deps_cmd: str, opt_dep_flag: str) -> Tuple[int, list[str]]:
+def _install_package(package: str, args: argparse.Namespace, install_cmd: str, list_cmd: str,
+                     docker_cmd: str, conf: ZboxConfiguration, box_conf: str,
+                     state: ZboxStateManagement, opt_deps_cmd: str, opt_dep_flag: str) -> int:
     """
     Real workhorse for :func:`install_package` that is invoked recursively for
     optional dependencies if required.
 
-    :param package: package to be installed
+    :param package: the package to be installed
+    :param args: arguments having all the attributes passed by the user (`package` is ignored)
     :param install_cmd: installation command as read from `distro.ini` configuration file of the
                         distribution which should have an unresolved `{opt_dep}` placeholder
                         for the `opt_dep_flag`
+    :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the docker/podman executable to use
-    :param container_name: name of the zbox container
+    :param conf: the `ZboxConfiguration` of the container
+    :param box_conf: the resolved INI format configuration of the container as a string
+    :param state: instance of the `ZboxStateManagement` class having the state of all zboxes
     :param opt_deps_cmd: command to determine optional dependencies as read from `distro.ini`
     :param opt_dep_flag: flag to be added during installation of an optional dependency to mark
                          it as a dependency (as read from `distro.ini`)
 
-    :return: pair having exit code of install command and list of optional dependencies
-             selected by the user (if any)
+    :return: exit code of install command for the main package
     """
-    print_info(f"Installing '{package}' in '{container_name}'")
+    print_info(f"Installing '{package}' in '{conf.box_name}'")
     # need to determine optional dependencies before installation else second level or higher
     # dependencies will never be found (as the dependencies are already installed)
     optional_deps: list[Tuple[str, str, int]] = []
-    selected_deps: list[str] = []
     if opt_deps_cmd:
-        optional_deps = get_optional_deps(package, docker_cmd, container_name, opt_deps_cmd)
-    if opt_dep_flag and not opt_deps_cmd:  # the case when installing dependency
+        optional_deps = get_optional_deps(package, docker_cmd, conf.box_name, opt_deps_cmd)
+    # the case when installing dependency -- perhaps should be made explicit with an argument
+    opt_dep_install = not opt_deps_cmd if opt_dep_flag else False
+    if opt_dep_install:
         resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
     else:
         resolved_install_cmd = install_cmd.format(opt_dep="")
     # don't exit on error here because the caller may have further actions to perform before exit
-    code = int(run_command([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
+    code = int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
                             f"{resolved_install_cmd} {package}"], exit_on_error=False,
                            error_msg=f"installing '{package}'"))
-    if code == 0 and optional_deps:
-        selected_deps = select_optional_deps(package, optional_deps)
-        for dep in selected_deps:
-            _install_package(dep, install_cmd, docker_cmd, container_name,
-                             opt_deps_cmd="", opt_dep_flag=opt_dep_flag)
+    if code == 0:
+        # don't create wrappers for executables from optional dependencies by default
+        local_copies = wrap_desktop_and_exec_files(package, args, list_cmd, docker_cmd, conf,
+                                                   box_conf, skip_exec_files=opt_dep_install)
+        package_type = state.optional_package_type(package) if opt_dep_install else ""
+        state.register_package(conf.box_name, package, shared_root=conf.shared_root_host_dir,
+                               local_copies=local_copies, package_type=package_type)
+        if optional_deps:
+            selected_deps = select_optional_deps(package, optional_deps)
+            for dep in selected_deps:
+                _install_package(dep, args, install_cmd, list_cmd, docker_cmd, conf, box_conf,
+                                 state, opt_deps_cmd="", opt_dep_flag=opt_dep_flag)
 
-    return code, selected_deps
+    return code
 
 
 def get_optional_deps(package: str, docker_cmd: str, container_name: str,
@@ -173,3 +186,92 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
                                  multi_select_select_on_accept=False, multi_select_empty_ok=True)
     selection = terminal_menu.show()
     return [deps[index][0] for index in selection] if selection else []
+
+
+def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd: str,
+                                docker_cmd: str, conf: ZboxConfiguration, box_conf: str,
+                                skip_exec_files: bool = False) -> list[str]:
+    """
+    Create wrappers in host environment to invoke container's desktop files and executables.
+
+    :param package: the package to be installed
+    :param args: arguments having all the attributes passed by the user (`package` is ignored)
+    :param list_cmd: command to list files for an installed package read from `distro.ini`
+    :param docker_cmd: the docker/podman executable to use
+    :param conf: the `ZboxConfiguration` of the container
+    :param box_conf: the resolved INI format configuration of the container as a string
+    :param skip_exec_files: if true, then skip creating wrappers for executable files
+
+    :return: the list of paths of the wrapper files
+    """
+    skip_desktop_files = args.skip_desktop_files
+    skip_executables = skip_exec_files or args.skip_executables
+    if skip_desktop_files and skip_executables:
+        return []
+    # skip on errors below and do not fail the installation
+    package_files = run_command(
+        [docker_cmd, "exec", "-t", conf.box_name, "/bin/bash", "-c", f"{list_cmd} {package}"],
+        capture_output=True, exit_on_error=False, error_msg=f"listing files of '{package}'")
+    if isinstance(package_files, int):
+        return []
+    wrapped_files: list[str] = []
+    desktop_dirs = FixedPaths.container_desktop_dirs()
+    executable_dirs = FixedPaths.container_executable_dirs()
+    # match both "Exec=" and "TryExec=" lines
+    exec_re = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(.+?)((\s%[a-zA-Z])?\s*)$")
+    box_config: Optional[ConfigParser] = None
+    appflags: Optional[SectionProxy] = None
+    for file in str(package_files).splitlines():
+        file_dir = os.path.dirname(file)
+        filename = os.path.basename(file).strip()
+        if not filename:
+            continue
+        # check if this is a .desktop directory and copy it over adding appropriate
+        # "docker exec" prefix to the command
+        if not skip_desktop_files and file_dir in desktop_dirs:
+            # container name is added to desktop file to make it unique
+            wrapped_name = f"zbox.{conf.box_name}.{filename}"
+            tmp_file = Path(f"/tmp/{wrapped_name}")
+            tmp_file.unlink(missing_ok=True)
+            print_info(f"Linking container desktop file {file}")
+            if run_command([docker_cmd, "cp", f"{conf.box_name}:{file}", str(tmp_file)],
+                           exit_on_error=False, error_msg=f"file copy of '{package}'") != 0:
+                continue
+            try:
+                # read the container configuration for [appflags] section
+                if not box_config:
+                    with io.StringIO(box_conf) as box_conf_fd:
+                        box_config = ini_file_reader(box_conf_fd, None)
+                    if box_config.has_section("appflags"):
+                        appflags = box_config["appflags"]
+                # check for additional flags to be added
+                if appflags and (flags := appflags.get(filename.removesuffix(".desktop"))):
+                    repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3 {flags}\4"
+                else:
+                    repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3\4"
+                # the destination will be $HOME/.local/share/applications
+                wrapped_file = f"{conf.env.user_applications_dir}/{wrapped_name}"
+                with open(wrapped_file, "w", encoding="utf-8") as wrapped_fd:
+                    wrapped_fd.writelines(
+                        exec_re.sub(repl, line) for line in tmp_file.open("r", encoding="utf-8"))
+                wrapped_files.append(wrapped_file)
+            finally:
+                tmp_file.unlink(missing_ok=True)
+            continue
+        # for the executables, create a wrapper executable that calls "docker exec"
+        if not skip_executables and file_dir in executable_dirs:
+            wrapped_exec = f"{conf.env.user_executables_dir}/{filename}"
+            print_info(f"Linking container executable {file}")
+            if os.path.exists(wrapped_exec):
+                resp = input(f"Target file {wrapped_exec} already exists. Overwrite? (y/N) ")
+                if resp.lower() != "y":
+                    print_warn(f"Skipping local wrapper for {file}")
+                    continue
+            exec_content = ("#!/bin/sh\n",
+                            f'exec {docker_cmd} exec -it {conf.box_name} "{file}" "$@"')
+            with open(wrapped_exec, "w", encoding="utf-8") as wrapped_fd:
+                wrapped_fd.writelines(exec_content)
+            os.chmod(wrapped_exec, mode=0o755, follow_symlinks=True)
+            wrapped_files.append(wrapped_exec)
+
+    return wrapped_files

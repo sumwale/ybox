@@ -15,7 +15,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
 
-from zbox.config import ZboxConfiguration
+from zbox.config import FixedPaths, ZboxConfiguration
 from zbox.env import Environ
 from zbox.filelock import FileLock
 from zbox.state import ZboxStateManagement
@@ -44,7 +44,7 @@ def main(argv: list[str]) -> None:
             raise NotSupportedError(f"Distribution '{distro}' not supported in {support_list}")
 
     # read the distribution specific configuration
-    base_image_name, shared_root_dirs, distro_config = read_distribution_config(env, conf)
+    base_image_name, shared_root_dirs, distro_config = read_distribution_config(conf)
     # setup entrypoint and related scripts to share with the container on a mount point
     setup_zbox_scripts(conf, distro_config)
 
@@ -54,7 +54,7 @@ def main(argv: list[str]) -> None:
         profile = conf.search_config_file(profile)
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the profile before any actions to ensure it is in proper shape
-    shared_root, config = process_sections(profile, env, conf, distro_config, docker_full_args)
+    shared_root, config = process_sections(profile, conf, distro_config, docker_full_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -142,7 +142,7 @@ def main(argv: list[str]) -> None:
 
     # remove distribution specific scripts and restart container the final time
     print_info(f"Restarting the final container '{box_name}'")
-    for script in conf.distribution_scripts:
+    for script in FixedPaths.distribution_scripts():
         os.unlink(f"{conf.scripts_dir}/{script}")
     restart_container(docker_cmd, conf)
     print_info("Waiting for the container to be ready (see "
@@ -152,7 +152,8 @@ def main(argv: list[str]) -> None:
 
     # finally add the state
     with ZboxStateManagement(env) as state:
-        state.register_container(box_name, distro, shared_root, config)
+        state.register_container(box_name, distro,
+                                 conf.shared_root_host_dir if shared_root else "", config)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -187,19 +188,23 @@ def process_args(args: argparse.Namespace) -> Tuple[str, str]:
             box_name = box_name[:-len(ini_suffix)]
         box_name = f"zbox-{args.distribution}_{box_name}"
 
+    # don't allow spaces or weird characters in the name
+    if not re.match(r"^[\w\-]+$", box_name):
+        print_error(f"Invalid container name '{box_name}' -- only alphanumeric, underscore and "
+                    "hyphen characters are accepted")
+        sys.exit(1)
     docker_cmd = get_docker_command(args, "-d")
     return box_name, docker_cmd
 
 
-def process_sections(profile: str, env: Environ, conf: ZboxConfiguration,
-                     distro_config: ConfigParser,
+def process_sections(profile: str, conf: ZboxConfiguration, distro_config: ConfigParser,
                      docker_args: list[str]) -> Tuple[bool, ConfigParser]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
     # Skip environment variable substitution for the "configs" section since the values
     # there have to be written as is to 'config.list' file for the container (since the
     #   $HOME variable can be different inside the container).
-    env_interpolation = EnvInterpolation(env, ["configs"])
+    env_interpolation = EnvInterpolation(conf.env, ["configs"])
     config = config_reader(profile, env_interpolation)
     # shared_root is false by default
     shared_root = False
@@ -209,7 +214,7 @@ def process_sections(profile: str, env: Environ, conf: ZboxConfiguration,
     for section in config.sections():
         if section == "base":
             shared_root, config_hardlinks = process_base_section(
-                config["base"], profile, env, docker_args)
+                config["base"], profile, conf.env, docker_args)
         elif section == "security":
             process_security_section(config["security"], profile, docker_args)
         elif section == "mounts":
@@ -498,17 +503,17 @@ def setup_zbox_scripts(conf: ZboxConfiguration, distro_config: ConfigParser) -> 
         shutil.rmtree(conf.scripts_dir)
     os.makedirs(conf.scripts_dir, exist_ok=True)
     # copy the common scripts
-    for script in [conf.entrypoint_base, conf.entrypoint_cp, conf.entrypoint,
-                   "entrypoint-common.sh", "prime-run"]:
+    for script in [FixedPaths.entrypoint_common(), FixedPaths.entrypoint_base(),
+                   FixedPaths.entrypoint_cp(), FixedPaths.entrypoint(), "prime-run"]:
         path = conf.search_config_file(f"resources/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     # also copy distribution specific scripts
-    for script in conf.distribution_scripts:
+    for script in FixedPaths.distribution_scripts():
         path = conf.search_config_file(f"{conf.distribution}/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     base_section = distro_config["base"]
-    if "scripts" in base_section:
-        for script in base_section["scripts"].split(";"):
+    if scripts := base_section.get("scripts"):
+        for script in scripts.split(";"):
             path = conf.search_config_file(f"{conf.distribution}/{script}")
             shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
         # finally copy the zbox python module which may be used by distribution scripts
@@ -516,9 +521,8 @@ def setup_zbox_scripts(conf: ZboxConfiguration, distro_config: ConfigParser) -> 
         copytree(f"{src_dir}/zbox", f"{conf.scripts_dir}/zbox")
 
 
-def read_distribution_config(env: Environ,
-                             conf: ZboxConfiguration) -> Tuple[str, str, ConfigParser]:
-    env_interpolation = EnvInterpolation(env, [])
+def read_distribution_config(conf: ZboxConfiguration) -> Tuple[str, str, ConfigParser]:
+    env_interpolation = EnvInterpolation(conf.env, [])
     distro_config = config_reader(conf.search_config_file(f"{conf.distribution}/distro.ini"),
                                   env_interpolation)
     distro_base_section = distro_config["base"]
@@ -541,7 +545,7 @@ def run_base_container(image_name: str, current_user: str, docker_cmd: str,
     docker_run = [docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR", f"--name={conf.box_name}",
                   f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
                   f"--label={ZboxLabel.CONTAINER_BASE}",
-                  f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_base}",
+                  f"--entrypoint={conf.target_scripts_dir}/{FixedPaths.entrypoint_base()}",
                   image_name, "-u", current_user, "-U", str(user_entry.pw_uid),
                   "-n", user_entry.pw_gecos, "-g", group_entry.gr_name,
                   "-G", str(group_entry.gr_gid)]
@@ -584,10 +588,10 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs
     # list of directories to be copied, and second the target directory
     run_command([docker_cmd, "run", "-it", f"--name={conf.box_name}",
                  f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
-                 f"-v={root_host}:{conf.shared_root_mount_dir}",
+                 f"-v={root_host}:{FixedPaths.shared_root_mount_dir()}",
                  f"--label={ZboxLabel.CONTAINER_COPY}", "--userns=keep-id", "--user=0",
-                 f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint_cp}",
-                 image_name, shared_root_dirs, conf.shared_root_mount_dir],
+                 f"--entrypoint={conf.target_scripts_dir}/{FixedPaths.entrypoint_cp()}",
+                 image_name, shared_root_dirs, FixedPaths.shared_root_mount_dir()],
                 error_msg="running container for copying shared root")
 
 
@@ -611,7 +615,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     status_path = Path(conf.status_file)
     status_path.unlink(missing_ok=True)
     status_path.touch(mode=0o600, exist_ok=False)
-    add_mount_option(docker_full_cmd, conf.status_file, conf.status_target_file)
+    add_mount_option(docker_full_cmd, conf.status_file, FixedPaths.status_target_file())
 
     for shared_dir in shared_root_dirs.split(";"):
         add_mount_option(docker_full_cmd, f"{conf.shared_root_host_dir}{shared_dir}", shared_dir)
@@ -620,12 +624,12 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
     docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_PRIMARY}")
     docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_DISTRIBUTION}={conf.distribution}")
-    docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{conf.entrypoint}")
+    docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{FixedPaths.entrypoint()}")
     docker_full_cmd.append("--userns=keep-id")
     # bubblewrap and thereby programs like steam do not work without --user
     # (https://github.com/containers/bubblewrap/issues/380#issuecomment-648169485)
     user_entry = pwd.getpwnam(current_user)
-    docker_full_cmd.append(f"--user={user_entry.pw_uid}:{user_entry.pw_gid}")
+    docker_full_cmd.append(f"--user={user_entry.pw_uid}")
     docker_full_cmd.append(conf.box_image(bool(shared_root_dirs)))
     if os.access(conf.config_list, os.R_OK):
         docker_full_cmd.extend(["-c", f"{conf.target_scripts_dir}/config.list",
@@ -635,8 +639,8 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
         docker_full_cmd.append(f"{conf.target_scripts_dir}/app.list")
     docker_full_cmd.append(conf.box_name)
 
-    if (code := run_command(docker_full_cmd, exit_on_error=False,
-                            error_msg="container launch")) != "0":
+    if (code := int(run_command(docker_full_cmd, exit_on_error=False,
+                                error_msg="container launch"))) != 0:
         print_error(f"Also check 'zbox-logs {conf.box_name}' for details")
         sys.exit(code)
 
@@ -680,8 +684,8 @@ def truncate_file(file: str) -> None:
 
 
 def restart_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
-    if (code := run_command([docker_cmd, "container", "start", conf.box_name], exit_on_error=False,
-                            error_msg="container restart")) != "0":
+    if (code := int(run_command([docker_cmd, "container", "start", conf.box_name],
+                                exit_on_error=False, error_msg="container restart"))) != 0:
         print_error("Also check 'zbox-logs {conf.box_name}' for details")
         sys.exit(code)
 
