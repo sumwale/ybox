@@ -214,7 +214,7 @@ def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd
         capture_output=True, exit_on_error=False, error_msg=f"listing files of '{package}'")
     if isinstance(package_files, int):
         return []
-    wrapped_files: list[str] = []
+    wrapper_files: list[str] = []
     desktop_dirs = FixedPaths.container_desktop_dirs()
     executable_dirs = FixedPaths.container_executable_dirs()
     # match both "Exec=" and "TryExec=" lines
@@ -224,54 +224,102 @@ def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd
     for file in str(package_files).splitlines():
         file_dir = os.path.dirname(file)
         filename = os.path.basename(file).strip()
-        if not filename:
+        if not filename:  # the case of directories
             continue
         # check if this is a .desktop directory and copy it over adding appropriate
         # "docker exec" prefix to the command
         if not skip_desktop_files and file_dir in desktop_dirs:
-            # container name is added to desktop file to make it unique
-            wrapped_name = f"zbox.{conf.box_name}.{filename}"
-            tmp_file = Path(f"/tmp/{wrapped_name}")
-            tmp_file.unlink(missing_ok=True)
             print_info(f"Linking container desktop file {file}")
-            if run_command([docker_cmd, "cp", f"{conf.box_name}:{file}", str(tmp_file)],
-                           exit_on_error=False, error_msg=f"file copy of '{package}'") != 0:
-                continue
-            try:
-                # read the container configuration for [appflags] section
-                if not box_config:
-                    with io.StringIO(box_conf) as box_conf_fd:
-                        box_config = ini_file_reader(box_conf_fd, None)
-                    if box_config.has_section("appflags"):
-                        appflags = box_config["appflags"]
-                # check for additional flags to be added
-                if appflags and (flags := appflags.get(filename.removesuffix(".desktop"))):
-                    repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3 {flags}\4"
-                else:
-                    repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3\4"
-                # the destination will be $HOME/.local/share/applications
-                wrapped_file = f"{conf.env.user_applications_dir}/{wrapped_name}"
-                with open(wrapped_file, "w", encoding="utf-8") as wrapped_fd:
-                    wrapped_fd.writelines(
-                        exec_re.sub(repl, line) for line in tmp_file.open("r", encoding="utf-8"))
-                wrapped_files.append(wrapped_file)
-            finally:
-                tmp_file.unlink(missing_ok=True)
+            box_config = _wrap_desktop_file(filename, file, package, exec_re, docker_cmd, conf,
+                                            box_conf, box_config, appflags, wrapper_files)
             continue
-        # for the executables, create a wrapper executable that calls "docker exec"
         if not skip_executables and file_dir in executable_dirs:
-            wrapped_exec = f"{conf.env.user_executables_dir}/{filename}"
             print_info(f"Linking container executable {file}")
-            if os.path.exists(wrapped_exec):
-                resp = input(f"Target file {wrapped_exec} already exists. Overwrite? (y/N) ")
-                if resp.lower() != "y":
-                    print_warn(f"Skipping local wrapper for {file}")
-                    continue
-            exec_content = ("#!/bin/sh\n",
-                            f'exec {docker_cmd} exec -it {conf.box_name} "{file}" "$@"')
-            with open(wrapped_exec, "w", encoding="utf-8") as wrapped_fd:
-                wrapped_fd.writelines(exec_content)
-            os.chmod(wrapped_exec, mode=0o755, follow_symlinks=True)
-            wrapped_files.append(wrapped_exec)
+            _wrap_executable(filename, file, docker_cmd, conf, wrapper_files)
 
-    return wrapped_files
+    return wrapper_files
+
+
+def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Pattern[str],
+                       docker_cmd: str, conf: ZboxConfiguration, box_conf: str,
+                       box_config: Optional[ConfigParser], appflags: Optional[SectionProxy],
+                       wrapper_files: list[str]) -> Optional[ConfigParser]:
+    """
+    For a desktop file, add "docker/podman exec ..." to its Exec/TryExec lines. Also read
+    the additional flags for the command passed in `appflags` and add them to an appropriate
+    position in the Exec/TryExec lines.
+
+    :param filename: name of the desktop file being wrapped
+    :param file: full path of the desktop file being wrapped
+    :param package: the package being installed
+    :param exec_re: the regular expression to use for matching Exec/TryExec lines
+    :param docker_cmd: the docker/podman executable to use
+    :param conf: the `ZboxConfiguration` of the container
+    :param box_conf: the resolved INI format configuration of the container as a string
+    :param box_config: the resolved configuration of the container as a `ConfigParser`
+    :param appflags: the `[appflags]` section from the container configuration specifying the
+                     additional flags for an application which allows them to work better
+                     in the container environment
+    :param wrapper_files: the accumulated list of all wrapper files so far
+
+    :return: the updated resolved configuration of the container as a `ConfigParser`
+    """
+    # container name is added to desktop file to make it unique
+    wrapper_name = f"zbox.{conf.box_name}.{filename}"
+    tmp_file = Path(f"/tmp/{wrapper_name}")
+    tmp_file.unlink(missing_ok=True)
+    print_info(f"Linking container desktop file {file}")
+    if run_command([docker_cmd, "cp", f"{conf.box_name}:{file}", str(tmp_file)],
+                   exit_on_error=False, error_msg=f"file copy of '{package}'") != 0:
+        return box_config
+    try:
+        # read the container configuration for [appflags] section
+        if not box_config:
+            with io.StringIO(box_conf) as box_conf_fd:
+                box_config = ini_file_reader(box_conf_fd, interpolation=None,
+                                             case_sensitive=False)  # case-insensitive
+            if box_config.has_section("appflags"):
+                appflags = box_config["appflags"]
+        # check for additional flags to be added
+        if appflags and (flags := appflags.get(filename.removesuffix(".desktop"))):
+            repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3 {flags}\4"
+        else:
+            repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3\4"
+        # the destination will be $HOME/.local/share/applications
+        wrapper_file = f"{conf.env.user_applications_dir}/{wrapper_name}"
+        with open(wrapper_file, "w", encoding="utf-8") as wrapper_fd:
+            wrapper_fd.writelines(
+                exec_re.sub(repl, line) for line in tmp_file.open("r", encoding="utf-8"))
+        wrapper_files.append(wrapper_file)
+    finally:
+        tmp_file.unlink(missing_ok=True)
+
+    return box_config
+
+
+def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: ZboxConfiguration,
+                     wrapper_files: list[str]) -> bool:
+    """
+    For an executable, create a wrapper executable that invokes "docker/podman exec".
+
+    :param filename: name of the executable file being wrapped
+    :param file: full path of the executable file being wrapped
+    :param docker_cmd: the docker/podman executable to use
+    :param conf: the `ZboxConfiguration` of the container
+    :param wrapper_files: the accumulated list of all wrapper files so far
+
+    :return: true if a wrapper for executable file was created else false if skipped by the user
+    """
+    wrapper_exec = f"{conf.env.user_executables_dir}/{filename}"
+    if os.path.exists(wrapper_exec):
+        resp = input(f"Target file {wrapper_exec} already exists. Overwrite? (y/N) ")
+        if resp.lower() != "y":
+            print_warn(f"Skipping local wrapper for {file}")
+            return False
+    exec_content = ("#!/bin/sh\n",
+                    f'exec {docker_cmd} exec -it {conf.box_name} "{file}" "$@"')
+    with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
+        wrapper_fd.writelines(exec_content)
+    os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)
+    wrapper_files.append(wrapper_exec)
+    return True

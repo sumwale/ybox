@@ -146,7 +146,8 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
     return config
 
 
-def ini_file_reader(file, interpolation: Optional[Interpolation]) -> ConfigParser:
+def ini_file_reader(file, interpolation: Optional[Interpolation],
+                    case_sensitive: bool = True) -> ConfigParser:
     """
     Read an INI file from a given file handle. It applies some basic rules that are used
     for all zbox configurations like allowing no values, only '=' as delimiters and
@@ -154,10 +155,12 @@ def ini_file_reader(file, interpolation: Optional[Interpolation]) -> ConfigParse
 
     :param file: file handle for the INI format data
     :param interpolation: if provided then used for value interpolation
+    :param case_sensitive: if true then keys are case-sensitive (default) else case-insensitive
     :return: instance of `configparser.ConfigParser` built after parsing the given file
     """
     config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
-    config.optionxform = str  # type: ignore
+    if case_sensitive:
+        config.optionxform = str  # type: ignore
     config.read_file(file)
     return config
 
