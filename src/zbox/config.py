@@ -141,7 +141,7 @@ class ZboxConfiguration:
         return self.__app_list
 
 
-class FixedPaths:
+class Consts:
     """
     Defines fixed file/path names used by zbox that are not configurable.
     """

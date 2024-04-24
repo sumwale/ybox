@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from zbox.config import FixedPaths, ZboxConfiguration
+from zbox.config import Consts, ZboxConfiguration
 from zbox.state import ZboxStateManagement
 from zbox.util import PkgMgr, print_info, print_warn, run_command, ini_file_reader
 
@@ -222,8 +222,8 @@ def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd
     if isinstance(package_files, int):
         return []
     wrapper_files: list[str] = []
-    desktop_dirs = FixedPaths.container_desktop_dirs()
-    executable_dirs = FixedPaths.container_executable_dirs()
+    desktop_dirs = Consts.container_desktop_dirs()
+    executable_dirs = Consts.container_executable_dirs()
     # match both "Exec=" and "TryExec=" lines
     exec_re = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(.+?)((\s%[a-zA-Z])?\s*)$")
     box_config: Optional[ConfigParser] = None

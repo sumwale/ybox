@@ -15,7 +15,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
 
-from zbox.config import FixedPaths, ZboxConfiguration
+from zbox.config import Consts, ZboxConfiguration
 from zbox.env import Environ
 from zbox.filelock import FileLock
 from zbox.state import ZboxStateManagement
@@ -142,7 +142,7 @@ def main(argv: list[str]) -> None:
 
     # remove distribution specific scripts and restart container the final time
     print_info(f"Restarting the final container '{box_name}'")
-    for script in FixedPaths.distribution_scripts():
+    for script in Consts.distribution_scripts():
         os.unlink(f"{conf.scripts_dir}/{script}")
     restart_container(docker_cmd, conf)
     print_info("Waiting for the container to be ready (see "
@@ -503,12 +503,12 @@ def setup_zbox_scripts(conf: ZboxConfiguration, distro_config: ConfigParser) -> 
         shutil.rmtree(conf.scripts_dir)
     os.makedirs(conf.scripts_dir, exist_ok=True)
     # copy the common scripts
-    for script in [FixedPaths.entrypoint_common(), FixedPaths.entrypoint_base(),
-                   FixedPaths.entrypoint_cp(), FixedPaths.entrypoint(), "prime-run"]:
+    for script in [Consts.entrypoint_common(), Consts.entrypoint_base(),
+                   Consts.entrypoint_cp(), Consts.entrypoint(), "prime-run"]:
         path = conf.search_config_file(f"resources/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     # also copy distribution specific scripts
-    for script in FixedPaths.distribution_scripts():
+    for script in Consts.distribution_scripts():
         path = conf.search_config_file(f"{conf.distribution}/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     base_section = distro_config["base"]
@@ -545,7 +545,7 @@ def run_base_container(image_name: str, current_user: str, docker_cmd: str,
     docker_run = [docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR", f"--name={conf.box_name}",
                   f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
                   f"--label={ZboxLabel.CONTAINER_BASE}",
-                  f"--entrypoint={conf.target_scripts_dir}/{FixedPaths.entrypoint_base()}",
+                  f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_base()}",
                   image_name, "-u", current_user, "-U", str(user_entry.pw_uid),
                   "-n", user_entry.pw_gecos, "-g", group_entry.gr_name,
                   "-G", str(group_entry.gr_gid)]
@@ -588,10 +588,10 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs
     # list of directories to be copied, and second the target directory
     run_command([docker_cmd, "run", "-it", f"--name={conf.box_name}",
                  f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
-                 f"-v={root_host}:{FixedPaths.shared_root_mount_dir()}",
+                 f"-v={root_host}:{Consts.shared_root_mount_dir()}",
                  f"--label={ZboxLabel.CONTAINER_COPY}", "--userns=keep-id", "--user=0",
-                 f"--entrypoint={conf.target_scripts_dir}/{FixedPaths.entrypoint_cp()}",
-                 image_name, shared_root_dirs, FixedPaths.shared_root_mount_dir()],
+                 f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_cp()}",
+                 image_name, shared_root_dirs, Consts.shared_root_mount_dir()],
                 error_msg="running container for copying shared root")
 
 
@@ -615,7 +615,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     status_path = Path(conf.status_file)
     status_path.unlink(missing_ok=True)
     status_path.touch(mode=0o600, exist_ok=False)
-    add_mount_option(docker_full_cmd, conf.status_file, FixedPaths.status_target_file())
+    add_mount_option(docker_full_cmd, conf.status_file, Consts.status_target_file())
 
     for shared_dir in shared_root_dirs.split(";"):
         add_mount_option(docker_full_cmd, f"{conf.shared_root_host_dir}{shared_dir}", shared_dir)
@@ -624,7 +624,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
     docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_PRIMARY}")
     docker_full_cmd.append(f"--label={ZboxLabel.CONTAINER_DISTRIBUTION}={conf.distribution}")
-    docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{FixedPaths.entrypoint()}")
+    docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint()}")
     docker_full_cmd.append("--userns=keep-id")
     # bubblewrap and thereby programs like steam do not work without --user
     # (https://github.com/containers/bubblewrap/issues/380#issuecomment-648169485)
