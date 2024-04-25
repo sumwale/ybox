@@ -5,6 +5,7 @@ import gzip
 import os
 import sys
 import time
+import zlib
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -91,25 +92,32 @@ def refresh_aur_metadata() -> None:
 
 # using ijson instead of the standard json because latter always loads the entire
 # JSON in memory whereas here we are interested in only a few fields
-def build_aur_db_map(aur_packages: dict[str, list[PackageAlternate]]) -> None:
-    with gzip.open(_AUR_META_FILE, mode="rt", encoding="utf-8") as aur_meta:
-        for package in ijson.items(aur_meta, "item"):
-            desc = package.get("Description")
-            if not desc:
-                desc = ""
-            deps = package.get("Depends")
-            opt_deps = package.get("OptDepends")
-            map_val = (package.get("Name"), desc, deps, opt_deps)
-            if existing := aur_packages.get(map_val[0]):
-                existing.append(map_val)
-            else:
-                aur_packages[map_val[0]] = [map_val]
-            if provides := package.get("Provides"):
-                for provide in provides:
-                    if existing := aur_packages.get(provide):
-                        existing.append(map_val)
-                    else:
-                        aur_packages[provide] = [map_val]
+def build_aur_db_map(aur_packages: dict[str, list[PackageAlternate]], raise_error: bool) -> bool:
+    try:
+        with gzip.open(_AUR_META_FILE, mode="rt", encoding="utf-8") as aur_meta:
+            for package in ijson.items(aur_meta, "item"):
+                desc = package.get("Description")
+                if not desc:
+                    desc = ""
+                deps = package.get("Depends")
+                opt_deps = package.get("OptDepends")
+                map_val = (package.get("Name"), desc, deps, opt_deps)
+                if existing := aur_packages.get(map_val[0]):
+                    existing.append(map_val)
+                else:
+                    aur_packages[map_val[0]] = [map_val]
+                if provides := package.get("Provides"):
+                    for provide in provides:
+                        if existing := aur_packages.get(provide):
+                            existing.append(map_val)
+                        else:
+                            aur_packages[provide] = [map_val]
+        return True
+    except (gzip.BadGzipFile, EOFError, zlib.error):
+        if raise_error:
+            raise
+        else:
+            return False
 
 
 def find_opt_deps(package: str, installed: set[str],
@@ -128,7 +136,11 @@ def find_opt_deps(package: str, installed: set[str],
             print_color(f"Searching dependencies of '{package}' in AUR", fg=fgcolor.orange)
             # fetch AUR metadata, populate into all_packages and try again
             refresh_aur_metadata()
-            build_aur_db_map(all_packages)
+            # if AUR metadata file is broken, then refresh it and try again
+            if not build_aur_db_map(all_packages, raise_error=False):
+                os.unlink(_AUR_META_FILE)
+                refresh_aur_metadata()
+                build_aur_db_map(all_packages, raise_error=True)
             alternates = all_packages.get(package)
     if not alternates:
         if level == 1:

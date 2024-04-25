@@ -95,7 +95,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                             f"{resolved_install_cmd} {package}"], exit_on_error=False,
                            error_msg=f"installing '{package}'"))
     if code == 0:
-        # don't create wrappers for executables from optional dependencies by default
+        # TODO: wrappers for newly installed required dependencies should also be created
+        # don't create wrappers for executables of optional dependencies by default
         local_copies = wrap_desktop_and_exec_files(package, args, list_cmd, docker_cmd, conf,
                                                    box_conf, skip_exec_files=opt_dep_install)
         package_type = state.optional_package_type(package) if opt_dep_install else ""
