@@ -15,7 +15,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
 
-from zbox.config import Consts, ZboxConfiguration
+from zbox.config import Consts, StaticConfiguration
 from zbox.env import Environ
 from zbox.filelock import FileLock
 from zbox.state import ZboxStateManagement
@@ -36,7 +36,7 @@ def main(argv: list[str]) -> None:
     print_color(f"Creating zbox container named '{box_name}'", fg=fgcolor.green)
     env = Environ()
     distro = args.distribution
-    conf = ZboxConfiguration(env, distro, box_name)
+    conf = StaticConfiguration(env, distro, box_name)
     support_list = conf.search_config_file("supported.list")
     # check that the distribution is in supported.list
     with open(support_list, "r", encoding="utf-8") as supp_file:
@@ -197,7 +197,7 @@ def process_args(args: argparse.Namespace) -> Tuple[str, str]:
     return box_name, docker_cmd
 
 
-def process_sections(profile: str, conf: ZboxConfiguration, distro_config: ConfigParser,
+def process_sections(profile: str, conf: StaticConfiguration, distro_config: ConfigParser,
                      docker_args: list[str]) -> Tuple[bool, ConfigParser]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
@@ -402,7 +402,7 @@ def process_mounts_section(mounts_section: SectionProxy, args: list[str]) -> Non
 
 
 def process_configs_section(configs_section: SectionProxy, config_hardlinks: bool,
-                            conf: ZboxConfiguration, args: list[str]) -> None:
+                            conf: StaticConfiguration, args: list[str]) -> None:
     # copy or link the mentioned files in [configs] section which can be either files
     # or directories (recursively copy/link in the latter case)
     # this is refreshed on every container start
@@ -451,7 +451,7 @@ def process_env_section(env_section: SectionProxy, args: list[str]) -> None:
         add_env_option(args, key, env_section[key])
 
 
-def process_apps_section(apps_section: SectionProxy, conf: ZboxConfiguration,
+def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
                          distro_config: ConfigParser) -> None:
     # first update the mirrors
     pkgmgr = distro_config["pkgmgr"]
@@ -497,7 +497,7 @@ def copytree(src: str, dest: str, hardlink: bool = False) -> None:
                     shutil.copy2(src_path, f"{dest_dir}/{src_file}", follow_symlinks=True)
 
 
-def setup_zbox_scripts(conf: ZboxConfiguration, distro_config: ConfigParser) -> None:
+def setup_zbox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -> None:
     # first create local mount directory having entrypoint and other scripts
     if os.path.exists(conf.scripts_dir):
         shutil.rmtree(conf.scripts_dir)
@@ -521,7 +521,7 @@ def setup_zbox_scripts(conf: ZboxConfiguration, distro_config: ConfigParser) -> 
         copytree(f"{src_dir}/zbox", f"{conf.scripts_dir}/zbox")
 
 
-def read_distribution_config(conf: ZboxConfiguration) -> Tuple[str, str, ConfigParser]:
+def read_distribution_config(conf: StaticConfiguration) -> Tuple[str, str, ConfigParser]:
     env_interpolation = EnvInterpolation(conf.env, [])
     distro_config = config_reader(conf.search_config_file(f"{conf.distribution}/distro.ini"),
                                   env_interpolation)
@@ -532,7 +532,7 @@ def read_distribution_config(conf: ZboxConfiguration) -> Tuple[str, str, ConfigP
 
 
 def run_base_container(image_name: str, current_user: str, docker_cmd: str,
-                       conf: ZboxConfiguration) -> None:
+                       conf: StaticConfiguration) -> None:
     # refresh the image locally first to decrease update size later
     print_info(f"Refreshing local copy of the base image '{image_name}'")
     if run_command([docker_cmd, "pull", image_name], exit_on_error=False,
@@ -559,7 +559,7 @@ def run_base_container(image_name: str, current_user: str, docker_cmd: str,
 
 
 def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs: str,
-                              conf: ZboxConfiguration) -> None:
+                              conf: StaticConfiguration) -> None:
     root_host = conf.shared_root_host_dir
     # if shared root copy exists locally, then prompt user to delete it or else exit
     if os.path.exists(root_host):
@@ -596,7 +596,7 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs
 
 
 def commit_container(current_user: str, docker_cmd: str, box_image: str,
-                     conf: ZboxConfiguration) -> None:
+                     conf: StaticConfiguration) -> None:
     run_command([docker_cmd, "commit", f"-c=USER={current_user}",
                  f"-c=WORKDIR=/home/{current_user}", conf.box_name, box_image],
                 error_msg="container commit")
@@ -609,7 +609,7 @@ def remove_image(docker_cmd: str, box_image: str) -> None:
 
 
 def start_container(docker_full_cmd: list[str], current_user: str, shared_root_dirs: str,
-                    conf: ZboxConfiguration) -> None:
+                    conf: StaticConfiguration) -> None:
     add_mount_option(docker_full_cmd, conf.scripts_dir, conf.target_scripts_dir, "ro")
     # touch the status file and mount it
     status_path = Path(conf.status_file)
@@ -645,7 +645,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
         sys.exit(code)
 
 
-def wait_for_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
+def wait_for_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     box_name = conf.box_name
     max_wait_secs = 600
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
@@ -683,7 +683,7 @@ def truncate_file(file: str) -> None:
         file_fd.truncate(0)
 
 
-def restart_container(docker_cmd: str, conf: ZboxConfiguration) -> None:
+def restart_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     if (code := int(run_command([docker_cmd, "container", "start", conf.box_name],
                                 exit_on_error=False, error_msg="container restart"))) != 0:
         print_error("Also check 'zbox-logs {conf.box_name}' for details")

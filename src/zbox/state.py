@@ -8,10 +8,30 @@ import sqlite3
 from configparser import ConfigParser
 from contextlib import closing
 from io import StringIO
-from typing import Optional, Tuple
+from typing import Optional
+
+from dataclasses import dataclass
 
 from .env import Environ
 from .util import print_error
+
+
+@dataclass
+class RuntimeConfiguration:
+    """
+    Holds runtime configuration details of a container.
+
+    Attributes:
+        name: name of the container
+        distribution: the Linux distribution used when creating the container
+        shared_root: the local shared root directory if `shared_root` flag is enabled for
+                     the container (see `shared_root` key in [base] section in basic.ini)
+        ini_config: the resolved configuration of the container in INI format as a string
+    """
+    name: str
+    distribution: str
+    shared_root: str
+    ini_config: str
 
 
 class ZboxStateManagement:
@@ -20,7 +40,7 @@ class ZboxStateManagement:
 
     1. The full configuration used for the creation of a container.
     2. The packages installed explicitly on each of the containers (though all
-         packages may be visible on all containers having 'shared_root' as true)
+         packages may be visible on all containers having `shared_root` as true)
     3. Cleanup state of containers removed explicitly or those that got stopped/removed.
 
     Expected usage is using a `with` statement to ensure proper cleanup other the database
@@ -66,8 +86,8 @@ class ZboxStateManagement:
 
         :param container_name: name of the container
         :param distribution: the Linux distribution used when creating the container
-        :param shared_root: the local shared root directory if 'shared_root' flag is enabled for
-                            the container (see 'shared_root' key in [base] section in basic.ini)
+        :param shared_root: the local shared root directory if `shared_root` flag is enabled
+                            for the container
         :param parser: parser object for the configuration file used for creating the container
         """
         # build the ini string from parser
@@ -132,17 +152,19 @@ class ZboxStateManagement:
                 self.__conn.commit()
             return row is not None
 
-    def get_container_configuration(self, container_name: str) -> Optional[Tuple[str, str]]:
+    def get_container_configuration(self, name: str) -> Optional[RuntimeConfiguration]:
         """
-        Get the INI configuration file contents for the container.
+        Get the configuration details of the container which includes its Linux distribution name,
+        shared root path (or empty if not using shared root), and its resolved configuration in
+        INI format as a string.
 
-        :param container_name: name of the container
-        :return: configuration of the container in INI format
+        :param name: name of the container
+        :return: configuration of the container as a `RuntimeConfiguration` object
         """
-        with closing(self.__conn.execute("SELECT distribution, configuration FROM containers "
-                                         "WHERE name = ?", (container_name,))) as cursor:
+        with closing(self.__conn.execute("SELECT distribution, shared_root, configuration FROM "
+                                         "containers WHERE name = ?", (name,))) as cursor:
             row = cursor.fetchone()
-            return (str(row[0]), str(row[1])) if row else None
+            return RuntimeConfiguration(name, row[0], row[1], row[2]) if row else None
 
     def register_package(self, container_name: str, package: str, shared_root: str,
                          local_copies: list[str], package_type: str = "") -> None:
@@ -151,7 +173,7 @@ class ZboxStateManagement:
 
         :param container_name: name of the container
         :param package: the package to be registered
-        :param shared_root: the local shared root directory if 'shared_root' flag is enabled
+        :param shared_root: the local shared root directory if `shared_root` flag is enabled
                             for the container
         :param local_copies: map of package name to list of locally copied files (typically
                              desktop files and binary executables that invoke container ones)
@@ -179,33 +201,40 @@ class ZboxStateManagement:
         return f"optional({package})"
 
     def unregister_package(self, container_name: str, package: str,
-                           shared_root: str) -> None:
+                           shared_root: str) -> list[str]:
         """
         Unregister a package for a given container.
 
         :param container_name: name of the container
         :param package: the package to be unregistered
-        :param shared_root: the local shared root directory if 'shared_root' flag is enabled
+        :param shared_root: the local shared root directory if `shared_root` flag is enabled
                             for the container
+        :return list of local desktop and executable wrapper files created for the package
         """
         self.__begin_transaction()
         # The shared root ones of a distribution all need to disappear (including orphans)
         # regardless of container if this container is on the same shared root.
         if shared_root:
-            self.__conn.execute("DELETE FROM packages WHERE name = ? AND shared_root = ?",
-                                (package, shared_root))
+            cursor = self.__conn.execute("DELETE FROM packages WHERE name = ? AND shared_root = ?"
+                                         " RETURNING local_copies", (package, shared_root))
         else:
-            self.__conn.execute("DELETE FROM packages WHERE name = ? AND container = ?",
-                                (package, container_name))
+            cursor = self.__conn.execute("DELETE FROM packages WHERE name = ? AND container = ?"
+                                         " RETURNING local_copies", (package, container_name))
+        with closing(cursor):
+            local_copies = [file for row in cursor.fetchall() if row[0]
+                            for file in str(row[0]).split(";")]
         self.__conn.commit()
+        return local_copies
 
-    def get_packages(self, container_name: Optional[str] = None, regex: str = ".*") -> list[str]:
+    def get_packages(self, container_name: Optional[str] = None, regex: str = ".*",
+                     package_type: str = "%") -> list[str]:
         """
         Get the list of registered packages. This can be filtered for a specific container
         and/or using a (python) regular expression pattern.
 
         :param container_name: optional name of the container to filter packages
         :param regex: regular expression pattern to match against package names
+        :param package_type: SQL LIKE pattern to match against package type field
         :return: list of registered packages matching the given criteria
         """
         predicate = ""
@@ -214,10 +243,15 @@ class ZboxStateManagement:
             predicate = "container = ? AND "
             args = [container_name]
         if regex == ".*":
+            predicate += "1=1 AND "
+        else:
+            predicate += "name REGEXP ? AND "
+            args.append(regex)
+        if package_type == "%":
             predicate += "1=1"
         else:
-            predicate += "name REGEXP ?"
-            args.append(regex)
+            predicate += "type LIKE ?"
+            args.append(package_type)
         with closing(self.__conn.cursor()) as cursor:
             cursor.execute(
                 f"SELECT DISTINCT(name) FROM packages WHERE {predicate} ORDER BY name ASC", args)

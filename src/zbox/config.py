@@ -8,10 +8,10 @@ from typing import Optional
 from .env import Environ
 
 
-class ZboxConfiguration:
+class StaticConfiguration:
     """
     Configuration paths for a zbox container, its name and distribution.
-    This class also setups up related environment variables which can be used by
+    This class also setups up related environment variables which can be used by the
     INI configuration files.
     """
 

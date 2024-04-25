@@ -6,11 +6,11 @@ Package management utility for zbox containers.
 
 import argparse
 import sys
-from configparser import SectionProxy
 
-from zbox.config import ZboxConfiguration
+from zbox.config import StaticConfiguration
 from zbox.env import Environ
 from zbox.pkg.inst import install_package
+from zbox.pkg.uninst import uninstall_package
 from zbox.state import ZboxStateManagement
 from zbox.util import EnvInterpolation, ZboxLabel, config_reader, get_docker_command
 from zbox.util import print_error, print_warn, run_command, verify_zbox_state
@@ -52,21 +52,15 @@ def main(argv: list[str]) -> int:
 
     env = Environ()
     with ZboxStateManagement(env) as state:
-        if (config := state.get_container_configuration(container_name)) is None:
+        if (runtime_conf := state.get_container_configuration(container_name)) is None:
             print_error(f"No state for zbox container '{container_name}' found!")
             return 1
-        conf = ZboxConfiguration(env, config[0], container_name)
+        conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
         env_interpolation = EnvInterpolation(env, [])
         distro_config = config_reader(conf.search_config_file(f"{conf.distribution}/distro.ini"),
                                       env_interpolation)
         pkgmgr = distro_config["pkgmgr"]
-        return args.func(args, pkgmgr, docker_cmd, conf, config[1], state)
-
-
-def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                      conf: ZboxConfiguration, box_conf: str, state: ZboxStateManagement) -> int:
-    print(f"SW: Will uninstall {args.package} in {conf.box_name} using {docker_cmd}")
-    return 0
+        return args.func(args, pkgmgr, docker_cmd, conf, runtime_conf, state)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -111,11 +105,11 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
 
 def add_uninstall(subparser: argparse.ArgumentParser) -> None:
     add_common_args(subparser)
-    subparser.add_argument("-p", "--purge", type=str,
+    subparser.add_argument("-p", "--purge", action="store_true",
                            help="remove everything including system configuration files "
-                                "of the package")
-    subparser.add_argument("-r", "--remove-deps", type=str,
-                           help="uninstall unused dependencies in addition to the package")
+                                "and/or data files of the package")
+    subparser.add_argument("-r", "--remove-deps", action="store_true",
+                           help="uninstall orphaned dependencies in addition to the package")
     subparser.add_argument("package", type=str, help="the package to uninstall")
     subparser.set_defaults(func=uninstall_package)
 

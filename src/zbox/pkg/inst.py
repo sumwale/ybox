@@ -14,13 +14,14 @@ from typing import Optional, Tuple
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from zbox.config import Consts, ZboxConfiguration
-from zbox.state import ZboxStateManagement
+from zbox.config import Consts, StaticConfiguration
+from zbox.state import RuntimeConfiguration, ZboxStateManagement
 from zbox.util import PkgMgr, print_info, print_warn, run_command, ini_file_reader
 
 
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                    conf: ZboxConfiguration, box_conf: str, state: ZboxStateManagement) -> int:
+                    conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
+                    state: ZboxStateManagement) -> int:
     """
     Install package specified by `args.package` on a zbox container with given docker/podman
     command. Additional flags honored are `args.quiet` to bypass user confirmation during install,
@@ -38,8 +39,8 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `ZboxConfiguration` of the container
-    :param box_conf: the resolved INI format configuration of the container as a string
+    :param conf: the `StaticConfiguration` of the container
+    :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of the `ZboxStateManagement` class having the state of all zboxes
 
     :return: integer exit status of install command where 0 represents success
@@ -52,11 +53,11 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     opt_deps_cmd, opt_dep_flag = (pkgmgr[PkgMgr.OPT_DEPS.value], pkgmgr[
         PkgMgr.OPT_DEP_FLAG.value]) if args.opt_deps else ("", "")
     return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,
-                            box_conf, state, opt_deps_cmd, opt_dep_flag)
+                            runtime_conf, state, opt_deps_cmd, opt_dep_flag)
 
 
 def _install_package(package: str, args: argparse.Namespace, install_cmd: str, list_cmd: str,
-                     docker_cmd: str, conf: ZboxConfiguration, box_conf: str,
+                     docker_cmd: str, conf: StaticConfiguration, rt_conf: RuntimeConfiguration,
                      state: ZboxStateManagement, opt_deps_cmd: str, opt_dep_flag: str) -> int:
     """
     Real workhorse for :func:`install_package` that is invoked recursively for
@@ -69,8 +70,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                         for the `opt_dep_flag`
     :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `ZboxConfiguration` of the container
-    :param box_conf: the resolved INI format configuration of the container as a string
+    :param conf: the `StaticConfiguration` of the container
+    :param rt_conf: the `RuntimeConfiguration` of the container
     :param state: instance of the `ZboxStateManagement` class having the state of all zboxes
     :param opt_deps_cmd: command to determine optional dependencies as read from `distro.ini`
     :param opt_dep_flag: flag to be added during installation of an optional dependency to mark
@@ -97,15 +98,15 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     if code == 0:
         # TODO: wrappers for newly installed required dependencies should also be created
         # don't create wrappers for executables of optional dependencies by default
-        local_copies = wrap_desktop_and_exec_files(package, args, list_cmd, docker_cmd, conf,
-                                                   box_conf, skip_exec_files=opt_dep_install)
-        package_type = state.optional_package_type(package) if opt_dep_install else ""
-        state.register_package(conf.box_name, package, shared_root=conf.shared_root_host_dir,
+        local_copies = wrap_container_files(package, args, list_cmd, docker_cmd, conf,
+                                            rt_conf.ini_config, skip_exec_files=opt_dep_install)
+        package_type = state.optional_package_type(args.package) if opt_dep_install else ""
+        state.register_package(conf.box_name, package, shared_root=rt_conf.shared_root,
                                local_copies=local_copies, package_type=package_type)
         if optional_deps:
             selected_deps = select_optional_deps(package, optional_deps)
             for dep in selected_deps:
-                _install_package(dep, args, install_cmd, list_cmd, docker_cmd, conf, box_conf,
+                _install_package(dep, args, install_cmd, list_cmd, docker_cmd, conf, rt_conf,
                                  state, opt_deps_cmd="", opt_dep_flag=opt_dep_flag)
 
     return code
@@ -196,9 +197,9 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
     return [deps[index][0] for index in selection] if selection else []
 
 
-def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd: str,
-                                docker_cmd: str, conf: ZboxConfiguration, box_conf: str,
-                                skip_exec_files: bool = False) -> list[str]:
+def wrap_container_files(package: str, args: argparse.Namespace, list_cmd: str,
+                         docker_cmd: str, conf: StaticConfiguration, box_conf: str,
+                         skip_exec_files: bool = False) -> list[str]:
     """
     Create wrappers in host environment to invoke container's desktop files and executables.
 
@@ -206,7 +207,7 @@ def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd
     :param args: arguments having all the attributes passed by the user (`package` is ignored)
     :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `ZboxConfiguration` of the container
+    :param conf: the `StaticConfiguration` of the container
     :param box_conf: the resolved INI format configuration of the container as a string
     :param skip_exec_files: if true, then skip creating wrappers for executable files
 
@@ -228,7 +229,6 @@ def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd
     # match both "Exec=" and "TryExec=" lines
     exec_re = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(.+?)((\s%[a-zA-Z])?\s*)$")
     box_config: Optional[ConfigParser] = None
-    appflags: Optional[SectionProxy] = None
     for file in str(package_files).splitlines():
         file_dir = os.path.dirname(file)
         filename = os.path.basename(file).strip()
@@ -239,7 +239,7 @@ def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd
         if not skip_desktop_files and file_dir in desktop_dirs:
             print_info(f"Linking container desktop file {file}")
             box_config = _wrap_desktop_file(filename, file, package, exec_re, docker_cmd, conf,
-                                            box_conf, box_config, appflags, wrapper_files)
+                                            box_conf, box_config, wrapper_files)
             continue
         if not skip_executables and file_dir in executable_dirs:
             print_info(f"Linking container executable {file}")
@@ -249,8 +249,8 @@ def wrap_desktop_and_exec_files(package: str, args: argparse.Namespace, list_cmd
 
 
 def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Pattern[str],
-                       docker_cmd: str, conf: ZboxConfiguration, box_conf: str,
-                       box_config: Optional[ConfigParser], appflags: Optional[SectionProxy],
+                       docker_cmd: str, conf: StaticConfiguration, box_conf: str,
+                       box_config: Optional[ConfigParser],
                        wrapper_files: list[str]) -> Optional[ConfigParser]:
     """
     For a desktop file, add "docker/podman exec ..." to its Exec/TryExec lines. Also read
@@ -262,12 +262,9 @@ def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Patte
     :param package: the package being installed
     :param exec_re: the regular expression to use for matching Exec/TryExec lines
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `ZboxConfiguration` of the container
+    :param conf: the `StaticConfiguration` of the container
     :param box_conf: the resolved INI format configuration of the container as a string
     :param box_config: the resolved configuration of the container as a `ConfigParser`
-    :param appflags: the `[appflags]` section from the container configuration specifying the
-                     additional flags for an application which allows them to work better
-                     in the container environment
     :param wrapper_files: the accumulated list of all wrapper files so far
 
     :return: the updated resolved configuration of the container as a `ConfigParser`
@@ -285,8 +282,9 @@ def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Patte
             with io.StringIO(box_conf) as box_conf_fd:
                 box_config = ini_file_reader(box_conf_fd, interpolation=None,
                                              case_sensitive=False)  # case-insensitive
-            if box_config.has_section("appflags"):
-                appflags = box_config["appflags"]
+        appflags: Optional[SectionProxy] = None
+        if box_config.has_section("appflags"):
+            appflags = box_config["appflags"]
         # check for additional flags to be added
         if appflags and (flags := appflags.get(filename.removesuffix(".desktop"))):
             repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3 {flags}\4"
@@ -304,7 +302,7 @@ def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Patte
     return box_config
 
 
-def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: ZboxConfiguration,
+def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
                      wrapper_files: list[str]) -> bool:
     """
     For an executable, create a wrapper executable that invokes "docker/podman exec".
@@ -312,7 +310,7 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: ZboxConfig
     :param filename: name of the executable file being wrapped
     :param file: full path of the executable file being wrapped
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `ZboxConfiguration` of the container
+    :param conf: the `StaticConfiguration` of the container
     :param wrapper_files: the accumulated list of all wrapper files so far
 
     :return: true if a wrapper for executable file was created else false if skipped by the user

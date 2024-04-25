@@ -65,7 +65,8 @@ def build_pacman_db_map(arch_packages: dict[str, list[PackageAlternate]]) -> Non
         package_info = package_list.split("::::")
         deps = package_info[3].split() if package_info[3] else None
         opt_deps = package_info[4].split() if package_info[4] else None
-        map_val = (package_info[0], package_info[1], deps, opt_deps)
+        # arch linux packages are always lower case which is enforced below for the map
+        map_val = (package_info[0].lower(), package_info[1], deps, opt_deps)
         if existing := arch_packages.get(map_val[0]):
             existing.append(map_val)
         else:
@@ -101,7 +102,8 @@ def build_aur_db_map(aur_packages: dict[str, list[PackageAlternate]], raise_erro
                     desc = ""
                 deps = package.get("Depends")
                 opt_deps = package.get("OptDepends")
-                map_val = (package.get("Name"), desc, deps, opt_deps)
+                # arch linux packages are always lower case which is enforced below for the map
+                map_val = (package.get("Name").lower(), desc, deps, opt_deps)
                 if existing := aur_packages.get(map_val[0]):
                     existing.append(map_val)
                 else:
@@ -116,8 +118,7 @@ def build_aur_db_map(aur_packages: dict[str, list[PackageAlternate]], raise_erro
     except (gzip.BadGzipFile, EOFError, zlib.error):
         if raise_error:
             raise
-        else:
-            return False
+        return False
 
 
 def find_opt_deps(package: str, installed: set[str],
@@ -158,9 +159,9 @@ def find_opt_deps(package: str, installed: set[str],
             if pkg not in installed:
                 # lookup description
                 dep_desc = ""
-                pkg_l = pkg.lower()
-                if opt_dep := all_packages.get(pkg_l):
-                    dep_desc = search_alternates(pkg_l, opt_dep)[1]
+                pkg = pkg.lower()
+                if opt_dep := all_packages.get(pkg):
+                    dep_desc = search_alternates(pkg, opt_dep)[1]
                 opt_deps[pkg] = (dep_desc, level)
                 # add to installed list so that it is skipped if it appears again
                 installed.add(pkg)

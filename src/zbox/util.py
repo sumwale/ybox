@@ -42,7 +42,7 @@ class PkgMgr(str, Enum):
     OPT_DEP_FLAG = "opt_dep_flag"
     UNINSTALL = "uninstall"
     PURGE_FLAG = "purge_flag"
-    PURGE_DEPS_FLAG = "purge_deps_flag"
+    REMOVE_DEPS_FLAG = "remove_deps_flag"
     UPDATE_ALL = "update_all"
     CLEANUP = "cleanup"
     INFO = "info"
