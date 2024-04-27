@@ -43,6 +43,8 @@ class PkgMgr(str, Enum):
     UNINSTALL = "uninstall"
     PURGE_FLAG = "purge_flag"
     REMOVE_DEPS_FLAG = "remove_deps_flag"
+    UPDATE_META = "update_meta"
+    UPDATE = "update"
     UPDATE_ALL = "update_all"
     CLEANUP = "cleanup"
     INFO = "info"
@@ -218,7 +220,8 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
     :param exit_on_error: whether to exit using `sys.exit` if command fails
     :param error_msg: string to be inserted in error message "FAILURE in ..." so should be a
                       user-friendly name of the action that the command was supposed to do;
-                      if not specified then the entire command string is displayed
+                      if not specified then the entire command string is displayed;
+                      the special value 'SKIP' can be used to skip printing any error message
     :return: the captured standard output if `capture_output` is true else the return code of
              the command as a string (if `exit_on_error` is False or command was successful)
     """
@@ -229,7 +232,8 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
             print_subprocess_output(result)
         if not error_msg:
             error_msg = f"'{' '.join(cmd)}'"
-        print_error(f"FAILURE in {error_msg} -- see the output above for details")
+        if error_msg != "SKIP":
+            print_error(f"FAILURE in {error_msg} -- see the output above for details")
         if exit_on_error:
             sys.exit(result.returncode)
         else:

@@ -237,12 +237,10 @@ def wrap_container_files(package: str, args: argparse.Namespace, list_cmd: str,
         # check if this is a .desktop directory and copy it over adding appropriate
         # "docker exec" prefix to the command
         if not skip_desktop_files and file_dir in desktop_dirs:
-            print_info(f"Linking container desktop file {file}")
             box_config = _wrap_desktop_file(filename, file, package, exec_re, docker_cmd, conf,
                                             box_conf, box_config, wrapper_files)
             continue
         if not skip_executables and file_dir in executable_dirs:
-            print_info(f"Linking container executable {file}")
             _wrap_executable(filename, file, docker_cmd, conf, wrapper_files)
 
     return wrapper_files
@@ -292,6 +290,7 @@ def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Patte
             repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3\4"
         # the destination will be $HOME/.local/share/applications
         wrapper_file = f"{conf.env.user_applications_dir}/{wrapper_name}"
+        print_warn(f"Linking container desktop file {file} to {wrapper_file}")
         with open(wrapper_file, "w", encoding="utf-8") as wrapper_fd:
             wrapper_fd.writelines(
                 exec_re.sub(repl, line) for line in tmp_file.open("r", encoding="utf-8"))
@@ -316,6 +315,7 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     :return: true if a wrapper for executable file was created else false if skipped by the user
     """
     wrapper_exec = f"{conf.env.user_executables_dir}/{filename}"
+    print_warn(f"Linking container executable {file} to {wrapper_exec}")
     if os.path.exists(wrapper_exec):
         resp = input(f"Target file {wrapper_exec} already exists. Overwrite? (y/N) ")
         if resp.lower() != "y":

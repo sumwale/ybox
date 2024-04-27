@@ -41,32 +41,36 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
     if remove_deps_flag:
         # more stuff can be added to the `type` field in the future, hence the '%' wildcards
         package_type = f"%{state.optional_package_type(package)}%"
-        opt_deps = state.get_packages(conf.box_name, package_type=package_type)
+        # package may be an orphan one sharing the same root directory, so search by shared_root
+        # if applicable
+        if runtime_conf.shared_root:
+            opt_deps = state.get_packages(shared_root=runtime_conf.shared_root,
+                                          package_type=package_type)
+        else:
+            opt_deps = state.get_packages(conf.box_name, package_type=package_type)
 
     code = _uninstall_package(package, uninstall_cmd, info_cmd, docker_cmd, conf, runtime_conf,
                               state)
     for opt_dep in opt_deps:
-        if isinstance(run_command([docker_cmd, "exec", conf.box_name, "/bin/bash", "-c",
-                                   f"{info_cmd} {opt_dep}"], capture_output=True,
-                                  exit_on_error=False), str):
-            _uninstall_package(opt_dep, uninstall_cmd, info_cmd, docker_cmd, conf, runtime_conf,
-                               state, dep_msg="dependency ")
+        _uninstall_package(opt_dep, uninstall_cmd, info_cmd, docker_cmd, conf, runtime_conf,
+                           state, dep_msg="dependency ")
     return code
 
 
 def _uninstall_package(package: str, uninstall_cmd: str, info_cmd: str, docker_cmd: str,
                        conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
                        state: ZboxStateManagement, dep_msg: str = "") -> int:
-    print_info(f"Uninstalling {dep_msg}'{package}' from '{conf.box_name}'")
-    code = 0
-    if isinstance(run_command([docker_cmd, "exec", conf.box_name, "/bin/bash", "-c",
-                               f"{info_cmd} {package}"], capture_output=True,
-                              exit_on_error=False, error_msg=f"checking package {package}"), str):
+    info_out = run_command([docker_cmd, "exec", conf.box_name, "/bin/bash", "-c",
+                            f"{info_cmd} {package}"], capture_output=True,
+                           exit_on_error=False, error_msg="SKIP")
+    if isinstance(info_out, str):
+        print_info(f"Uninstalling {dep_msg}'{package}' from '{conf.box_name}'")
         code = int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
                                 f"{uninstall_cmd} {package}"], exit_on_error=False,
                                error_msg=f"uninstalling '{package}'"))
-    if code == 0:
-        for file in state.unregister_package(conf.box_name, package, runtime_conf.shared_root):
-            print_warn(f"Removing local wrapper {file}")
-            Path(file).unlink(missing_ok=True)
+    else:
+        code = int(info_out)
+    for file in state.unregister_package(conf.box_name, package, runtime_conf.shared_root):
+        print_warn(f"Removing local wrapper {file}")
+        Path(file).unlink(missing_ok=True)
     return code

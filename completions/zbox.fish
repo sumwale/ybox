@@ -52,3 +52,5 @@ set -l pkg_commands install uninstall update list info search mark clean repair
 
 complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a install -d "install a package with dependencies"
 complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a uninstall -d "uninstall a package and optionally its dependencies"
+complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a update -d "update some or all packages"
+complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a list -d "list installed packages"

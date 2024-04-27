@@ -213,7 +213,7 @@ class ZboxStateManagement:
         """
         self.__begin_transaction()
         # The shared root ones of a distribution all need to disappear (including orphans)
-        # regardless of container if this container is on the same shared root.
+        # regardless of container if this container uses shared root.
         if shared_root:
             cursor = self.__conn.execute("DELETE FROM packages WHERE name = ? AND shared_root = ?"
                                          " RETURNING local_copies", (package, shared_root))
@@ -221,18 +221,21 @@ class ZboxStateManagement:
             cursor = self.__conn.execute("DELETE FROM packages WHERE name = ? AND container = ?"
                                          " RETURNING local_copies", (package, container_name))
         with closing(cursor):
+            # split local_copies field on ";" then flatten
             local_copies = [file for row in cursor.fetchall() if row[0]
                             for file in str(row[0]).split(";")]
         self.__conn.commit()
         return local_copies
 
-    def get_packages(self, container_name: Optional[str] = None, regex: str = ".*",
+    def get_packages(self, container_name: Optional[str] = None,
+                     shared_root: Optional[str] = None, regex: str = ".*",
                      package_type: str = "%") -> list[str]:
         """
         Get the list of registered packages. This can be filtered for a specific container
         and/or using a (python) regular expression pattern.
 
-        :param container_name: optional name of the container to filter packages
+        :param container_name: optional name of the container to filter packages (optional)
+        :param shared_root: the local shared root directory to search for a package (optional)
         :param regex: regular expression pattern to match against package names
         :param package_type: SQL LIKE pattern to match against package type field
         :return: list of registered packages matching the given criteria
@@ -242,6 +245,9 @@ class ZboxStateManagement:
         if container_name:
             predicate = "container = ? AND "
             args = [container_name]
+        if shared_root:
+            predicate += "shared_root = ?"
+            args.append(shared_root)
         if regex == ".*":
             predicate += "1=1 AND "
         else:
