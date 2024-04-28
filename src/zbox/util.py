@@ -54,6 +54,7 @@ class PkgMgr(str, Enum):
     LIST_LONG = "list_long"
     LIST_ALL_LONG = "list_all_long"
     LIST_FILES = "list_files"
+    PAGER = "pager"
 
 
 class EnvInterpolation(Interpolation):

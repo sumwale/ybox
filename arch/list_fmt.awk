@@ -1,7 +1,6 @@
 BEGIN {
-    printf "\n\033[37m%s = \033[33m%s, \033[35m%s, \033[36m%s\033[0m\n", \
+    printf "\033[37m%s = \033[33m%s, \033[35m%s, \033[36m%s\033[0m\n\n", \
            "Name", "Version", "Required By", "Optional For"
-    print
 }
 /^Name/ { name=$3 }
 /^Version/ { version=$3 }

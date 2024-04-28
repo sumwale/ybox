@@ -175,7 +175,7 @@ class Consts:
     @staticmethod
     def status_target_file() -> str:
         """target location where status_file is mounted in container"""
-        return "/usr/local/zbox-status"
+        return "/usr/local/zbox-status"  # this should match the one in entrypoint-common.sh
 
     @staticmethod
     def distribution_scripts() -> list[str]:
