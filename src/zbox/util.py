@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Annotated, Optional, Union
 
 from .env import Environ
+from .state import ZboxStateManagement
 
 
 class NotSupportedError(Exception):
@@ -50,6 +51,8 @@ class PkgMgr(str, Enum):
     INFO = "info"
     LIST = "list"
     LIST_ALL = "list_all"
+    LIST_LONG = "list_long"
+    LIST_ALL_LONG = "list_all_long"
     LIST_FILES = "list_files"
 
 
@@ -248,6 +251,24 @@ def print_subprocess_output(result: subprocess.CompletedProcess) -> None:
        for standard error)"""
     print_color(result.stdout.decode("utf-8"), fg=fgcolor.orange)
     print_warn(result.stderr.decode("utf-8"))
+
+
+def get_other_shared_containers(container_name: str, shared_root: str,
+                                state: ZboxStateManagement) -> list[str]:
+    """
+    Get other containers sharing the same shared_root as the given container having a shared root.
+
+    :param container_name: name of the container
+    :param shared_root: the local shared root directory if `shared_root` flag is enabled
+                        for the container
+    :param state: instance of `ZboxStateManagement`
+    :return: list of containers sharing the same shared root with the given container
+    """
+    if shared_root:
+        shared_containers = state.get_containers(shared_root=shared_root)
+        shared_containers.remove(container_name)
+        return shared_containers
+    return []
 
 
 # define color names for printing in terminal

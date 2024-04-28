@@ -1,9 +1,13 @@
+"""
+Update some or all packages on a running zbox container.
+"""
+
 import argparse
 from configparser import SectionProxy
 
 from zbox.config import StaticConfiguration
 from zbox.state import RuntimeConfiguration, ZboxStateManagement
-from zbox.util import PkgMgr, run_command
+from zbox.util import PkgMgr, get_other_shared_containers, print_warn, run_command
 
 
 def update_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
@@ -33,8 +37,13 @@ def update_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: s
     if packages:
         update_meta_cmd = pkgmgr[PkgMgr.UPDATE_META.value]
         update_pkgs_cmd = pkgmgr[PkgMgr.UPDATE.value].format(quiet=quiet_flag)
-        update_cmd = f"{update_meta_cmd} && {update_pkgs_cmd} {' '.join(packages)}"
+        update_cmd = f"{{ {update_meta_cmd}; }} && {{ {update_pkgs_cmd} {' '.join(packages)}; }}"
     else:
         update_cmd = pkgmgr[PkgMgr.UPDATE_ALL.value].format(quiet=quiet_flag)
+    if shared_containers := get_other_shared_containers(conf.box_name, runtime_conf.shared_root,
+                                                        state):
+        # show all the containers sharing the same shared root
+        print_warn("The operation will also update packages in other containers having the same "
+                   f"shared root directory: {', '.join(shared_containers)}")
     return int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
                             update_cmd], exit_on_error=False, error_msg="updating packages"))

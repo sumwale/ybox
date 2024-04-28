@@ -13,7 +13,6 @@ from typing import Optional
 from dataclasses import dataclass
 
 from .env import Environ
-from .util import print_error
 
 
 @dataclass
@@ -166,6 +165,34 @@ class ZboxStateManagement:
             row = cursor.fetchone()
             return RuntimeConfiguration(name, row[0], row[1], row[2]) if row else None
 
+    def get_containers(self, name: Optional[str] = None, distribution: Optional[str] = None,
+                       shared_root: Optional[str] = None) -> list[str]:
+        """
+        Get the containers matching the given name, distribution and/or shared root location.
+
+        :param name: name of the container (optional)
+        :param distribution: the Linux distribution used when creating the container (optional)
+        :param shared_root: the local shared root directory to search for a package (optional)
+        :return: list of containers matching the given criteria
+        """
+        predicate = ""
+        args: list[str] = []
+        if name:
+            predicate = "name = ? AND "
+            args.append(name)
+        if distribution:
+            predicate += "distribution = ? AND "
+            args.append(distribution)
+        if shared_root:
+            predicate += "shared_root = ?"
+            args.append(shared_root)
+        else:
+            predicate += "1=1"
+        with closing(self.__conn.execute(f"SELECT name FROM containers WHERE {predicate} "
+                                         "ORDER BY name ASC", args)) as cursor:
+            rows = cursor.fetchall()
+            return [str(row[0]) for row in rows]
+
     def register_package(self, container_name: str, package: str, shared_root: str,
                          local_copies: list[str], package_type: str = "") -> None:
         """
@@ -180,8 +207,7 @@ class ZboxStateManagement:
         :param package_type: additional type information for the package, if any
         """
         if not package:
-            print_error("Empty package provided to register_package!")
-            return
+            raise FileNotFoundError("Empty package provided to register_package")
 
         args = (package, container_name, shared_root, ";".join(local_copies), package_type)
         self.__begin_transaction()
@@ -244,13 +270,11 @@ class ZboxStateManagement:
         args: list[str] = []
         if container_name:
             predicate = "container = ? AND "
-            args = [container_name]
+            args.append(container_name)
         if shared_root:
-            predicate += "shared_root = ?"
+            predicate += "shared_root = ? AND "
             args.append(shared_root)
-        if regex == ".*":
-            predicate += "1=1 AND "
-        else:
+        if regex != ".*":
             predicate += "name REGEXP ? AND "
             args.append(regex)
         if package_type == "%":
