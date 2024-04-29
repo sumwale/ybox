@@ -420,16 +420,14 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
     with open(conf.config_list, "w", encoding="utf-8") as config_list_fd:
         for key in configs_section:
             val = configs_section[key]
-            config_list_fd.write(val)
-            config_list_fd.write("\n")
             # perform environment variable substitution now which was skipped earlier
-            val = os.path.expandvars(val)
-            split_idx = val.find("->")
+            f_val = os.path.expandvars(val)
+            split_idx = f_val.find("->")
             if split_idx == -1:
                 raise NotSupportedError("Incorrect value format in [configs] section for "
                                         f"'{key}'. Required: '{{src}} -> {{dest}}'")
-            src_path = os.path.realpath(val[:split_idx].strip())
-            dest_path = f"{conf.configs_dir}/{val[split_idx + 2:].strip()}"
+            src_path = os.path.realpath(f_val[:split_idx].strip())
+            dest_path = f"{conf.configs_dir}/{f_val[split_idx + 2:].strip()}"
             if os.access(src_path, os.R_OK):
                 os.makedirs(os.path.dirname(dest_path), exist_ok=True)
                 if os.path.isdir(src_path):
@@ -439,8 +437,10 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                         os.link(os.path.realpath(src_path), dest_path, follow_symlinks=True)
                     else:
                         shutil.copy2(src_path, dest_path, follow_symlinks=True)
+                config_list_fd.write(val)
+                config_list_fd.write("\n")
             else:
-                print_error(f"Skipping inaccessible configuration path '{src_path}'")
+                print_warn(f"Skipping inaccessible configuration path '{src_path}'")
     print_info("DONE")
     # finally mount the configs directory to corresponding directory in the target container
     add_mount_option(args, conf.configs_dir, conf.target_configs_dir, "ro")
@@ -456,6 +456,7 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
     # first update the mirrors
     pkgmgr = distro_config["pkgmgr"]
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
+    opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
     install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="")
     cleanup_cmd = pkgmgr[PkgMgr.CLEANUP.value]
     if not install_cmd:
@@ -467,14 +468,16 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
     with open(f"{conf.scripts_dir}/pkgmgr.conf", "w", encoding="utf-8") as pkg_fd:
         pkg_fd.write(f"PKGMGR_INSTALL='{install_cmd}'\n")
         pkg_fd.write(f"PKGMGR_CLEANUP='{cleanup_cmd}'\n")
+    dep_suffix = ":dep"
     with open(conf.app_list, "w", encoding="utf-8") as apps_fd:
-        extra_args = "extra-args="
         for key in apps_section:
-            apps = apps_section[key].split(",")
-            args = [a[len(extra_args):] for a in apps if a.startswith(extra_args)]
-            if args:
-                apps = [app for app in apps if not app.startswith(extra_args)]
-            apps_fd.write(f"{' '.join(args)} {' '.join(apps)}\n")
+            apps = [app.strip() for app in apps_section[key].split(",")]
+            deps = [dep[:len(dep) - len(dep_suffix)] for dep in apps if dep.endswith(dep_suffix)]
+            if deps:
+                apps = [app for app in apps if not app.endswith(dep_suffix)]
+                apps_fd.write(f"{opt_dep_flag} {' '.join(deps)}\n")
+            if apps:
+                apps_fd.write(f"{' '.join(apps)}\n")
 
 
 # The shutil.copytree(...) method does not work correctly for "symlinks=False" (or at least
