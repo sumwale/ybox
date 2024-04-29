@@ -354,7 +354,7 @@ def enable_dbus(args: list[str], sys_enable: bool) -> None:
 
 def add_multi_opt(args: list[str], section: SectionProxy, key: str, opt: str) -> None:
     if opts := section.get(key):
-        for opt_val in opts.split(";"):
+        for opt_val in opts.split(","):
             args.append(f"--{opt}={opt_val}")
 
 
@@ -470,7 +470,7 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
     with open(conf.app_list, "w", encoding="utf-8") as apps_fd:
         extra_args = "extra-args="
         for key in apps_section:
-            apps = apps_section[key].split(";")
+            apps = apps_section[key].split(",")
             args = [a[len(extra_args):] for a in apps if a.startswith(extra_args)]
             if args:
                 apps = [app for app in apps if not app.startswith(extra_args)]
@@ -513,7 +513,7 @@ def setup_zbox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     base_section = distro_config["base"]
     if scripts := base_section.get("scripts"):
-        for script in scripts.split(";"):
+        for script in scripts.split(","):
             path = conf.search_config_file(f"{conf.distribution}/{script}")
             shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
         # finally copy the zbox python module which may be used by distribution scripts
@@ -584,7 +584,7 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs
             remove_image(docker_cmd, image_name)
             sys.exit(1)
     os.makedirs(root_host)
-    # the entrypoint-cp.sh script requires two arguments: first is the semicolon separated
+    # the entrypoint-cp.sh script requires two arguments: first is the comma separated
     # list of directories to be copied, and second the target directory
     run_command([docker_cmd, "run", "-it", f"--name={conf.box_name}",
                  f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
@@ -617,7 +617,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     status_path.touch(mode=0o600, exist_ok=False)
     add_mount_option(docker_full_cmd, conf.status_file, Consts.status_target_file())
 
-    for shared_dir in shared_root_dirs.split(";"):
+    for shared_dir in shared_root_dirs.split(","):
         add_mount_option(docker_full_cmd, f"{conf.shared_root_host_dir}{shared_dir}", shared_dir)
     for lang_var in ["LANG", "LANGUAGE"]:
         docker_full_cmd.append(f"-e={lang_var}")

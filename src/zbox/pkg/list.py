@@ -53,7 +53,5 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
         list_cmd = pkgmgr[PkgMgr.LIST_ALL_LONG.value] if args.verbose else pkgmgr[
             PkgMgr.LIST_ALL.value]
         list_cmd = list_cmd.format(packages=packages)
-    pager = pkgmgr[PkgMgr.PAGER.value]
     return int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
-                            f"{list_cmd} | {pager}"], exit_on_error=False,
-                           error_msg="listing packages"))
+                            list_cmd], exit_on_error=False, error_msg="listing packages"))

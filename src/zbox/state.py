@@ -209,7 +209,7 @@ class ZboxStateManagement:
         if not package:
             raise FileNotFoundError("Empty package provided to register_package")
 
-        args = (package, container_name, shared_root, ";".join(local_copies), package_type)
+        args = (package, container_name, shared_root, ",".join(local_copies), package_type)
         self.__begin_transaction()
         # first delete any old entry for the package+container
         self.__conn.execute("DELETE FROM packages WHERE name = ? and container = ?",
@@ -247,9 +247,9 @@ class ZboxStateManagement:
             cursor = self.__conn.execute("DELETE FROM packages WHERE name = ? AND container = ?"
                                          " RETURNING local_copies", (package, container_name))
         with closing(cursor):
-            # split local_copies field on ";" then flatten
+            # split local_copies field on "," then flatten
             local_copies = [file for row in cursor.fetchall() if row[0]
-                            for file in str(row[0]).split(";")]
+                            for file in str(row[0]).split(",")]
         self.__conn.commit()
         return local_copies
 

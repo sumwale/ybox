@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 from collections import namedtuple
-from configparser import ConfigParser, Interpolation
+from configparser import BasicInterpolation, ConfigParser, Interpolation
 from enum import Enum
 from typing import Annotated, Optional, Union
 
@@ -54,14 +54,20 @@ class PkgMgr(str, Enum):
     LIST_LONG = "list_long"
     LIST_ALL_LONG = "list_all_long"
     LIST_FILES = "list_files"
-    PAGER = "pager"
 
 
-class EnvInterpolation(Interpolation):
+class EnvInterpolation(BasicInterpolation):
     """
     Substitute environment variables in the values using 'os.path.expandvars'.
     In addition, a special substitution of ${NOW:<fmt>} is supported to substitute the
     current time (captured by InitNow above) in the 'datetime.strftime' format.
+
+    This class extends `BasicInterpolation` hence the `%(.)s` syntax can be used to expand other
+    keys in the same section or the `DEFAULT` section in the `before_get`. If a bare '%' is
+    required in the value, then it should be escaped with a '%' i.e. use '%%' for a single '%'.
+    Note that the environment variable and NOW substitution is done in the `before_read` phase
+    before any `BasicInterpolation` is done, so any '%' characters in those environment variable
+    or ${NOW:...} expansions should not be escaped.
 
     If 'skip_expansion' is specified in initialization to a non-empty list, then no
     environment variable substitution is performed for those sections but the
@@ -71,6 +77,7 @@ class EnvInterpolation(Interpolation):
     __NOW_RE = re.compile(r"\${NOW:([^}]*)}")
 
     def __init__(self, env: Environ, skip_expansion: list[str]):
+        super().__init__()
         self.__skip_expansion = skip_expansion
         # for the NOW substitution
         self.__now = env.now
