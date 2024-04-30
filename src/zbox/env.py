@@ -25,7 +25,7 @@ class Environ:
         target_user_base = self.__target_home + "/.local"
         self.__data_dir = f"{user_base}/share/zbox"
         self.__target_data_dir = f"{target_user_base}/share/zbox"
-        self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR")
+        self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
         self.__now = datetime.now()
         os.environ["NOW"] = str(self.__now)
         self.__user_applications_dir = f"{user_base}/share/applications"

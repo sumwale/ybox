@@ -164,17 +164,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                        NVIDIA, dbus among others. It also allows controlling various parameters
                        of the container including directories to be shared, logging etc.""")
     parser.add_argument("-n", "--name", type=str,
-                        help="""name of the zbox; default is zbox-<distribution>_<profile>
-                                if not provided (removing the .ini suffix from <profile> file)""")
+                        help="name of the zbox; default is zbox-<distribution>_<profile> "
+                             "if not provided (removing the .ini suffix from <profile> file)")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("distribution", type=str,
                         help="short name of the distribution (should be in supported.list)")
     parser.add_argument("profile", type=str,
-                        help="""the profile defined in INI file to use for creating the zbox
-                                (can be a relative or absolute path, or be in user or system
-                                 configuration directory which are $HOME/.config/zbox and
-                                 /etc/zbox respectively)""")
+                        help="the profile defined in INI file to use for creating the zbox "
+                             "(can be a relative or absolute path, or be in user or system "
+                             "configuration directory which are $HOME/.config/zbox and "
+                             "/etc/zbox respectively)")
     return parser.parse_args(argv)
 
 

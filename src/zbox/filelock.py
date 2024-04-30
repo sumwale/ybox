@@ -6,6 +6,7 @@ import errno
 import fcntl
 import time
 from datetime import datetime
+from io import IOBase
 from typing import Optional
 
 
@@ -36,7 +37,7 @@ class FileLock:
         :param poll_interval: polling interval at which to check for lock to be available
         """
         self.__lock_file = lock_file
-        self.__lock_fd: None
+        self.__lock_fd: Optional[IOBase] = None
         self.__timeout = timeout_secs
         self.__poll = poll_interval
 

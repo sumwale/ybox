@@ -8,11 +8,11 @@ if [ "$1" = "-l" ]; then
 fi
 
 export MYPYPATH=./src
-for f in src/zbox/*.py src/zbox/pkg/*.py src/zbox-* arch/pkg*; do
+for f in src/zbox/*.py src/zbox/pkg/*.py src/zbox-* arch/pkg* arch/*.py; do
   echo -------------------------------------------
   echo Output of mypy on $f
   echo -------------------------------------------
-  mypy $f
+  mypy --check-untyped-defs $f
 done
 
 if [ -n "$PYLINT" ]; then
@@ -27,7 +27,7 @@ if [ -n "$PYLINT" ]; then
     echo -------------------------------------------
     pylint $f
   done
-  for f in src/zbox-* arch/pkg*; do
+  for f in src/zbox-* arch/pkg* arch/*.py; do
     echo -------------------------------------------
     echo -------------------------------------------
     echo

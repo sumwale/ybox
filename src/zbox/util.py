@@ -292,7 +292,7 @@ bgcolor: Annotated[TermColors, "background colors in terminal"] = TermColors(
 
 
 def print_color(msg: str, fg: Optional[str] = None,
-                bg: Optional[str] = None, end: str = "\n") -> None:
+                bg: Optional[str] = None, end: str = "\n", file=None) -> None:
     # pylint: disable=invalid-name
     """
     Display given string to standard output with foreground and background colors, if provided.
@@ -304,6 +304,7 @@ def print_color(msg: str, fg: Optional[str] = None,
     :param fg: the foreground color of the string
     :param bg: the background color of the string
     :param end: the terminating string which is newline by default (or can be empty for example)
+    :param file: the text-mode file object to use for writing (defaults to `sys.stdout`)
     """
     if fg:
         if bg:
@@ -315,34 +316,37 @@ def print_color(msg: str, fg: Optional[str] = None,
     else:
         full_msg = msg
     # force flush the output if it doesn't end in a newline
-    print(full_msg, end=end, flush=(end != "\n"))
+    print(full_msg, end=end, file=file, flush=(end != "\n"))
 
 
-def print_error(msg: str, end: str = "\n") -> None:
+def print_error(msg: str, end: str = "\n", file=None) -> None:
     """
     Display an error string in red foreground (and no background change).
 
     :param msg: the string to be displayed
     :param end: the terminating string which is newline by default (or can be empty for example)
+    :param file: the text-mode file object to use for writing (defaults to `sys.stdout`)
     """
-    print_color(msg, fg=fgcolor.red, end=end)
+    print_color(msg, fg=fgcolor.red, end=end, file=file)
 
 
-def print_warn(msg: str, end: str = "\n"):
+def print_warn(msg: str, end: str = "\n", file=None):
     """
     Display a warning string in purple foreground (and no background change).
 
     :param msg: the string to be displayed
     :param end: the terminating string which is newline by default (or can be empty for example)
+    :param file: the text-mode file object to use for writing (defaults to `sys.stdout`)
     """
-    print_color(msg, fg=fgcolor.purple, end=end)
+    print_color(msg, fg=fgcolor.purple, end=end, file=file)
 
 
-def print_info(msg: str, end: str = "\n"):
+def print_info(msg: str, end: str = "\n", file=None):
     """
     Display an informational string in blue foreground (and no background change).
 
     :param msg: the string to be displayed
     :param end: the terminating string which is newline by default (or can be empty for example)
+    :param file: the text-mode file object to use for writing (defaults to `sys.stdout`)
     """
-    print_color(msg, fg=fgcolor.blue, end=end)
+    print_color(msg, fg=fgcolor.blue, end=end, file=file)

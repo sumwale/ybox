@@ -42,7 +42,7 @@ def main(argv: list[str]) -> int:
                 f"Expected one active zbox container but found {', '.join(containers)}")
             return 1
         else:
-            print_info("Please select the container to use:")
+            print_info("Please select the container to use:", file=sys.stderr)
             # don't select on <Enter> (multi_select_select_on_accept) and allow for empty selection
             terminal_menu = TerminalMenu(containers,
                                          status_bar="Press <Enter> to select, <Esc> to exit")
@@ -53,7 +53,7 @@ def main(argv: list[str]) -> int:
                 print_warn("Aborting")
                 return 1
 
-    print_info(f"Running the operation on '{container_name}'")
+    print_info(f"Running the operation on '{container_name}'", file=sys.stderr)
     verify_zbox_state(docker_cmd, container_name, ["running"], error_msg=" active ")
 
     env = Environ()
@@ -141,12 +141,16 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
                                 f"not managed by {os.path.basename(__file__)}; when multiple "
                                 "containers share the same root directory, then it will include "
                                 "packages installed on other containers")
-    subparser.add_argument("-e", "--explicit", action="store_true",
-                           help="show only explicitly installed packages skipping those that have"
-                                "been installed purely as a dependency")
+    subparser.add_argument("-p", "--plain-separator", type=str,
+                           help="show the output in 'plain' format rather than as a table with "
+                                "the fields separated by the given string; it will also skip "
+                                "any truncation of the 'Dependency Of' column")
+    subparser.add_argument("-s", "--show-dependents", action="store_true",
+                           help="include pure dependent packages in the output otherwise only "
+                                "the packages that have been explicitly installed are shown")
     subparser.add_argument("-v", "--verbose", action="store_true",
-                           help="show some package details including version and whether it is "
-                                "a dependency or a top-level package")
+                           help="show some package details including version, description and "
+                                "whether it is a dependency or a top-level package")
     subparser.set_defaults(func=list_packages)
 
 
