@@ -24,7 +24,7 @@ class RuntimeConfiguration:
         name: name of the container
         distribution: the Linux distribution used when creating the container
         shared_root: the local shared root directory if `shared_root` flag is enabled for
-                     the container (see `shared_root` key in [base] section in basic.ini)
+                     the container (see `shared_root` key in [base] section in profiles/basic.ini)
         ini_config: the resolved configuration of the container in INI format as a string
     """
     name: str

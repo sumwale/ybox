@@ -4,7 +4,7 @@ Common utilities for `list_fmt` and `list_fmt_long`.
 
 import argparse
 
-from zbox.util import fgcolor
+from zbox.print import fgcolor
 
 # aliases for colors used in display
 FG_NAME = fgcolor.lightgray

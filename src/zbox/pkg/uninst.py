@@ -7,8 +7,9 @@ from configparser import SectionProxy
 from pathlib import Path
 
 from zbox.config import StaticConfiguration
+from zbox.print import print_info, print_warn
 from zbox.state import RuntimeConfiguration, ZboxStateManagement
-from zbox.util import PkgMgr, print_info, print_warn, run_command
+from zbox.util import PkgMgr, run_command
 
 
 def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,

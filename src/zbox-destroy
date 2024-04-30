@@ -4,9 +4,9 @@ import argparse
 import sys
 
 from zbox.env import Environ
+from zbox.print import fgcolor, print_color, print_error, print_warn
 from zbox.state import ZboxStateManagement
-from zbox.util import fgcolor, get_docker_command, print_color, print_error, print_warn
-from zbox.util import run_command, verify_zbox_state
+from zbox.util import get_docker_command, run_command, verify_zbox_state
 
 
 def main(argv: list[str]) -> None:

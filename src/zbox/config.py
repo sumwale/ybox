@@ -24,7 +24,6 @@ class StaticConfiguration:
         self.__box_name = box_name
         self.__box_image = f"zbox-local/{distribution}/{box_name}"
         self.__shared_box_image = f"zbox-shared-local/{distribution}"
-        self.__configuration_dirs = (f"{env.home}/.config/zbox", "/etc/zbox")
         # timezone properties
         self.__localtime = None
         self.__timezone = None
@@ -44,22 +43,6 @@ class StaticConfiguration:
         self.__status_file = f"{container_dir}/status"
         self.__config_list = f"{self.scripts_dir}/config.list"
         self.__app_list = f"{self.scripts_dir}/app.list"
-
-    def search_config_file(self, conf_file: str) -> str:
-        """
-        Search for given configuration file in user and system configuration directories
-        (in that order).
-
-        :param conf_file: the configuration file to search (expected to be a relative path)
-        :return: the full path of the configuration file
-        """
-        # order is first search in user's config directory, and then the system config directory
-        for config_dir in self.__configuration_dirs:
-            path = f"{config_dir}/{conf_file}"
-            if os.access(path, os.R_OK):
-                return path
-        search_dirs = ', '.join(self.__configuration_dirs)
-        raise FileNotFoundError(f"Configuration file '{conf_file}' not found in [{search_dirs}]")
 
     @property
     def env(self) -> Environ:

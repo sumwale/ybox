@@ -28,8 +28,25 @@ class Environ:
         self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
         self.__now = datetime.now()
         os.environ["NOW"] = str(self.__now)
+        self.__configuration_dirs = (f"{self.__home_dir}/.config/zbox", "/etc/zbox")
         self.__user_applications_dir = f"{user_base}/share/applications"
         self.__user_executables_dir = f"{user_base}/bin"
+
+    def search_config_path(self, conf_file: str) -> str:
+        """
+        Search for given configuration path in user and system configuration directories
+        (in that order). The path may refer to a file or a subdirectory.
+
+        :param conf_file: the configuration file to search (expected to be a relative path)
+        :return: the full path of the configuration file
+        """
+        # order is first search in user's config directory, and then the system config directory
+        for config_dir in self.__configuration_dirs:
+            path = f"{config_dir}/{conf_file}"
+            if os.access(path, os.R_OK):
+                return path
+        search_dirs = ', '.join(self.__configuration_dirs)
+        raise FileNotFoundError(f"Configuration file '{conf_file}' not found in [{search_dirs}]")
 
     @property
     def home(self) -> str:

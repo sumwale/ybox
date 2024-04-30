@@ -3,7 +3,8 @@
 import argparse
 import sys
 
-from zbox.util import get_docker_command, print_info, run_command, verify_zbox_state
+from zbox.print import print_info
+from zbox.util import get_docker_command, run_command, verify_zbox_state
 
 
 def main(argv: list[str]) -> None:

@@ -16,9 +16,10 @@ from zbox.pkg.inst import install_package
 from zbox.pkg.list import list_packages
 from zbox.pkg.uninst import uninstall_package
 from zbox.pkg.update import update_package
+from zbox.print import print_error, print_info
 from zbox.state import ZboxStateManagement
-from zbox.util import EnvInterpolation, ZboxLabel, config_reader, get_docker_command
-from zbox.util import print_error, print_info, print_warn, run_command, verify_zbox_state
+from zbox.util import EnvInterpolation, ZboxLabel, config_reader, get_docker_command, \
+    run_command, select_item_from_menu, verify_zbox_state
 
 
 def main(argv: list[str]) -> int:
@@ -43,14 +44,7 @@ def main(argv: list[str]) -> int:
             return 1
         else:
             print_info("Please select the container to use:", file=sys.stderr)
-            # don't select on <Enter> (multi_select_select_on_accept) and allow for empty selection
-            terminal_menu = TerminalMenu(containers,
-                                         status_bar="Press <Enter> to select, <Esc> to exit")
-            selection = terminal_menu.show()
-            if selection is not None:
-                container_name = containers[int(selection)]
-            else:
-                print_warn("Aborting")
+            if (container_name := select_item_from_menu(containers)) is None:
                 return 1
 
     print_info(f"Running the operation on '{container_name}'", file=sys.stderr)
@@ -63,7 +57,7 @@ def main(argv: list[str]) -> int:
             return 1
         conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
         env_interpolation = EnvInterpolation(env, [])
-        distro_config = config_reader(conf.search_config_file(f"{conf.distribution}/distro.ini"),
+        distro_config = config_reader(env.search_config_path(f"{conf.distribution}/distro.ini"),
                                       env_interpolation)
         pkgmgr = distro_config["pkgmgr"]
         return args.func(args, pkgmgr, docker_cmd, conf, runtime_conf, state)

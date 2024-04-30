@@ -18,10 +18,12 @@ from typing import Optional, Tuple
 from zbox.config import Consts, StaticConfiguration
 from zbox.env import Environ
 from zbox.filelock import FileLock
+from zbox.print import bgcolor, fgcolor, print_color, print_error, print_info, print_warn
 from zbox.state import ZboxStateManagement
-from zbox.util import EnvInterpolation, NotSupportedError, PkgMgr, ZboxLabel
-from zbox.util import config_reader, bgcolor, fgcolor, get_docker_command, print_color
-from zbox.util import print_info, print_warn, print_error, run_command, verify_zbox_state
+from zbox.util import EnvInterpolation, NotSupportedError, PkgMgr, ZboxLabel, config_reader, \
+    get_docker_command, ini_file_reader, run_command, select_item_from_menu, verify_zbox_state
+
+__EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 
 
 # Note: deliberately not using os.path.join for joining paths throughout the code,
@@ -32,26 +34,26 @@ from zbox.util import print_info, print_warn, print_error, run_command, verify_z
 
 def main(argv: list[str]) -> None:
     args = parse_args(argv)
-    box_name, docker_cmd = process_args(args)
-    print_color(f"Creating zbox container named '{box_name}'", fg=fgcolor.green)
     env = Environ()
-    distro = args.distribution
-    conf = StaticConfiguration(env, distro, box_name)
-    support_list = conf.search_config_file("supported.list")
-    # check that the distribution is in supported.list
-    with open(support_list, "r", encoding="utf-8") as supp_file:
-        if distro not in supp_file.read().splitlines():
-            raise NotSupportedError(f"Distribution '{distro}' not supported in {support_list}")
 
+    # use provided distribution else let user select from available ones
+    distro = select_distribution(args, env)
+    # the profile used to build the docker/podman command-line which is either provided
+    # on command-line or else let user select from available ones in standard locations
+    profile = select_profile(args, env)
+
+    box_name, docker_cmd = process_args(args, distro, profile)
+    print_color(f"Creating zbox container named '{box_name}'", fg=fgcolor.green)
+    if verify_zbox_state(docker_cmd, box_name, [], exit_on_error=False):
+        print_error(f"Zbox container '{box_name}' already exists.")
+        sys.exit(1)
+
+    conf = StaticConfiguration(env, distro, box_name)
     # read the distribution specific configuration
     base_image_name, shared_root_dirs, distro_config = read_distribution_config(conf)
     # setup entrypoint and related scripts to share with the container on a mount point
     setup_zbox_scripts(conf, distro_config)
 
-    # the profile used to build the docker/podman command-line
-    profile = args.profile
-    if not os.access(profile, os.R_OK):
-        profile = conf.search_config_file(profile)
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the profile before any actions to ensure it is in proper shape
     shared_root, config = process_sections(profile, conf, distro_config, docker_full_args)
@@ -168,9 +170,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "if not provided (removing the .ini suffix from <profile> file)")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
-    parser.add_argument("distribution", type=str,
+    parser.add_argument("distribution", nargs="?", type=str,
                         help="short name of the distribution (should be in supported.list)")
-    parser.add_argument("profile", type=str,
+    parser.add_argument("profile", nargs="?", type=str,
                         help="the profile defined in INI file to use for creating the zbox "
                              "(can be a relative or absolute path, or be in user or system "
                              "configuration directory which are $HOME/.config/zbox and "
@@ -178,15 +180,80 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def process_args(args: argparse.Namespace) -> Tuple[str, str]:
+def quick_config_read(file: str) -> ConfigParser:
+    """Quick read of an INI file without processing includes or any value interpolation"""
+    with open(file, "r", encoding="utf-8") as profile_fd:
+        return ini_file_reader(profile_fd, None)
+
+
+def select_distribution(args: argparse.Namespace, env: Environ) -> str:
+    support_list = env.search_config_path("supported.list")
+    with open(support_list, "r", encoding="utf-8") as supp_file:
+        supported_distros = supp_file.read().splitlines()
+    if distro := args.distribution:
+        # check that the distribution is in supported.list
+        if distro not in supported_distros:
+            raise NotSupportedError(f"Distribution '{distro}' not supported in {support_list}")
+        return str(distro)
+    elif len(supported_distros) == 1:
+        return supported_distros[0]
+
+    # show a menu to choose from if the number of supported distributions exceeds 1
+    distro_names: list[str] = []
+    for distro in supported_distros:
+        distro_config = quick_config_read(env.search_config_path(f"{distro}/distro.ini"))
+        distro_names.append(f"{distro_config['base']['name']} ({distro})")  # should always exist
+    print_info("Please select the distribution to use for the container:", file=sys.stderr)
+    if (distro_name := select_item_from_menu(distro_names)) is None:
+        sys.exit(1)
+    if match := __EXTRACT_PARENS_NAME.match(distro_name):
+        return match.group(1)
+    else:
+        raise ValueError(f"Unexpected distribution name string: {distro_name}")
+
+
+def select_profile(args: argparse.Namespace, env: Environ) -> str:
+    # the profile used to build the docker/podman command-line
+    if profile := args.profile:
+        if os.access(profile, os.R_OK):
+            return profile
+        else:
+            return env.search_config_path(profile)
+
+    # search for available profiles in standard locations and provide a selection menu
+    # for the user
+    profile_names: list[str] = []
+    profiles_dir = env.search_config_path("profiles")
+    profiles = [file_path for file in os.listdir(profiles_dir)
+                if os.path.isfile(file_path := f"{profiles_dir}/{file}")]
+    if len(profiles) == 1:
+        return profiles[0]
+    elif len(profiles) == 0:
+        print_error(f"No valid profile found in '{profiles_dir}'")
+        sys.exit(1)
+
+    profiles.sort()
+    for profile in profiles:
+        profile_config = quick_config_read(profile)
+        profile_names.append(f"{profile_config['base']['name']} ({os.path.basename(profile)})")
+    print_info("Please select the profile to use for the container:", file=sys.stderr)
+    if (profile_name := select_item_from_menu(profile_names)) is None:
+        sys.exit(1)
+    if match := __EXTRACT_PARENS_NAME.match(profile_name):
+        return f"{profiles_dir}/{match.group(1)}"
+    else:
+        raise ValueError(f"Unexpected profile name string: {profile_name}")
+
+
+def process_args(args: argparse.Namespace, distro: str, profile: str) -> Tuple[str, str]:
     ini_suffix = ".ini"
     if args.name:
         box_name = args.name
     else:
-        box_name = os.path.basename(args.profile)
+        box_name = os.path.basename(profile)
         if box_name.endswith(ini_suffix):
             box_name = box_name[:-len(ini_suffix)]
-        box_name = f"zbox-{args.distribution}_{box_name}"
+        box_name = f"zbox-{distro}_{box_name}"
 
     # don't allow spaces or weird characters in the name
     if not re.match(r"^[\w\-]+$", box_name):
@@ -284,7 +351,7 @@ def process_base_section(base_section: SectionProxy, profile: str,
                         (re.match("^--log-opt=path=(.*)/.*$", path) for path in args) if mt]
             for log_dir in log_dirs:
                 os.makedirs(log_dir, exist_ok=True)
-        elif key not in ("dbus_sys", "includes"):
+        elif key not in ("name", "dbus_sys", "includes"):
             raise NotSupportedError(f"Unknown key '{key}' in the [base] of {profile} "
                                     "or its includes")
     return shared_root, config_hardlinks
@@ -505,19 +572,20 @@ def setup_zbox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
     if os.path.exists(conf.scripts_dir):
         shutil.rmtree(conf.scripts_dir)
     os.makedirs(conf.scripts_dir, exist_ok=True)
+    env = conf.env
     # copy the common scripts
     for script in [Consts.entrypoint_common(), Consts.entrypoint_base(),
                    Consts.entrypoint_cp(), Consts.entrypoint(), "prime-run"]:
-        path = conf.search_config_file(f"resources/{script}")
+        path = env.search_config_path(f"resources/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     # also copy distribution specific scripts
     for script in Consts.distribution_scripts():
-        path = conf.search_config_file(f"{conf.distribution}/{script}")
+        path = env.search_config_path(f"{conf.distribution}/{script}")
         shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
     base_section = distro_config["base"]
     if scripts := base_section.get("scripts"):
         for script in scripts.split(","):
-            path = conf.search_config_file(f"{conf.distribution}/{script}")
+            path = env.search_config_path(f"{conf.distribution}/{script}")
             shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
         # finally copy the zbox python module which may be used by distribution scripts
         src_dir = os.path.dirname(os.path.realpath(__file__))
@@ -526,7 +594,7 @@ def setup_zbox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
 
 def read_distribution_config(conf: StaticConfiguration) -> Tuple[str, str, ConfigParser]:
     env_interpolation = EnvInterpolation(conf.env, [])
-    distro_config = config_reader(conf.search_config_file(f"{conf.distribution}/distro.ini"),
+    distro_config = config_reader(conf.env.search_config_path(f"{conf.distribution}/distro.ini"),
                                   env_interpolation)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist

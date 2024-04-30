@@ -10,9 +10,9 @@ end
 
 function __fish_zbox_complete_distributions
   if test -r ~/.config/zbox/supported.list
-    cat ~/.config/zbox/supported.list
+    /usr/bin/cat ~/.config/zbox/supported.list
   else if test -r /etc/zbox/supported.list
-    cat /etc/zbox/supported.list
+    /usr/bin/cat /etc/zbox/supported.list
   end
 end
 
