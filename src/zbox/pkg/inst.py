@@ -25,12 +25,12 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     """
     Install package specified by `args.package` on a zbox container with given docker/podman
     command. Additional flags honored are `args.quiet` to bypass user confirmation during install,
-    `args.opt_deps` to also allow installing optional dependencies of the package,
+    `args.skip_opt_deps` to skip installing optional dependencies of the package,
     `args.skip_executables` to skip creating wrapper executables for the package executables,
     `args.skip_desktop_files` to skip creating wrapper desktop files for the package ones.
 
-    When the `args.opt_deps` flag is enabled, then the package databases are searched for
-    optional dependencies of the package as well as those of the new required dependencies
+    When the `args.skip_opt_deps` flag is not enabled, then the package databases are searched
+    for optional dependencies of the package as well as those of the new required dependencies
     being installed. Recursion level for this search is fixed to 2 for now else the number
     of packages can be overwhelming with most being largely irrelevant. A selection menu
     presented to the user allows choosing the optional dependencies to be installed after
@@ -50,8 +50,8 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     # before actual execution by _install_package(...)
     install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="{opt_dep}")
     list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
-    opt_deps_cmd, opt_dep_flag = (pkgmgr[PkgMgr.OPT_DEPS.value], pkgmgr[
-        PkgMgr.OPT_DEP_FLAG.value]) if args.opt_deps else ("", "")
+    opt_deps_cmd, opt_dep_flag = ("", "") if args.skip_opt_deps else (
+        pkgmgr[PkgMgr.OPT_DEPS.value], pkgmgr[PkgMgr.OPT_DEP_FLAG.value])
     return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,
                             runtime_conf, state, opt_deps_cmd, opt_dep_flag)
 

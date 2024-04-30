@@ -99,8 +99,8 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
 
 def add_install(subparser: argparse.ArgumentParser) -> None:
     add_common_args(subparser)
-    subparser.add_argument("-o", "--opt-deps", action="store_true",
-                           help="install optional dependencies (or recommendations)")
+    subparser.add_argument("-o", "--skip-opt-deps", action="store_true",
+                           help="skip installation of optional dependencies (or recommendations)")
     subparser.add_argument("-s", "--skip-executables", action="store_true",
                            help="skip creating wrappers for invoking executables installed by "
                                 "the package; default is to create wrapper executables in user's "
