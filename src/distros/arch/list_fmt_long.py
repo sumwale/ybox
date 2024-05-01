@@ -110,4 +110,5 @@ def process() -> None:
             pass
 
 
-process()
+if __name__ == "__main__":
+    process()

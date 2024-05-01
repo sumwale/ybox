@@ -1,0 +1,6 @@
+exclude src/zbox-*
+graft src/completions
+graft src/distros
+graft src/profiles
+graft src/resources
+global-exclude **/.mypy_cache/**

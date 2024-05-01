@@ -9,10 +9,10 @@ function __fish_zbox_complete_all_containers
 end
 
 function __fish_zbox_complete_distributions
-  if test -r ~/.config/zbox/supported.list
-    /usr/bin/cat ~/.config/zbox/supported.list
-  else if test -r /etc/zbox/supported.list
-    /usr/bin/cat /etc/zbox/supported.list
+  if test -r ~/.config/zbox/distros/supported.list
+    /usr/bin/cat ~/.config/zbox/distros/supported.list
+  else if test -r ~/.local/lib/python3*/site-packages/zbox/distros/supported.list
+    /usr/bin/cat ~/.local/lib/python3*/site-packages/zbox/distros/supported.list
   end
 end
 

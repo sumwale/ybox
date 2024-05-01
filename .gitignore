@@ -1,1 +1,6 @@
 **/__pycache__/
+**/.mypy_cache/
+dist/
+src/zbox.egg-info
+.venv
+build/

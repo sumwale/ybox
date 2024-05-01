@@ -28,7 +28,11 @@ class Environ:
         self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
         self.__now = datetime.now()
         os.environ["NOW"] = str(self.__now)
-        self.__configuration_dirs = (f"{self.__home_dir}/.config/zbox", "/etc/zbox")
+        # TODO: change this to use importlib.resources.files as shown in
+        # https://setuptools.pypa.io/en/latest/userguide/datafiles.html#accessing-data-files-at-runtime
+        # The search_config_path method will change to return a Traversable
+        config_dir = os.path.dirname(os.path.dirname(__file__))
+        self.__configuration_dirs = (f"{self.__home_dir}/.config/zbox", config_dir)
         self.__user_applications_dir = f"{user_base}/share/applications"
         self.__user_executables_dir = f"{user_base}/bin"
 

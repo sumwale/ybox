@@ -139,11 +139,17 @@ def get_other_shared_containers(container_name: str, shared_root: str,
 
 
 def select_item_from_menu(items: list[str]) -> Optional[str]:
+    """
+    Display a list of items on terminal and allow user to select an item from it interactively
+    using arrow keys and all.
+
+    :param items: list of items to be displayed
+    :return: the chosen item, or None if user aborted the selection
+    """
     terminal_menu = TerminalMenu(items,
                                  status_bar="Press <Enter> to select, <Esc> to exit")
     selection = terminal_menu.show()
     if selection is not None:
         return items[int(selection)]
-    else:
-        print_warn("Aborted selection")
-        return None
+    print_warn("Aborted selection")
+    return None

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zbox"
+version = "0.9.0"
+authors = [
+  { name = "Sumedh Wale", email = "sumwale@yahoo.com" },
+]
+description = "Run Linux distribution inside a container"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "simple-term-menu",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+keywords = ["Linux in container", "toolbox"]
+
+[project.urls]
+Homepage = "https://github.com/sumwale/zbox"
+Issues = "https://github.com/sumwale/zbox/issues"
+
+[project.scripts]
+zbox-create = "zbox_run.create:main"
+zbox-destroy = "zbox_run.destroy:main"
+zbox-logs = "zbox_run.logs:main"
+zbox-ls = "zbox_run.ls:main"
+zbox-pkg = "zbox_run.pkg:main"
+zbox-restart = "zbox_run.restart:main"
+zbox-shell = "zbox_run.shell:main"
+
+[tool.setuptools]
+include-package-data = true

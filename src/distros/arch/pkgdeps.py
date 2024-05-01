@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import argparse
 import gzip
 import os
@@ -24,7 +22,11 @@ _REFRESH_AGE = 24.0 * 60 * 60  # consider AUR metadata file as stale after a day
 PackageAlternate = Tuple[str, str, Optional[list[str]], Optional[list[str]]]
 
 
-def main(argv: list[str]) -> None:
+def main() -> None:
+    main_argv(sys.argv[1:])
+
+
+def main_argv(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(
         description="Recursively find optional dependencies of a package")
     parser.add_argument("-l", "--level", type=int, default=2,
@@ -181,4 +183,4 @@ def search_alternates(package_name: str, alternates: list[PackageAlternate]) -> 
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()
