@@ -10,6 +10,7 @@ import sys
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
+from zbox.cmd import ZboxLabel, get_docker_command, run_command, verify_zbox_state
 from zbox.config import StaticConfiguration
 from zbox.env import Environ
 from zbox.pkg.inst import install_package
@@ -18,8 +19,7 @@ from zbox.pkg.uninst import uninstall_package
 from zbox.pkg.update import update_package
 from zbox.print import print_error, print_info
 from zbox.state import ZboxStateManagement
-from zbox.util import EnvInterpolation, ZboxLabel, config_reader, get_docker_command, \
-    run_command, select_item_from_menu, verify_zbox_state
+from zbox.util import EnvInterpolation, config_reader, select_item_from_menu
 
 
 def main(argv: list[str]) -> int:

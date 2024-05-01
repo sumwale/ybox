@@ -6,10 +6,11 @@ import argparse
 import sys
 from configparser import SectionProxy
 
+from zbox.cmd import PkgMgr, run_command
 from zbox.config import StaticConfiguration
 from zbox.print import print_warn
 from zbox.state import RuntimeConfiguration, ZboxStateManagement
-from zbox.util import PkgMgr, get_other_shared_containers, run_command
+from zbox.util import get_other_shared_containers
 
 
 def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,

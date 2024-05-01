@@ -11,8 +11,8 @@ from typing import Optional, Tuple
 
 import ijson  # type: ignore
 
+from zbox.cmd import run_command
 from zbox.print import fgcolor, print_color, print_error, print_warn
-from zbox.util import run_command
 
 _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
 _AUR_META_CACHE_DIR = f"{os.environ['HOME']}/.cache/{os.path.basename(__file__)}"

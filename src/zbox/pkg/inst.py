@@ -14,10 +14,11 @@ from typing import Optional, Tuple
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
+from zbox.cmd import PkgMgr, run_command
 from zbox.config import Consts, StaticConfiguration
 from zbox.print import print_info, print_warn
 from zbox.state import RuntimeConfiguration, ZboxStateManagement
-from zbox.util import PkgMgr, run_command, ini_file_reader
+from zbox.util import ini_file_reader
 
 
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,

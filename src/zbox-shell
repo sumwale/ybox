@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from zbox.util import get_docker_command, run_command, verify_zbox_state
+from zbox.cmd import get_docker_command, run_command
 
 
 def main(argv: list[str]) -> None:
@@ -11,7 +11,7 @@ def main(argv: list[str]) -> None:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    verify_zbox_state(docker_cmd, container_name, ["running"], error_msg=" active ")
+    # verify_zbox_state(docker_cmd, container_name, ["running"], error_msg=" active ")
 
     run_command([docker_cmd, "exec", "-it", container_name, args.shell],
                 error_msg=f"{args.shell} execution on '{container_name}'")

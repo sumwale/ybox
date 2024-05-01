@@ -15,13 +15,14 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
 
+from zbox.cmd import PkgMgr, ZboxLabel, get_docker_command, run_command, verify_zbox_state
 from zbox.config import Consts, StaticConfiguration
 from zbox.env import Environ
 from zbox.filelock import FileLock
 from zbox.print import bgcolor, fgcolor, print_color, print_error, print_info, print_warn
 from zbox.state import ZboxStateManagement
-from zbox.util import EnvInterpolation, NotSupportedError, PkgMgr, ZboxLabel, config_reader, \
-    get_docker_command, ini_file_reader, run_command, select_item_from_menu, verify_zbox_state
+from zbox.util import EnvInterpolation, NotSupportedError, config_reader, ini_file_reader, \
+    select_item_from_menu
 
 __EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 
@@ -196,6 +197,7 @@ def select_distribution(args: argparse.Namespace, env: Environ) -> str:
             raise NotSupportedError(f"Distribution '{distro}' not supported in {support_list}")
         return str(distro)
     elif len(supported_distros) == 1:
+        print_info(f"Using distribution '{supported_distros[0]}'")
         return supported_distros[0]
 
     # show a menu to choose from if the number of supported distributions exceeds 1
@@ -227,6 +229,7 @@ def select_profile(args: argparse.Namespace, env: Environ) -> str:
     profiles = [file_path for file in os.listdir(profiles_dir)
                 if os.path.isfile(file_path := f"{profiles_dir}/{file}")]
     if len(profiles) == 1:
+        print_info(f"Using profile '{profiles[0]}'")
         return profiles[0]
     elif len(profiles) == 0:
         print_error(f"No valid profile found in '{profiles_dir}'")
