@@ -11,6 +11,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TypeAlias
 
+from zbox.print import print_error
+
 PathName: TypeAlias = Path | Traversable
 
 
@@ -52,7 +54,8 @@ class Environ:
             if os.access(path, os.R_OK):  # type: ignore
                 return path
         search_dirs = ', '.join([str(file) for file in self.__configuration_dirs])
-        raise FileNotFoundError(f"Configuration file '{conf_path}' not found in [{search_dirs}]")
+        print_error(f"Configuration file '{conf_path}' not found in [{search_dirs}]")
+        raise FileNotFoundError
 
     @property
     def home(self) -> str:

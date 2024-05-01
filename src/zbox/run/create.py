@@ -168,7 +168,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                        with given file in INI format. It allows for set up of various aspects of
                        the zbox including support for X11, Wayland, audio, video acceleration,
                        NVIDIA, dbus among others. It also allows controlling various parameters
-                       of the container including directories to be shared, logging etc.""")
+                       of the container including directories to be shared, logging etc.
+                       See src/zbox/conf/profiles/basic.ini in the distribution for all available
+                       options with examples and comments having the explanations.""")
     parser.add_argument("-n", "--name", type=str,
                         help="name of the zbox; default is zbox-<distribution>_<profile> "
                              "if not provided (removing the .ini suffix from <profile> file)")
@@ -176,12 +178,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("distribution", nargs="?", type=str,
                         help="short name of the distribution as listed in distros/supported.list "
-                             "(either in ~/.config/zbox or package's zbox/conf)")
+                             "(either in ~/.config/zbox or package's zbox/conf); it is optional "
+                             "and user is presented with selection menu if there are multiple "
+                             "listed in the first supported.list file that is found")
     parser.add_argument("profile", nargs="?", type=str,
                         help="the profile defined in INI file to use for creating the zbox "
                              "(can be a relative or absolute path, or be in user or system "
-                             "configuration directory which are $HOME/.config/zbox and "
-                             "zbox package directory respectively)")
+                             "configuration directory which are $HOME/.config/zbox/profiles and "
+                             "package's zbox/conf/profiles directory respectively); it is "
+                             "optional and user is presented with a selection menu of the "
+                             "available profiles in the user or system profiles directory "
+                             "whichever is found (in that order)")
     return parser.parse_args(argv)
 
 
@@ -222,7 +229,7 @@ def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
     if profile_arg := args.profile:
         if os.access(profile_arg, os.R_OK):
             return Path(profile_arg)
-        return env.search_config_path(profile_arg)
+        return env.search_config_path(f"profiles/{profile_arg}")
 
     # search for available profiles in standard locations and provide a selection menu
     # for the user

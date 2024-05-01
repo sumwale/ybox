@@ -30,7 +30,7 @@ huge repositories like Arch Linux with AUR.
 
 (these are in the src directory)
 
-zbox-create arch profiles/basic.ini
+zbox-create arch basic.ini
 
 Create a zbox for Arch Linux running the basic profile. By default the name of
 the container will be "zbox-arch\_basic" which can be changed with the -n/--name option.

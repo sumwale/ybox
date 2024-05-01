@@ -64,8 +64,9 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
         return "/usr/bin/podman"
     if os.access("/usr/bin/docker", os.X_OK):
         return "/usr/bin/docker"
-    raise FileNotFoundError("Neither /usr/bin/podman nor /usr/bin/docker found "
-                            f"and no '{option_name}' option has been provided")
+    print_error("Neither /usr/bin/podman nor /usr/bin/docker found "
+                f"and no '{option_name}' option has been provided")
+    raise FileNotFoundError
 
 
 def verify_zbox_state(docker_cmd: str, box_name: str, expected_states: list[str],
