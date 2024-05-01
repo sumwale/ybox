@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from zbox_run.destroy import main
+from zbox.run.destroy import main
 
 if __name__ == "__main__":
     # sys.tracebacklimit = 0

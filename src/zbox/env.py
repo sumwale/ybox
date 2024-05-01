@@ -6,6 +6,12 @@ import getpass
 import os
 import site
 from datetime import datetime
+from importlib.abc import Traversable
+from importlib.resources import files
+from pathlib import Path
+from typing import TypeAlias
+
+PathName: TypeAlias = Path | Traversable
 
 
 class Environ:
@@ -16,7 +22,7 @@ class Environ:
     """
 
     def __init__(self):
-        self.__home_dir = os.environ['HOME']
+        self.__home_dir = os.path.expanduser("~")
         # local user home might be in a different location than /home but target user in the
         # container will always be in /home as ensured by zbox/entrypoint.py script
         self.__target_home = "/home/" + getpass.getuser()
@@ -28,29 +34,25 @@ class Environ:
         self.__xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
         self.__now = datetime.now()
         os.environ["NOW"] = str(self.__now)
-        # TODO: change this to use importlib.resources.files as shown in
-        # https://setuptools.pypa.io/en/latest/userguide/datafiles.html#accessing-data-files-at-runtime
-        # The search_config_path method will change to return a Traversable
-        config_dir = os.path.dirname(os.path.dirname(__file__))
-        self.__configuration_dirs = (f"{self.__home_dir}/.config/zbox", config_dir)
+        self.__configuration_dirs = (Path(f"{self.__home_dir}/.config/zbox"), files("zbox.conf"))
         self.__user_applications_dir = f"{user_base}/share/applications"
         self.__user_executables_dir = f"{user_base}/bin"
 
-    def search_config_path(self, conf_file: str) -> str:
+    def search_config_path(self, conf_path: str) -> PathName:
         """
         Search for given configuration path in user and system configuration directories
         (in that order). The path may refer to a file or a subdirectory.
 
-        :param conf_file: the configuration file to search (expected to be a relative path)
+        :param conf_path: the configuration file to search (expected to be a relative path)
         :return: the full path of the configuration file
         """
         # order is first search in user's config directory, and then the system config directory
         for config_dir in self.__configuration_dirs:
-            path = f"{config_dir}/{conf_file}"
-            if os.access(path, os.R_OK):
+            path = config_dir.joinpath(conf_path)
+            if os.access(path, os.R_OK):  # type: ignore
                 return path
-        search_dirs = ', '.join(self.__configuration_dirs)
-        raise FileNotFoundError(f"Configuration file '{conf_file}' not found in [{search_dirs}]")
+        search_dirs = ', '.join([str(file) for file in self.__configuration_dirs])
+        raise FileNotFoundError(f"Configuration file '{conf_path}' not found in [{search_dirs}]")
 
     @property
     def home(self) -> str:

@@ -5,17 +5,19 @@ import os
 import pwd
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
 from configparser import ConfigParser, SectionProxy
+from importlib.resources import files
 from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
 
 from zbox.cmd import PkgMgr, ZboxLabel, get_docker_command, run_command, verify_zbox_state
 from zbox.config import Consts, StaticConfiguration
-from zbox.env import Environ
+from zbox.env import Environ, PathName
 from zbox.filelock import FileLock
 from zbox.print import bgcolor, fgcolor, print_color, print_error, print_info, print_warn
 from zbox.state import ZboxStateManagement
@@ -25,9 +27,8 @@ from zbox.util import EnvInterpolation, NotSupportedError, config_reader, ini_fi
 __EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 
 
-# Note: deliberately not using os.path.join for joining paths throughout the code,
-# since it only works on Linux like systems where path separator will always be "/"
-# and explicitly forcing the same.
+# Note: deliberately not using os.path.join for joining paths since the code only works on
+# Linux/POSIX systems where path separator will always be "/" and explicitly forcing the same.
 #
 # Configuration files should be in $HOME/.config/zbox or zbox package directory.
 
@@ -174,7 +175,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("distribution", nargs="?", type=str,
-                        help="short name of the distribution (listed in distros/supported.list)")
+                        help="short name of the distribution as listed in distros/supported.list "
+                             "(either in ~/.config/zbox or package's zbox/conf)")
     parser.add_argument("profile", nargs="?", type=str,
                         help="the profile defined in INI file to use for creating the zbox "
                              "(can be a relative or absolute path, or be in user or system "
@@ -183,15 +185,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def quick_config_read(file: str) -> ConfigParser:
+def quick_config_read(file: PathName) -> ConfigParser:
     """Quick read of an INI file without processing includes or any value interpolation"""
-    with open(file, "r", encoding="utf-8") as profile_fd:
+    with file.open("r", encoding="utf-8") as profile_fd:
         return ini_file_reader(profile_fd, None)
 
 
 def select_distribution(args: argparse.Namespace, env: Environ) -> str:
     support_list = env.search_config_path("distros/supported.list")
-    with open(support_list, "r", encoding="utf-8") as supp_file:
+    with support_list.open("r", encoding="utf-8") as supp_file:
         supported_distros = supp_file.read().splitlines()
     if distro := args.distribution:
         # check that the distribution is in supported.list
@@ -215,19 +217,18 @@ def select_distribution(args: argparse.Namespace, env: Environ) -> str:
     raise ValueError(f"Unexpected distribution name string: {distro_name}")
 
 
-def select_profile(args: argparse.Namespace, env: Environ) -> str:
+def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
     # the profile used to build the docker/podman command-line
-    if profile := args.profile:
-        if os.access(profile, os.R_OK):
-            return profile
-        return env.search_config_path(profile)
+    if profile_arg := args.profile:
+        if os.access(profile_arg, os.R_OK):
+            return Path(profile_arg)
+        return env.search_config_path(profile_arg)
 
     # search for available profiles in standard locations and provide a selection menu
     # for the user
     profile_names: list[str] = []
     profiles_dir = env.search_config_path("profiles")
-    profiles = [file_path for file in os.listdir(profiles_dir)
-                if os.path.isfile(file_path := f"{profiles_dir}/{file}")]
+    profiles = [file for file in profiles_dir.iterdir() if file.is_file()]
     if len(profiles) == 1:
         print_info(f"Using profile '{profiles[0]}'")
         return profiles[0]
@@ -235,24 +236,24 @@ def select_profile(args: argparse.Namespace, env: Environ) -> str:
         print_error(f"No valid profile found in '{profiles_dir}'")
         sys.exit(1)
 
-    profiles.sort()
+    profiles.sort(key=str)
     for profile in profiles:
         profile_config = quick_config_read(profile)
-        profile_names.append(f"{profile_config['base']['name']} ({os.path.basename(profile)})")
+        profile_names.append(f"{profile_config['base']['name']} ({profile.name})")
     print_info("Please select the profile to use for the container:", file=sys.stderr)
     if (profile_name := select_item_from_menu(profile_names)) is None:
         sys.exit(1)
     if match := __EXTRACT_PARENS_NAME.match(profile_name):
-        return f"{profiles_dir}/{match.group(1)}"
+        return profiles_dir.joinpath(match.group(1))
     raise ValueError(f"Unexpected profile name string: {profile_name}")
 
 
-def process_args(args: argparse.Namespace, distro: str, profile: str) -> Tuple[str, str]:
+def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> Tuple[str, str]:
     ini_suffix = ".ini"
     if args.name:
         box_name = args.name
     else:
-        box_name = os.path.basename(profile)
+        box_name = profile.name
         if box_name.endswith(ini_suffix):
             box_name = box_name[:-len(ini_suffix)]
         box_name = f"zbox-{distro}_{box_name}"
@@ -266,7 +267,7 @@ def process_args(args: argparse.Namespace, distro: str, profile: str) -> Tuple[s
     return box_name, docker_cmd
 
 
-def process_sections(profile: str, conf: StaticConfiguration, distro_config: ConfigParser,
+def process_sections(profile: PathName, conf: StaticConfiguration, distro_config: ConfigParser,
                      docker_args: list[str]) -> Tuple[bool, ConfigParser]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
@@ -300,7 +301,7 @@ def process_sections(profile: str, conf: StaticConfiguration, distro_config: Con
     return shared_root, config
 
 
-def process_base_section(base_section: SectionProxy, profile: str,
+def process_base_section(base_section: SectionProxy, profile: PathName,
                          env: Environ, args: list[str]) -> Tuple[bool, bool]:
     # shared root is true by default
     shared_root = True
@@ -427,7 +428,7 @@ def add_multi_opt(args: list[str], section: SectionProxy, key: str, opt: str) ->
             args.append(f"--{opt}={opt_val}")
 
 
-def process_security_section(sec_section: SectionProxy, profile: str,
+def process_security_section(sec_section: SectionProxy, profile: PathName,
                              args: list[str]) -> None:
     sec_options = ["label", "apparmor", "seccomp", "mask", "umask", "proc_opts"]
     single_options = ["seccomp_policy", "ipc", "cgroup_parent", "cgroupns", "cgroups"]
@@ -569,6 +570,16 @@ def copytree(src: str, dest: str, hardlink: bool = False) -> None:
                     shutil.copy2(src_path, f"{dest_dir}/{src_file}", follow_symlinks=True)
 
 
+def copy_file(src: PathName, dest: str, permissions: Optional[int] = None) -> None:
+    with open(dest, "w", encoding="utf-8") as dest_fd:
+        dest_fd.write(src.read_text(encoding="utf-8"))
+    if permissions is not None:
+        os.chmod(dest, permissions)
+    elif hasattr(src, "stat"):  # copy the permissions
+        perms = stat.S_IMODE(src.stat(follow_symlinks=True).st_mode)
+        os.chmod(dest, perms)
+
+
 def setup_zbox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -> None:
     # first create local mount directory having entrypoint and other scripts
     if os.path.exists(conf.scripts_dir):
@@ -579,20 +590,23 @@ def setup_zbox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
     for script in [Consts.entrypoint_common(), Consts.entrypoint_base(),
                    Consts.entrypoint_cp(), Consts.entrypoint(), "prime-run"]:
         path = env.search_config_path(f"resources/{script}")
-        shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
+        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
     # also copy distribution specific scripts
     for script in Consts.distribution_scripts():
         path = env.search_config_path(f"distros/{conf.distribution}/{script}")
-        shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
+        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
     base_section = distro_config["base"]
     if scripts := base_section.get("scripts"):
         for script in scripts.split(","):
             path = env.search_config_path(f"distros/{conf.distribution}/{script}")
-            shutil.copy2(path, f"{conf.scripts_dir}/{script}", follow_symlinks=True)
+            copy_file(path, f"{conf.scripts_dir}/{script}")
         # finally copy the zbox python module which may be used by distribution scripts
-        # TODO: use importlib.resources.files to find those files rather than the fragile copytree
-        src_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-        copytree(f"{src_dir}/zbox", f"{conf.scripts_dir}/zbox")
+        src_dir = files("zbox")
+        dest_dir = f"{conf.scripts_dir}/zbox"
+        os.mkdir(dest_dir)
+        for resource in src_dir.iterdir():
+            if resource.is_file():
+                copy_file(resource, f"{dest_dir}/{resource.name}")
 
 
 def read_distribution_config(conf: StaticConfiguration) -> Tuple[str, str, ConfigParser]:

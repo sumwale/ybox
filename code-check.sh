@@ -8,12 +8,19 @@ if [ "$1" = "-l" ]; then
 fi
 
 export MYPYPATH=./src
-for f in src/zbox/*.py src/zbox/pkg/*.py src/zbox_run/*.py src/distros/*/*.py; do
+for f in src/zbox/*.py src/zbox/pkg/*.py src/zbox/run/*.py; do
   echo -------------------------------------------
   echo Output of mypy on $f
   echo -------------------------------------------
   mypy --check-untyped-defs $f
 done
+for f in src/zbox/conf/distros/*/*.py; do
+  echo -------------------------------------------
+  echo Output of mypy on $f
+  echo -------------------------------------------
+  ( cd $(dirname "$f") && mypy --check-untyped-defs $(basename "$f") )
+done
+
 
 if [ -n "$PYLINT" ]; then
   export PYTHONPATH=./src
@@ -27,7 +34,7 @@ if [ -n "$PYLINT" ]; then
     echo -------------------------------------------
     pylint $f
   done
-  for f in src/zbox_run/*.py src/distros/*/*.py; do
+  for f in src/zbox/run/*.py src/zbox/conf/distros/*/*.py; do
     echo -------------------------------------------
     echo -------------------------------------------
     echo

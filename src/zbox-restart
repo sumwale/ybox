@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from zbox_run.restart import main
+from zbox.run.restart import main
 
 if __name__ == "__main__":
     main()

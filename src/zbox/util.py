@@ -5,11 +5,12 @@ Common utility classes and methods used by the scripts.
 import os
 import re
 from configparser import BasicInterpolation, ConfigParser, Interpolation
+from pathlib import Path
 from typing import Optional
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from .env import Environ
+from .env import Environ, PathName
 from .print import print_warn
 from .state import ZboxStateManagement
 
@@ -59,8 +60,8 @@ class EnvInterpolation(BasicInterpolation):
 
 
 # read the ini file, recursing into the includes to build the final dictionary
-def config_reader(conf_file: str, interpolation: Optional[Interpolation],
-                  top_level: str = "") -> ConfigParser:
+def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
+                  top_level: Optional[PathName] = None) -> ConfigParser:
     """
     Read the container configuration INI file, recursing into the includes to build the final
     dictionary having the sections with corresponding key-value pairs.
@@ -72,12 +73,12 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
     :return: instance of `configparser.ConfigParser` built after parsing the given file as
              well as any includes recursively
     """
-    if not os.access(conf_file, os.R_OK):
+    if not conf_file.is_file():
         if top_level:
             raise FileNotFoundError(f"Config file '{conf_file}' among the includes of "
-                                    f"'{top_level}' does not exist or not readable")
-        raise FileNotFoundError(f"Config file '{conf_file}' does not exist or not readable")
-    with open(conf_file, "r", encoding="utf-8") as conf_fd:
+                                    f"'{top_level}' does not exist or not a file")
+        raise FileNotFoundError(f"Config file '{conf_file}' does not exist or not a file")
+    with conf_file.open("r", encoding="utf-8") as conf_fd:
         config = ini_file_reader(conf_fd, interpolation)
     if not top_level:
         top_level = conf_file
@@ -86,8 +87,8 @@ def config_reader(conf_file: str, interpolation: Optional[Interpolation],
     for include in includes.split(","):
         if not (include := include.strip()):
             continue
-        inc_file = include if os.path.isabs(
-            include) else f"{os.path.dirname(conf_file)}/{include}"
+        inc_file = Path(include) if os.path.isabs(include) \
+            else conf_file.parent.joinpath(include)  # type: ignore
         inc_conf = config_reader(inc_file, interpolation, top_level)
         for section in inc_conf.sections():
             if not config.has_section(section):

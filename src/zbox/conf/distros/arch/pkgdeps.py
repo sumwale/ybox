@@ -13,7 +13,8 @@ from zbox.cmd import run_command
 from zbox.print import fgcolor, print_color, print_error, print_warn
 
 _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
-_AUR_META_CACHE_DIR = f"{os.environ['HOME']}/.cache/{os.path.basename(__file__)}"
+_PKG_CACHE_SUBDIR = os.path.basename(__file__).removesuffix(".py")
+_AUR_META_CACHE_DIR = f"{os.path.expanduser('~/.cache')}/{_PKG_CACHE_SUBDIR}"
 _AUR_META_FILE = f"{_AUR_META_CACHE_DIR}/packages-meta-ext-v1.json.gz"
 # parallel download using aria2 is much faster on slower networks
 _FETCH_AUR_META = f"/usr/bin/aria2c -x8 -j8 -s8 -k1M -d{_AUR_META_CACHE_DIR} {_AUR_META_URL}"

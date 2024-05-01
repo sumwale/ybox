@@ -1,6 +1,3 @@
 exclude src/zbox-*
-graft src/completions
-graft src/distros
-graft src/profiles
-graft src/resources
+graft src/zbox/conf
 global-exclude **/.mypy_cache/**
