@@ -71,6 +71,8 @@ echo_color "$fg_cyan" "Configuring makepkg and system-wide bashrc" >> $status_fi
 # use reasonable MAKEFLAGS and zstd compression level for AUR packages
 sed -i "s/^#MAKEFLAGS=.*/MAKEFLAGS=\"-j`/usr/bin/nproc --all`\"/" /etc/makepkg.conf
 sed -i 's/^COMPRESSZST=.*/COMPRESSZST=(zstd -c -T0 -8 -)/' /etc/makepkg.conf
+# remove debug from options
+sed -i 's/^OPTIONS\(.*\b[^!]\)debug/OPTIONS\1!debug/' /etc/makepkg.conf
 
 # common environment variables
 if ! grep -q '^export LESSOPEN=' /etc/bash.bashrc; then

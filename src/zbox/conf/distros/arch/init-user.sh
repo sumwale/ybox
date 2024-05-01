@@ -12,7 +12,6 @@ if ! pacman -Q paru 2>/dev/null >/dev/null; then
   cd paru-bin
   makepkg --noconfirm -si
   cd ..
-  $PARU -Rs paru-bin-debug
 fi
 echo_color "$fg_cyan" "Installing neovim-symlinks libtree autojump" >> $status_file
 $PARU -S --needed neovim-symlinks libtree autojump
