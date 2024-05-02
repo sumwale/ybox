@@ -9,7 +9,7 @@ import sys
 from enum import Enum
 from typing import Optional, Union
 
-from .print import fgcolor, print_color, print_error, print_warn
+from .print import print_error, print_notice, print_warn
 
 
 class PkgMgr(str, Enum):
@@ -148,5 +148,5 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
 def print_subprocess_output(result: subprocess.CompletedProcess) -> None:
     """print completed subprocess output in color (orange for standard output and purple
        for standard error)"""
-    print_color(result.stdout.decode("utf-8"), fg=fgcolor.orange)
+    print_notice(result.stdout.decode("utf-8"))
     print_warn(result.stderr.decode("utf-8"))

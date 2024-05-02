@@ -10,15 +10,15 @@ import subprocess
 import sys
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
 from zbox.cmd import PkgMgr, run_command
 from zbox.config import Consts, StaticConfiguration
-from zbox.print import print_info, print_warn
+from zbox.print import print_info, print_notice, print_warn
 from zbox.state import RuntimeConfiguration, ZboxStateManagement
-from zbox.util import ini_file_reader
+from zbox.util import check_installed_package, ini_file_reader
 
 
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
@@ -52,15 +52,20 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     # before actual execution by _install_package(...)
     install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="{opt_dep}")
     list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
-    opt_deps_cmd, opt_dep_flag = ("", "") if args.skip_opt_deps else (
+    selected_deps = args.with_opt_deps.split(",") if args.with_opt_deps else None
+    opt_deps_cmd, opt_dep_flag = ("", "") if args.skip_opt_deps and not selected_deps else (
         pkgmgr[PkgMgr.OPT_DEPS.value], pkgmgr[PkgMgr.OPT_DEP_FLAG.value])
+    check_cmd = pkgmgr[PkgMgr.INFO.value] if args.check_package else ""
     return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,
-                            runtime_conf, state, opt_deps_cmd, opt_dep_flag)
+                            runtime_conf, state, opt_deps_cmd, opt_dep_flag, False, check_cmd,
+                            selected_deps, args.quiet)
 
 
 def _install_package(package: str, args: argparse.Namespace, install_cmd: str, list_cmd: str,
                      docker_cmd: str, conf: StaticConfiguration, rt_conf: RuntimeConfiguration,
-                     state: ZboxStateManagement, opt_deps_cmd: str, opt_dep_flag: str) -> int:
+                     state: ZboxStateManagement, opt_deps_cmd: str, opt_dep_flag: str,
+                     opt_dep_install: bool, check_cmd: str, selected_deps: Optional[list[str]],
+                     quiet: bool) -> int:
     """
     Real workhorse for :func:`install_package` that is invoked recursively for
     optional dependencies if required.
@@ -78,38 +83,49 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     :param opt_deps_cmd: command to determine optional dependencies as read from `distro.ini`
     :param opt_dep_flag: flag to be added during installation of an optional dependency to mark
                          it as a dependency (as read from `distro.ini`)
+    :param opt_dep_install: true if installation is for an optional dependency
+    :param check_cmd: command to check if package exists before installation
+    :param selected_deps: list of dependencies to install if user has already provided them
+    :param quiet: perform some operations quietly
 
     :return: exit code of install command for the main package
     """
-    print_info(f"Installing '{package}' in '{conf.box_name}'")
     # need to determine optional dependencies before installation else second level or higher
     # dependencies will never be found (as the dependencies are already installed)
     optional_deps: list[Tuple[str, str, int]] = []
-    if opt_deps_cmd:
+    if opt_deps_cmd and selected_deps is None:
         optional_deps = get_optional_deps(package, docker_cmd, conf.box_name, opt_deps_cmd)
-    # the case when installing dependency -- perhaps should be made explicit with an argument
-    opt_dep_install = not opt_deps_cmd if opt_dep_flag else False
     if opt_dep_install:
         resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
     else:
         resolved_install_cmd = install_cmd.format(opt_dep="")
     # don't exit on error here because the caller may have further actions to perform before exit
-    code = int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
-                            f"{resolved_install_cmd} {package}"], exit_on_error=False,
-                           error_msg=f"installing '{package}'"))
+    code = -1
+    if check_cmd and (code := check_installed_package(docker_cmd, check_cmd, package,
+                                                      conf.box_name)) == 0 and not quiet:
+        print_notice(f"'{package}' is already installed in '{conf.box_name}")
+    if code != 0:
+        if not quiet:
+            print_info(f"Installing '{package}' in '{conf.box_name}'")
+        code = int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
+                                f"{resolved_install_cmd} {package}"], exit_on_error=False,
+                               error_msg=f"installing '{package}'"))
     if code == 0:
         # TODO: wrappers for newly installed required dependencies should also be created
-        # don't create wrappers for executables of optional dependencies by default
-        local_copies = wrap_container_files(package, args, list_cmd, docker_cmd, conf,
-                                            rt_conf.ini_config, skip_exec_files=opt_dep_install)
+        # check if need to create wrappers for optional dependencies
+        local_copies: list[str] = []
+        if not opt_dep_install or args.add_dep_wrappers:
+            local_copies = wrap_container_files(package, args, list_cmd, docker_cmd, conf,
+                                                rt_conf.ini_config)
         package_type = state.optional_package_type(args.package) if opt_dep_install else ""
         state.register_package(conf.box_name, package, shared_root=rt_conf.shared_root,
                                local_copies=local_copies, package_type=package_type)
-        if optional_deps:
+        if optional_deps and selected_deps is None:
             selected_deps = select_optional_deps(package, optional_deps)
+        if selected_deps:
             for dep in selected_deps:
                 _install_package(dep, args, install_cmd, list_cmd, docker_cmd, conf, rt_conf,
-                                 state, opt_deps_cmd="", opt_dep_flag=opt_dep_flag)
+                                 state, "", opt_dep_flag, True, check_cmd, None, quiet)
 
     return code
 
@@ -149,9 +165,9 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
         line = bytearray()
         eol = b"\n"[0]  # end of line
         buffered = 0
+        assert deps_result.stdout is not None
         # readline does not work for in-place updates like from aria2
-        for char in iter(lambda: deps_result.stdout.read(1), b""):  # type: ignore
-            # for output in deps_result.stdout:
+        while char := deps_result.stdout.read(1):
             sys.stdout.buffer.write(char)
             buffered += 1
             if char[0] == eol:
@@ -167,7 +183,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
                     sys.stdout.flush()
                     buffered = 0
         sys.stdout.flush()
-        for pkg_out in iter(deps_result.stdout.readline, b""):  # type: ignore
+        while pkg_out := deps_result.stdout.readline():
             output = pkg_out.decode("utf-8")
             name, desc, level = output[len(pkg_prefix):].split("::::")
             optional_deps.append((name, desc, int(level.strip())))
@@ -200,8 +216,8 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
 
 
 def wrap_container_files(package: str, args: argparse.Namespace, list_cmd: str,
-                         docker_cmd: str, conf: StaticConfiguration, box_conf: str,
-                         skip_exec_files: bool = False) -> list[str]:
+                         docker_cmd: str, conf: StaticConfiguration,
+                         box_conf: Union[str, ConfigParser]) -> list[str]:
     """
     Create wrappers in host environment to invoke container's desktop files and executables.
 
@@ -210,13 +226,13 @@ def wrap_container_files(package: str, args: argparse.Namespace, list_cmd: str,
     :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
-    :param box_conf: the resolved INI format configuration of the container as a string
-    :param skip_exec_files: if true, then skip creating wrappers for executable files
+    :param box_conf: the resolved INI format configuration of the container as a string or
+                     a `ConfigParser` object
 
     :return: the list of paths of the wrapper files
     """
     skip_desktop_files = args.skip_desktop_files
-    skip_executables = skip_exec_files or args.skip_executables
+    skip_executables = args.skip_executables
     if skip_desktop_files and skip_executables:
         return []
     # skip on errors below and do not fail the installation
@@ -230,7 +246,11 @@ def wrap_container_files(package: str, args: argparse.Namespace, list_cmd: str,
     executable_dirs = Consts.container_executable_dirs()
     # match both "Exec=" and "TryExec=" lines
     exec_re = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(.+?)((\s%[a-zA-Z])?\s*)$")
-    box_config: Optional[ConfigParser] = None
+    # read the container configuration for [app_flags] section
+    app_flags = _get_app_flags(box_conf)
+    # the "-it" flag is used for both desktop file and executable for docker/podman exec
+    # since it is safe (unless the app may need stdin in which case Terminal must be true
+    #   in its desktop file in which case a terminal will be opened during execution)
     for file in str(package_files).splitlines():
         file_dir = os.path.dirname(file)
         filename = os.path.basename(file).strip()
@@ -239,22 +259,38 @@ def wrap_container_files(package: str, args: argparse.Namespace, list_cmd: str,
         # check if this is a .desktop directory and copy it over adding appropriate
         # "docker exec" prefix to the command
         if not skip_desktop_files and file_dir in desktop_dirs:
-            box_config = _wrap_desktop_file(filename, file, package, exec_re, docker_cmd, conf,
-                                            box_conf, box_config, wrapper_files)
+            _wrap_desktop_file(filename, file, package, exec_re, docker_cmd, conf, app_flags,
+                               wrapper_files)
             continue
         if not skip_executables and file_dir in executable_dirs:
-            _wrap_executable(filename, file, docker_cmd, conf, wrapper_files)
+            _wrap_executable(filename, file, docker_cmd, conf, app_flags, wrapper_files)
 
     return wrapper_files
 
 
+def _get_app_flags(box_conf: Union[str, ConfigParser]) -> Optional[SectionProxy]:
+    """
+    Get the [app_flags] section from the container configuration.
+
+    :param box_conf: the resolved INI format configuration of the container as a string or
+                     a `ConfigParser` object
+    :return: the [app_flags] section as a `SectionProxy` object
+    """
+    if isinstance(box_conf, ConfigParser):
+        box_config = box_conf
+    else:
+        with io.StringIO(box_conf) as box_conf_fd:
+            box_config = ini_file_reader(box_conf_fd, interpolation=None,
+                                         case_sensitive=False)  # case-insensitive
+    return box_config["app_flags"] if box_config.has_section("app_flags") else None
+
+
 def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Pattern[str],
-                       docker_cmd: str, conf: StaticConfiguration, box_conf: str,
-                       box_config: Optional[ConfigParser],
-                       wrapper_files: list[str]) -> Optional[ConfigParser]:
+                       docker_cmd: str, conf: StaticConfiguration,
+                       app_flags: Optional[SectionProxy], wrapper_files: list[str]) -> None:
     """
     For a desktop file, add "docker/podman exec ..." to its Exec/TryExec lines. Also read
-    the additional flags for the command passed in `appflags` and add them to an appropriate
+    the additional flags for the command passed in `app_flags` and add them to an appropriate
     position in the Exec/TryExec lines.
 
     :param filename: name of the desktop file being wrapped
@@ -263,30 +299,19 @@ def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Patte
     :param exec_re: the regular expression to use for matching Exec/TryExec lines
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
-    :param box_conf: the resolved INI format configuration of the container as a string
-    :param box_config: the resolved configuration of the container as a `ConfigParser`
+    :param app_flags: the [app_flags] section from the container configuration as a `SectionProxy`
     :param wrapper_files: the accumulated list of all wrapper files so far
-
-    :return: the updated resolved configuration of the container as a `ConfigParser`
     """
     # container name is added to desktop file to make it unique
     wrapper_name = f"zbox.{conf.box_name}.{filename}"
     tmp_file = Path(f"/tmp/{wrapper_name}")
     tmp_file.unlink(missing_ok=True)
     if run_command([docker_cmd, "cp", f"{conf.box_name}:{file}", str(tmp_file)],
-                   exit_on_error=False, error_msg=f"file copy of '{package}'") != 0:
-        return box_config
+                   exit_on_error=False, error_msg=f"copying of file from '{package}'") != 0:
+        return
     try:
-        # read the container configuration for [appflags] section
-        if not box_config:
-            with io.StringIO(box_conf) as box_conf_fd:
-                box_config = ini_file_reader(box_conf_fd, interpolation=None,
-                                             case_sensitive=False)  # case-insensitive
-        appflags: Optional[SectionProxy] = None
-        if box_config.has_section("appflags"):
-            appflags = box_config["appflags"]
         # check for additional flags to be added
-        if appflags and (flags := appflags.get(filename.removesuffix(".desktop"))):
+        if app_flags and (flags := app_flags.get(filename.removesuffix(".desktop"))):
             repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3 {flags}\4"
         else:
             repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3\4"
@@ -300,11 +325,9 @@ def _wrap_desktop_file(filename: str, file: str, package: str, exec_re: re.Patte
     finally:
         tmp_file.unlink(missing_ok=True)
 
-    return box_config
-
 
 def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
-                     wrapper_files: list[str]) -> bool:
+                     app_flags: Optional[SectionProxy], wrapper_files: list[str]) -> bool:
     """
     For an executable, create a wrapper executable that invokes "docker/podman exec".
 
@@ -312,6 +335,7 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     :param file: full path of the executable file being wrapped
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
+    :param app_flags: the [app_flags] section from the container configuration as a `SectionProxy`
     :param wrapper_files: the accumulated list of all wrapper files so far
 
     :return: true if a wrapper for executable file was created else false if skipped by the user
@@ -323,8 +347,10 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
         if resp.lower() != "y":
             print_warn(f"Skipping local wrapper for {file}")
             return False
+    # check for additional flags to be added
+    flags = app_flags.get(filename, "") if app_flags else ""
     exec_content = ("#!/bin/sh\n",
-                    f'exec {docker_cmd} exec -it {conf.box_name} "{file}" "$@"')
+                    f'exec {docker_cmd} exec -it {conf.box_name} "{file}" {flags} "$@"')
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)

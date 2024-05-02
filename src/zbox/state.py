@@ -7,10 +7,9 @@ import re
 import sqlite3
 from configparser import ConfigParser
 from contextlib import closing
-from io import StringIO
-from typing import Optional
-
 from dataclasses import dataclass
+from io import StringIO
+from typing import Optional, Union
 
 from .env import Environ
 
@@ -25,12 +24,13 @@ class RuntimeConfiguration:
         distribution: the Linux distribution used when creating the container
         shared_root: the local shared root directory if `shared_root` flag is enabled for
                      the container (see `shared_root` key in zbox/conf/profiles/basic.ini)
-        ini_config: the resolved configuration of the container in INI format as a string
+        ini_config: the resolved configuration of the container in INI format as a string or
+                    a `ConfigParser` object
     """
     name: str
     distribution: str
     shared_root: str
-    ini_config: str
+    ini_config: Union[str, ConfigParser]
 
 
 class ZboxStateManagement:

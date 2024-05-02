@@ -3,7 +3,7 @@
 
 [DESIGN]
 # Maximum number of arguments for function / method
-max-args = 12 # EDIT: increased from 9 to 12
+max-args = 15 # EDIT: increased from 9 to 15
 # Maximum number of locals for function / method body
 max-locals = 30 # EDIT: increased from 19 to 30
 # Maximum number of return / yield for function / method body

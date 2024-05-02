@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 import ijson  # type: ignore
 
 from zbox.cmd import run_command
-from zbox.print import fgcolor, print_color, print_error, print_warn
+from zbox.print import print_error, print_notice, print_warn
 
 _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
 _PKG_CACHE_SUBDIR = os.path.basename(__file__).removesuffix(".py")
@@ -39,8 +39,7 @@ def main_argv(argv: list[str]) -> None:
     # i.e. the package and its new dependencies skipping the already installed dependencies,
     # otherwise the list can be too long and become pointless for the end-user
 
-    print_color(f"Searching dependencies of '{args.package}' in base Arch repositories",
-                fg=fgcolor.orange)
+    print_notice(f"Searching dependencies of '{args.package}' in base Arch repositories")
     # first get the list of all installed packages to eliminate installed packages
     # (include their provides too)
     installed_packages = set(
@@ -138,7 +137,7 @@ def find_opt_deps(package: str, installed: set[str],
     # search all_packages to obtain the required and optional dependencies
     if not (alternates := all_packages.get(package)):
         if level == 1:
-            print_color(f"Searching dependencies of '{package}' in AUR", fg=fgcolor.orange)
+            print_notice(f"Searching dependencies of '{package}' in AUR")
             # fetch AUR metadata, populate into all_packages and try again
             refresh_aur_metadata()
             # if AUR metadata file is broken, then refresh it and try again

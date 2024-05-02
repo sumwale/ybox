@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import time
+from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
 from importlib.resources import files
 from pathlib import Path
@@ -19,12 +20,15 @@ from zbox.cmd import PkgMgr, ZboxLabel, get_docker_command, run_command, verify_
 from zbox.config import Consts, StaticConfiguration
 from zbox.env import Environ, PathName
 from zbox.filelock import FileLock
+from zbox.pkg.inst import install_package
 from zbox.print import bgcolor, fgcolor, print_color, print_error, print_info, print_warn
-from zbox.state import ZboxStateManagement
+from zbox.run.pkg import parse_args as pkg_parse_args
+from zbox.state import RuntimeConfiguration, ZboxStateManagement
 from zbox.util import EnvInterpolation, NotSupportedError, config_reader, ini_file_reader, \
     select_item_from_menu
 
 __EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
+__DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
 
 
 # Note: deliberately not using os.path.join for joining paths since the code only works on
@@ -60,7 +64,8 @@ def main_argv(argv: list[str]) -> None:
 
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the profile before any actions to ensure it is in proper shape
-    shared_root, config = process_sections(profile, conf, distro_config, docker_full_args)
+    shared_root, config, apps_with_deps = process_sections(profile, conf, distro_config,
+                                                           docker_full_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -156,10 +161,21 @@ def main_argv(argv: list[str]) -> None:
     sys.stdout.flush()
     wait_for_container(docker_cmd, conf)
 
-    # finally add the state
+    # finally add the state and register the installed packages
     with ZboxStateManagement(env) as state:
-        state.register_container(box_name, distro,
-                                 conf.shared_root_host_dir if shared_root else "", config)
+        shared_root_dir = conf.shared_root_host_dir if shared_root else ""
+        state.register_container(box_name, distro, shared_root_dir, config)
+        if apps_with_deps:
+            pkgmgr = distro_config["pkgmgr"]
+            runtime_conf = RuntimeConfiguration(box_name, distro, shared_root_dir, config)
+            for app, deps in apps_with_deps.items():
+                pkg_args = ["install", "-z", box_name, "-q", "-o", "-c"]
+                if deps:
+                    pkg_args.append("-w")
+                    pkg_args.append(",".join(deps))
+                pkg_args.append(app)
+                parsed_args = pkg_parse_args(pkg_args)
+                install_package(parsed_args, pkgmgr, docker_cmd, conf, runtime_conf, state)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -275,7 +291,7 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> Tu
 
 
 def process_sections(profile: PathName, conf: StaticConfiguration, distro_config: ConfigParser,
-                     docker_args: list[str]) -> Tuple[bool, ConfigParser]:
+                     docker_args: list[str]) -> Tuple[bool, ConfigParser, dict[str, list[str]]]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
     # Skip environment variable substitution for the "configs" section since the values
@@ -287,6 +303,7 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
     shared_root = False
     # hard links are false by default
     config_hardlinks = False
+    apps_with_deps: dict[str, list[str]] = {}
     # finally process all the sections and the keys forming the docker/podman command-line
     for section in config.sections():
         if section == "base":
@@ -301,11 +318,11 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
         elif section == "configs":
             process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
         elif section == "apps":
-            process_apps_section(config["apps"], conf, distro_config)
-        elif section not in ("appflags", "startup"):
+            apps_with_deps = process_apps_section(config["apps"], conf, distro_config)
+        elif section not in ("app_flags", "startup"):
             raise NotSupportedError(f"Unknown section [{section}] in '{profile}' "
                                     "or one of its includes")
-    return shared_root, config
+    return shared_root, config, apps_with_deps
 
 
 def process_base_section(base_section: SectionProxy, profile: PathName,
@@ -529,8 +546,9 @@ def process_env_section(env_section: SectionProxy, args: list[str]) -> None:
 
 
 def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
-                         distro_config: ConfigParser) -> None:
-    # first update the mirrors
+                         distro_config: ConfigParser) -> dict[str, list[str]]:
+    if len(apps_section) == 0:
+        return {}
     pkgmgr = distro_config["pkgmgr"]
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
@@ -540,21 +558,30 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
         print_color("Skipping app installation since no 'pkgmgr.install' has "
                     "been defined in distro.ini or is empty",
                     fg=fgcolor.lightgray, bg=bgcolor.red)
-        return
+        return {}
     # write pkgmgr.conf for entrypoint.sh
     with open(f"{conf.scripts_dir}/pkgmgr.conf", "w", encoding="utf-8") as pkg_fd:
         pkg_fd.write(f"PKGMGR_INSTALL='{install_cmd}'\n")
         pkg_fd.write(f"PKGMGR_CLEANUP='{cleanup_cmd}'\n")
-    dep_suffix = ":dep"
+    apps_with_deps = defaultdict[str, list[str]](list[str])
+
+    def capture_dep(match: re.Match) -> str:
+        dep = match.group(1)
+        apps_with_deps[match.group(2)].append(dep)
+        return dep
+
     with open(conf.app_list, "w", encoding="utf-8") as apps_fd:
         for key in apps_section:
             apps = [app.strip() for app in apps_section[key].split(",")]
-            deps = [dep[:len(dep) - len(dep_suffix)] for dep in apps if dep.endswith(dep_suffix)]
+            deps = [capture_dep(match) for dep in apps if (match := __DEP_SUFFIX.match(dep))]
             if deps:
-                apps = [app for app in apps if not app.endswith(dep_suffix)]
+                apps = [app for app in apps if not __DEP_SUFFIX.match(app)]
                 apps_fd.write(f"{opt_dep_flag} {' '.join(deps)}\n")
             if apps:
                 apps_fd.write(f"{' '.join(apps)}\n")
+                for app in apps:
+                    assert apps_with_deps[app] is not None  # insert with empty list if absent
+    return apps_with_deps
 
 
 # The shutil.copytree(...) method does not work correctly for "symlinks=False" (or at least

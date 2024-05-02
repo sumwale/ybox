@@ -67,6 +67,17 @@ def print_warn(msg: str, end: str = "\n", file=None):
     print_color(msg, fg=fgcolor.purple, end=end, file=file)
 
 
+def print_notice(msg: str, end: str = "\n", file=None):
+    """
+    Display a string in orange foreground (and no background change).
+
+    :param msg: the string to be displayed
+    :param end: the terminating string which is newline by default (or can be empty for example)
+    :param file: the text-mode file object to use for writing (defaults to `sys.stdout`)
+    """
+    print_color(msg, fg=fgcolor.orange, end=end, file=file)
+
+
 def print_info(msg: str, end: str = "\n", file=None):
     """
     Display an informational string in blue foreground (and no background change).

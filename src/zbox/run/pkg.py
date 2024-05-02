@@ -46,7 +46,8 @@ def main_argv(argv: list[str]) -> None:
             if (container_name := select_item_from_menu(containers)) is None:
                 sys.exit(1)
 
-    print_info(f"Running the operation on '{container_name}'", file=sys.stderr)
+    if not args.quiet:
+        print_info(f"Running the operation on '{container_name}'", file=sys.stderr)
     verify_zbox_state(docker_cmd, container_name, ["running"], error_msg=" active ")
 
     env = Environ()
@@ -67,16 +68,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Package management across zbox containers")
     operations = parser.add_subparsers(title="Operations", required=True, metavar="OPERATION",
                                        help="DESCRIPTION")
-    add_install(operations.add_parser("install", help="install a package with dependencies"))
-    add_uninstall(operations.add_parser("uninstall", help="uninstall a package and "
-                                                          "optionally its dependencies"))
-    add_update(operations.add_parser("update", help="update some or all packages"))
-    add_list(operations.add_parser("list", help="list installed packages"))
+    add_install(add_subparser(operations, "install", "install a package with dependencies"))
+    add_uninstall(add_subparser(operations, "uninstall", "uninstall a package and "
+                                                         "optionally its dependencies"))
+    add_update(add_subparser(operations, "update", "update some or all packages"))
+    add_list(add_subparser(operations, "list", "list installed packages"))
     # parser.add_argument("operation", type=str,
     #                    choices=("install", "uninstall", "update", "list", "info", "search",
     #                             "mark", "clean", "repair"),
     #                    help="the package operation to perform")
     return parser.parse_args(argv)
+
+
+# noinspection PyProtectedMember
+def add_subparser(operations: argparse._SubParsersAction, name: str,
+                  hlp: str) -> argparse.ArgumentParser:
+    subparser = operations.add_parser(name, help=hlp)
+    add_common_args(subparser)
+    return subparser
 
 
 def add_common_args(subparser: argparse.ArgumentParser) -> None:
@@ -92,9 +101,16 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_install(subparser: argparse.ArgumentParser) -> None:
-    add_common_args(subparser)
     subparser.add_argument("-o", "--skip-opt-deps", action="store_true",
                            help="skip installation of optional dependencies (or recommendations)")
+    subparser.add_argument("-w", "--with-opt-deps", type=str,
+                           help="provide comma-separated optional dependencies to install "
+                                "(in which case user will not be prompted to select them)")
+    subparser.add_argument("-l", "--add-dep-wrappers", action="store_true",
+                           help="create local wrapper desktop and executables for the newly "
+                                "installed package dependencies too (both required and optional)")
+    subparser.add_argument("-c", "--check-package", action="store_true",
+                           help="check for existing package before actual installation")
     subparser.add_argument("-s", "--skip-executables", action="store_true",
                            help="skip creating wrappers for invoking executables installed by "
                                 "the package; default is to create wrapper executables in user's "
@@ -109,7 +125,6 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_uninstall(subparser: argparse.ArgumentParser) -> None:
-    add_common_args(subparser)
     subparser.add_argument("-p", "--purge", action="store_true",
                            help="remove everything including system configuration files "
                                 "and/or data files of the package")
@@ -120,7 +135,6 @@ def add_uninstall(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_update(subparser: argparse.ArgumentParser) -> None:
-    add_common_args(subparser)
     subparser.add_argument("packages", nargs="*",
                            help="the packages to update if provided, else update the entire "
                                 "installation of the container (which will end up updating all "
@@ -129,7 +143,6 @@ def add_update(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_list(subparser: argparse.ArgumentParser) -> None:
-    add_common_args(subparser)
     subparser.add_argument("-a", "--all", action="store_true",
                            help="list all packages installed in the container including those "
                                 "not managed by 'zbox-pkg'; when multiple containers share the "
