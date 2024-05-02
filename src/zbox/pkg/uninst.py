@@ -19,9 +19,9 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
     """
     Uninstall package specified by `args.package` on a zbox container with given docker/podman
     command. Additional flags honored are `args.quiet` to bypass user confirmation during
-    uninstall, `args.purge` to remove everything related to the package including system
-    configuration files and/or data files, `args.remove_deps` to remove all orphaned
-    dependencies of the package (including required and optional dependencies).
+    uninstall, `args.keep_config_files` to keep the system configuration and/or data files
+    of the package, `args.skip_deps` to skip removal of all orphaned dependencies of the package
+    (including required and optional dependencies).
 
     :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
@@ -32,10 +32,10 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
 
     :return: integer exit status of uninstall command where 0 represents success
     """
-    package: str = args.package
+    package = str(args.package)
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value] if args.quiet else ""
-    purge_flag = pkgmgr[PkgMgr.PURGE_FLAG.value] if args.purge else ""
-    remove_deps_flag = pkgmgr[PkgMgr.REMOVE_DEPS_FLAG.value] if args.remove_deps else ""
+    purge_flag = "" if args.keep_config_files else pkgmgr[PkgMgr.PURGE_FLAG.value]
+    remove_deps_flag = "" if args.skip_deps else pkgmgr[PkgMgr.REMOVE_DEPS_FLAG.value]
     uninstall_cmd = pkgmgr[PkgMgr.UNINSTALL.value].format(quiet=quiet_flag, purge=purge_flag,
                                                           remove_deps=remove_deps_flag)
     check_cmd = pkgmgr[PkgMgr.INFO.value]

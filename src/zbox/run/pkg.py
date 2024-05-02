@@ -125,11 +125,10 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_uninstall(subparser: argparse.ArgumentParser) -> None:
-    subparser.add_argument("-p", "--purge", action="store_true",
-                           help="remove everything including system configuration files "
-                                "and/or data files of the package")
-    subparser.add_argument("-r", "--remove-deps", action="store_true",
-                           help="uninstall orphaned dependencies in addition to the package")
+    subparser.add_argument("-k", "--keep-config-files", action="store_true",
+                           help="keep system configuration and/or data files of the package")
+    subparser.add_argument("-s", "--skip-deps", action="store_true",
+                           help="skip uninstallation of the orphaned dependencies of the package")
     subparser.add_argument("package", type=str, help="the package to uninstall")
     subparser.set_defaults(func=uninstall_package)
 
