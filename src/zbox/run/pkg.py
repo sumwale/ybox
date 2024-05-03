@@ -10,6 +10,7 @@ from zbox.config import StaticConfiguration
 from zbox.env import Environ
 from zbox.pkg.inst import install_package
 from zbox.pkg.list import list_packages
+from zbox.pkg.search import search_packages
 from zbox.pkg.uninst import uninstall_package
 from zbox.pkg.update import update_package
 from zbox.print import print_error, print_info
@@ -73,6 +74,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                                                          "optionally its dependencies"))
     add_update(add_subparser(operations, "update", "update some or all packages"))
     add_list(add_subparser(operations, "list", "list installed packages"))
+    add_search(add_subparser(operations, "search",
+                             "search repository for packages with matching string"))
     # parser.add_argument("operation", type=str,
     #                    choices=("install", "uninstall", "update", "list", "info", "search",
     #                             "mark", "clean", "repair"),
@@ -158,3 +161,13 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
                            help="show some package details including version, description and "
                                 "whether it is a dependency or a top-level package")
     subparser.set_defaults(func=list_packages)
+
+
+def add_search(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-f", "--full", action="store_true",
+                           help="search in package descriptions in addition to the package names")
+    subparser.add_argument("-o", "--official", action="store_true",
+                           help="search only in the official repositories and not the extra ones "
+                                "(e.g. skip AUR repository on Arch Linux)")
+    subparser.add_argument("search", nargs="+", help="one or more search terms")
+    subparser.set_defaults(func=search_packages)

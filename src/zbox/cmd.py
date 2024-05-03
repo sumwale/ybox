@@ -33,6 +33,10 @@ class PkgMgr(str, Enum):
     LIST_LONG = "list_long"
     LIST_ALL_LONG = "list_all_long"
     LIST_FILES = "list_files"
+    SEARCH = "search"
+    SEARCH_FULL = "search_full"
+    SEARCH_QUIET_FLAG = "search_quiet_flag"
+    SEARCH_OFFICIAL_FLAG = "search_official_flag"
 
 
 class ZboxLabel(str, Enum):

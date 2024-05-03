@@ -132,7 +132,7 @@ all the available options with detailed comments. There are a few more detailed 
 in the `src/zbox/conf/profiles/examples` directory.
 
 
-### Install/uninstall/list packages
+### Install/uninstall/list/search packages
 
 Install a new package with `zbox-pkg` like firefox below:
 
@@ -178,6 +178,18 @@ Will list all the distribution packages in the container including those not ins
 zbox-pkg list -v
 ```
 Will show more details of the packages (combine with -a/-s as required)
+
+Search the repositories for packages with names matching search terms:
+
+```sh
+zbox-pkg search intellij
+```
+
+Search the repositories for packages with names or descriptions matching search terms:
+
+```sh
+zbox-pkg search intellij -f
+```
 
 
 ### List the available containers
