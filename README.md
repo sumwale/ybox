@@ -92,19 +92,19 @@ In future, the installer will take care of setting all of these up.
 
 Now you can simply go to the repository and run the `zbox-create` and other utilities from
 the `src` directory of the repository checkout. For convenience you can symlink these to
-your ~/.local/bin directory which should be in PATH in modern Linux distributions:
+your `~/.local/bin` directory which should be in PATH in modern Linux distributions:
 
 ```sh
 ln -s <full path of checkout zbox directory>/src/zbox-* ~/.local/bin/
 ```
 
-All the `zbox-*` utilities will show detailed help with the `-h` or `--help` option.
+All the `zbox-*` utilities will show detailed help with the `-h`/`--help` option.
 
 
 ## Usage
 
 The basic workflow consists of setting up one or more containers, installing/removing/...
-packages in those containers, opening a shell into a container for more "direct" usage.
+packages in those containers and opening a shell into a container for more "direct" usage.
 
 You can also destroy the containers, list them, see their logs, or restart them using
 convenient utilities.
@@ -147,7 +147,7 @@ to choose from among them which may add additional features to the package.
 
 The installation will also create wrapper desktop files in `~/.local/share/applications`
 and executables in `~/.local/bin` so you can execute the newly install application binaries
-from your desktop environment's application menu or from command-line.
+from your desktop environment's application menu and/or from command-line.
 
 Likewise you can uninstall all the changes (including the optional packages chosen before):
 

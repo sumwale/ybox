@@ -84,6 +84,8 @@ def process() -> None:
             req_by = __VAL_RE.sub("", line).rstrip()
         elif line.startswith("Optional For"):
             opt_for = __VAL_RE.sub("", line).rstrip()
+            # FIXME: fix this to be after 'Name:' if previous name is non-empty (and at the end)
+            # because opt_for can be multi-line which will be skipped if processed here
             dep_of = format_dep_of(req_by, opt_for, description, plain_sep)
             if plain_sep:
                 print(f"{name}{plain_sep}{version}{plain_sep}{description}{plain_sep}{dep_of}")
