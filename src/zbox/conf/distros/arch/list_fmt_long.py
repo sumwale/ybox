@@ -35,12 +35,12 @@ def format_dep_of(req_by: str, opt_for: str, description: str, plain_sep: str) -
     dep_of_total_width = 0
     if req_by == "None":
         req_by = ""
-    else:
+    elif req_by:
         req_by = __WS_RE.sub(" ", req_by)
         dep_of_total_width += len(req_by) + 6  # +6 due to being surrounded by 'req()'
     if opt_for == "None":
         opt_for = ""
-    else:
+    elif opt_for:
         opt_for = __WS_RE.sub(" ", opt_for)
         dep_of_total_width += len(opt_for) + 6  # +6 due to being surrounded by 'opt()'
 
@@ -73,8 +73,23 @@ def process() -> None:
     table: list[Tuple[str, str, str, str]] = []
     plain_sep = parse_separator()
     name = version = description = req_by = opt_for = ""
+    req_by_start = opt_for_start = False
+
+    def format_package() -> None:
+        """format details of a package as a table or a plain line with given separator"""
+        # because opt_for can be multi-line which will be skipped if processed here
+        dep_of = format_dep_of(req_by, opt_for, description, plain_sep)
+        if plain_sep:
+            print(f"{name}{plain_sep}{version}{plain_sep}{description}{plain_sep}{dep_of}")
+        else:
+            table.append((f"{FG_NAME}{name}{FG_NONE}", f"{FG_VER}{version}{FG_NONE}",
+                          f"{FG_DESC}{description}{FG_NONE}", dep_of))
+
     for line in sys.stdin:
         if line.startswith("Name"):
+            if name:
+                format_package()
+                req_by = opt_for = ""
             name = __VAL_RE.sub("", line).rstrip()
         elif line.startswith("Version"):
             version = __VAL_RE.sub("", line).rstrip()
@@ -82,25 +97,23 @@ def process() -> None:
             description = __VAL_RE.sub("", line).rstrip()
         elif line.startswith("Required By"):
             req_by = __VAL_RE.sub("", line).rstrip()
+            req_by_start = True
+            opt_for_start = False
         elif line.startswith("Optional For"):
             opt_for = __VAL_RE.sub("", line).rstrip()
-            # FIXME: fix this to be after 'Name:' if previous name is non-empty (and at the end)
-            # because opt_for can be multi-line which will be skipped if processed here
-            dep_of = format_dep_of(req_by, opt_for, description, plain_sep)
-            if plain_sep:
-                print(f"{name}{plain_sep}{version}{plain_sep}{description}{plain_sep}{dep_of}")
-            else:
-                table.append((f"{FG_NAME}{name}{FG_NONE}", f"{FG_VER}{version}{FG_NONE}",
-                              f"{FG_DESC}{description}{FG_NONE}", dep_of))
-            req_by = ""
-            opt_for = ""
+            opt_for_start = True
+            req_by_start = False
         elif line and line[0].isspace():
             # "Required By" and "Optional For" can have multiline output
-            if req_by:
+            if req_by_start:
                 req_by += line.rstrip()
-            elif opt_for:
+            elif opt_for_start:
                 opt_for += line.rstrip()
+        elif req_by_start or opt_for_start:
+            req_by_start = opt_for_start = False
 
+    if name:
+        format_package()
     if not plain_sep:
         try:
             print(tabulate(table, headers=(f"{FG_NAME}Name{FG_NONE}", f"{FG_VER}Version{FG_NONE}",
