@@ -23,15 +23,15 @@ security, features off to minimum required for those set of applications.
 - simple creation of docker/podman containers hosting Linux distributions (Arch Linux for now)
   using `zbox-create` with interactive menus
 - special emphasis on security to lock down applications as much as possible to avoid
-  "malicious" apps, backdoors etc from affecting your main work space, so you can play/test
+  "malicious" apps, backdoors etc., from affecting your main work space, so you can play/test
   software/games/... to your heart's content in these containers
-- pre-built profiles for common uses so you can just run `zbox-create`, select profile and
+- pre-built profiles for common uses, so you can just run `zbox-create`, select profile and
   be done with it; or advanced users can micro-customize a profile ini file as required
 - allow for sharing root directories (like /usr, /etc) among various containers to reduce
   disk and memory usage (default behaviour in the shipped profiles)
 - simple specification to list configuration files that you want to share with the containers
-  in readonly mode (e.g. the basic.ini lists .bashrc, .vimrc etc)
-- completely isolated home directories in the containers but you can still precisely control
+  in readonly mode (e.g. the basic.ini lists .bashrc, .vimrc etc.)
+- completely isolated home directories in the containers, but you can still precisely control
   which directories to mount for sharing between the host and guests
 - a high level generic package manager `zbox-pkg` with simple install/uninstall/... commands
   that uses the distribution package manager for the operation, creates wrapper desktop and
@@ -63,18 +63,18 @@ few things like systemd.
 
 ## Installation
 
-If you have cloned the repository, then no further installation is required and you can
-run the utilities in `src` directory directly off the repository. In the near future this
-will also be published on `pypi.org`, so you will be able to install with `pip install zbox`.
+If you have cloned the repository, then no further installation is required to run the utilities
+in `src` directory which can be done directly off the repository. In the near future this will
+also be published on `pypi.org`, so you will be able to install with `pip install zbox`.
 
-As of now you need the following:
+As of now the following is required:
 
 - clone the repo: `git clone https://github.com/sumwale/zbox.git`
 - rootless podman or docker
   * for podman this only needs installation of `podman`, `slirp4netns` and `buildah` packages,
     then setup /etc/subuid and /etc/subgid as noted here:
     [/etc/subuid and /etc/subgid configuration](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md#etcsubuid-and-etcsubgid-configuration)
-    (ubuntu, for example will also setup subuid/subgid for current user automatically;
+    (ubuntu, for example will also set up subuid/subgid for current user automatically;
      for ubuntu 24.04 you may also need an apparmor profile as noted in the docker docs next)
   * for docker follow the instructions in the official [docs](https://docs.docker.com/engine/security/rootless/)
 - python version 3.9 or higher -- all fairly recent Linux distributions should satisfy this
@@ -88,10 +88,10 @@ As of now you need the following:
   [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html); for example on ubuntu with podman configure the apt repository
   and install the package as noted in the link, then run `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` (this will need to be repeated if nvidia driver version is upgraded)
 
-In future, the installer will take care of setting all of these up.
+In the future, installer will take care of setting all of these up.
 
 Now you can simply go to the repository and run the `zbox-create` and other utilities from
-the `src` directory of the repository checkout. For convenience you can symlink these to
+the `src` directory of the repository checkout. For convenience, you can symlink these to
 your `~/.local/bin` directory which should be in PATH in modern Linux distributions:
 
 ```sh
@@ -140,8 +140,8 @@ Install a new package with `zbox-pkg` like firefox below:
 zbox-pkg install firefox
 ```
 
-If there are more than one containers you have created, then this will allow you to choose
-one among them for the install. After the main package installation, it will also list
+If you have created multiples containers, then this will allow you to choose one among
+them for the installation. After the main package installation, it will also list
 the optional dependencies of the installed package (only till second level) and allow you
 to choose from among them which may add additional features to the package.
 
@@ -149,7 +149,7 @@ The installation will also create wrapper desktop files in `~/.local/share/appli
 and executables in `~/.local/bin` so you can execute the newly install application binaries
 from your desktop environment's application menu and/or from command-line.
 
-Likewise you can uninstall all the changes (including the optional packages chosen before):
+Likewise, you can uninstall all the changes (including the optional packages chosen before):
 
 ```sh
 zbox-pkg uninstall firefox
@@ -220,9 +220,9 @@ zbox-destroy zbox-arch_apps
 ```
 
 Will destroy the `apps` container created in the example before. This does not delete the
-$HOME files, nor does it delete the shared root directory (if enabled). Hence if you create
+$HOME files, nor does it delete the shared root directory (if enabled). Hence, if you create
 a new container having the same shared root, then it will inherit everything installed
-previously. Likewise if you create the container with the same profile again, then it
+previously. Likewise, if you create the container with the same profile again, then it
 will also have the $HOME as before if you do not explicitly delete the directories
 in `~/.local/share/zbox`.
 
@@ -233,7 +233,7 @@ in `~/.local/share/zbox`.
 ln -s <full path of checkout zbox directory>/src/zbox/conf/completions/zbox.fish ~/.config/fish/conf.d/
 ```
 This will allow auto complete for zbox container names, profiles among others.
-Auto-complete for bash/zsh will be added in future.
+Auto-complete for bash/zsh will be added in the future.
 
 
 ### Running a command in a container
@@ -261,7 +261,7 @@ A shell on a container will act like a native Linux distribution environment for
 The one prominent missing thing is systemd which is not enabled deliberately since it requires
 highly elevated privileges. It is strongly recommended not to try and somehow enable systemd
 in the containers lest it will bypass most of the security provided by a container environment.
-Instead you should just start any daemons the normal way as required. You will also need
+Instead, you should just start any daemons the normal way as required. You will also need
 to ensure that the daemons don't try and use journald for the logging, rather use the
 normal /var/log based logging. Overall these containers are not meant for running system
 daemons and similar low level utilities which should be the job of your host system.
