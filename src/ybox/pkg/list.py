@@ -34,14 +34,13 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     :return: integer exit status of install command where 0 represents success
     """
     plain_sep = f"'{args.plain_separator}'" if args.plain_separator else "''"
-    if args.all:
+    if args.os_pkgs:
         # package list and details will all be fetched using distribution's package manager
         if args.verbose:
-            list_cmd = pkgmgr[PkgMgr.LIST_ALL_LONG.value] if args.show_dependents else pkgmgr[
+            list_cmd = pkgmgr[PkgMgr.LIST_ALL_LONG.value] if args.all else pkgmgr[
                 PkgMgr.LIST_LONG.value]
         else:
-            list_cmd = pkgmgr[PkgMgr.LIST_ALL.value] if args.show_dependents else pkgmgr[
-                PkgMgr.LIST.value]
+            list_cmd = pkgmgr[PkgMgr.LIST_ALL.value] if args.all else pkgmgr[PkgMgr.LIST.value]
         list_cmd = list_cmd.format(packages="", plain_separator=plain_sep)
         if shared_containers := get_other_shared_containers(conf.box_name,
                                                             runtime_conf.shared_root, state):
@@ -50,7 +49,7 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     else:
         # package list will be fetched from the state database while the details, if required,
         # will be fetched using the distribution's package manager
-        package_type = "%" if args.show_dependents else ""
+        package_type = "%" if args.all else ""
         packages = " ".join(state.get_packages(conf.box_name, package_type=package_type))
         if not packages:
             return 0
