@@ -1,5 +1,5 @@
 """
-Methods for package installation on a running zbox container.
+Methods for package installation on an active zbox container.
 """
 
 import argparse

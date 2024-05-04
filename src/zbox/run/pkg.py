@@ -28,11 +28,11 @@ def main_argv(argv: list[str]) -> None:
     container_name = args.zbox
 
     if not container_name:
-        # check running containers
+        # check active containers
         containers = str(run_command([docker_cmd, "container", "ls", "--format={{ .Names }}",
                                       f"--filter=label={ZboxLabel.CONTAINER_PRIMARY}"],
                                      capture_output=True, error_msg="container ls")).splitlines()
-        # use running container if there is only one of them
+        # use the active container if there is only one of them
         if len(containers) == 1:
             container_name = containers[0]
         elif not containers:
@@ -96,11 +96,11 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
                            help="path of docker/podman if not in /usr/bin")
     subparser.add_argument("-z", "--zbox", type=str,
                            help="the zbox container to use for package operations else the user "
-                                "is prompted to select a container from among the running ones")
+                                "is prompted to select a container from among the active ones")
     subparser.add_argument("-q", "--quiet", action="store_true",
                            help="proceed without asking any questions; the container selection "
                                 "is also skipped and it is assumed that there is only one "
-                                "running container which is selected else the operation fails")
+                                "active container which is selected else the operation fails")
 
 
 def add_install(subparser: argparse.ArgumentParser) -> None:
@@ -164,6 +164,8 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_search(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-w", "--word", action="store_true",
+                           help="match given search terms as full words")
     subparser.add_argument("-f", "--full", action="store_true",
                            help="search in package descriptions in addition to the package names")
     subparser.add_argument("-o", "--official", action="store_true",

@@ -33,12 +33,16 @@ def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     """
     quiet_flag = pkgmgr[PkgMgr.SEARCH_QUIET_FLAG.value] if args.quiet else ""
     official = pkgmgr[PkgMgr.SEARCH_OFFICIAL_FLAG.value] if args.official else ""
+    word_start = word_end = ""
+    if args.word:
+        word_start = pkgmgr[PkgMgr.SEARCH_WORD_START_FLAG.value]
+        word_end = pkgmgr[PkgMgr.SEARCH_WORD_END_FLAG.value]
     search_terms: list[str] = args.search  # there will be at least one search term in the list
     search = pkgmgr[PkgMgr.SEARCH_FULL.value] if args.full else pkgmgr[PkgMgr.SEARCH.value]
     # quote the search terms for bash to properly see the full arguments if they contain spaces
     # or other special characters
-    search_cmd = search.format(quiet=quiet_flag, official=official,
-                               search="'" + "' '".join(search_terms) + "'")
+    search_cmd = search.format(quiet=quiet_flag, official=official, word_start=word_start,
+                               word_end=word_end, search="'" + "' '".join(search_terms) + "'")
     docker_args = [docker_cmd, "exec"]
     if sys.stdout.isatty():  # don't act as a terminal if it is being redirected
         docker_args.append("-it")

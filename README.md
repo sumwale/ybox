@@ -56,8 +56,8 @@ In this way this acts as a complete replacement of flatpak/snap while being able
 from way bigger software repositories, and with applications configured the way they are
 supposed to be in the original Linux distribution (which is only Arch Linux for now).
 The big difference being that these are just containers where you can open a shell
-(using `zbox-shell`) and learn/play as required, or micro-configure stuff. You will not
-notice much difference from a full Linux installation in the shell apart from missing
+(using `zbox-cmd`) and learn/play as required, or micro-configure stuff. You will not
+notice much difference from a full Linux installation in a shell apart from missing
 few things like systemd.
 
 
@@ -191,6 +191,12 @@ Search the repositories for packages with names or descriptions matching search 
 zbox-pkg search intellij -f
 ```
 
+You can also restrict the search to full word matches (can be combined with -f if required):
+
+```sh
+zbox-pkg search intellij -w
+```
+
 
 ### List the available containers
 
@@ -230,10 +236,19 @@ This will allow auto complete for zbox container names, profiles among others.
 Auto-complete for bash/zsh will be added in future.
 
 
-### Open a shell in a container
+### Running a command in a container
+
+The `zbox-cmd` runs `/bin/bash` in the container by default:
 
 ```sh
-zbox-shell zbox-arch_apps
+zbox-cmd zbox-arch_apps
+```
+
+You can run other commands instead of bash shell, but if those commands require options starting
+with a hyphen, then first end the options to `zbox-cmd` with a double hyphen:
+
+```sh
+zbox-cmd zbox-arch_apps -- ls -l
 ```
 
 The default profiles also link the .bashrc and starship configuration files from your host
@@ -242,8 +257,8 @@ host. These are linked in read-only mode, so if you want to change these auto-li
 configuration files inside the container, then you will need to create a copy from the symlink
 first (but then it will lose the link from the host $HOME).
 
-This shell will act like a native Linux distribution environment for most purposes. The one
-prominent missing thing is systemd which is not enabled deliberately since it requires
+A shell on a container will act like a native Linux distribution environment for most purposes.
+The one prominent missing thing is systemd which is not enabled deliberately since it requires
 highly elevated privileges. It is strongly recommended not to try and somehow enable systemd
 in the containers lest it will bypass most of the security provided by a container environment.
 Instead you should just start any daemons the normal way as required. You will also need

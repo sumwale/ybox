@@ -33,13 +33,13 @@ Homepage = "https://github.com/sumwale/zbox"
 Issues = "https://github.com/sumwale/zbox/issues"
 
 [project.scripts]
+zbox-cmd = "zbox.run.cmd:main"
 zbox-create = "zbox.run.create:main"
 zbox-destroy = "zbox.run.destroy:main"
 zbox-logs = "zbox.run.logs:main"
 zbox-ls = "zbox.run.ls:main"
 zbox-pkg = "zbox.run.pkg:main"
 zbox-restart = "zbox.run.restart:main"
-zbox-shell = "zbox.run.shell:main"
 
 [tool.setuptools]
 include-package-data = true

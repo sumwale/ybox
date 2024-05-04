@@ -30,7 +30,7 @@ def main_argv(argv: list[str]) -> None:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Show logs from a running or stopped zbox container")
+        description="Show logs from an active or stopped zbox container")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-f", "--follow", action="store_true",

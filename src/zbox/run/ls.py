@@ -32,7 +32,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="List zbox containers")
     parser.add_argument("-a", "--all", action="store_true",
                         help="show all containers including stopped and temporary ones; "
-                             "default is to show only running zbox containers and also skip "
+                             "default is to show only active zbox containers and also skip "
                              "any temporary containers spun by zbox-create")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")

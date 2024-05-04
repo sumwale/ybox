@@ -87,8 +87,8 @@ def main_argv(argv: list[str]) -> None:
     #    followed by the generic "entrypoint.sh" script which will create the configuration
     #    file links (from [configs] section), install required apps (from [apps] section),
     #    followed by invoking the startup scripts from the [startup] section.
-    # 4) The container is now ready to use so 'zbox-shell' will only do a docker/podman exec
-    #    of /bin/bash to open a shell.
+    # 4) The container is now ready to use so 'zbox-cmd' will only do a docker/podman exec
+    #    of /bin/bash to open a shell (or any given command).
     # 5) Mounts and environment variables are set up for step 3 which are automatically also
     #    available in step 4, and hence no special setup is required in step 4.
     #

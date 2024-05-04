@@ -1,5 +1,5 @@
 """
-Methods for uninstalling package uninstallation on a running zbox container.
+Methods for uninstalling package uninstallation on an active zbox container.
 """
 
 import argparse

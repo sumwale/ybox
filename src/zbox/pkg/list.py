@@ -1,5 +1,5 @@
 """
-List packages on a running zbox container.
+List packages on an active zbox container.
 """
 
 import argparse

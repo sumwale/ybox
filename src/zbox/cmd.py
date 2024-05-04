@@ -37,6 +37,8 @@ class PkgMgr(str, Enum):
     SEARCH_FULL = "search_full"
     SEARCH_QUIET_FLAG = "search_quiet_flag"
     SEARCH_OFFICIAL_FLAG = "search_official_flag"
+    SEARCH_WORD_START_FLAG = "search_word_start_flag"
+    SEARCH_WORD_END_FLAG = "search_word_end_flag"
 
 
 class ZboxLabel(str, Enum):

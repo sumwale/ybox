@@ -9,10 +9,12 @@ function __fish_zbox_complete_all_containers
 end
 
 function __fish_zbox_complete_distributions
-  if test -r ~/.config/zbox/distros/supported.list
-    /usr/bin/cat ~/.config/zbox/distros/supported.list
-  else if test -r ~/.local/lib/python3*/site-packages/zbox/conf/distros/supported.list
-    /usr/bin/cat ~/.local/lib/python3*/site-packages/zbox/conf/distros/supported.list
+  set user_supported ~/.config/zbox/distros/supported.list
+  set sys_supported ~/.local/lib/python3*/site-packages/zbox/conf/distros/supported.list
+  if test -r $user_supported
+    /usr/bin/cat $user_supported
+  else if test -r $sys_supported 2>/dev/null
+    /usr/bin/cat $sys_supported
   end
 end
 
@@ -42,10 +44,9 @@ complete -f -c zbox-restart -s h -l help -d "show help"
 complete -c zbox-restart -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -r
 complete -f -c zbox-restart -n "not __fish_seen_subcommand_from (__fish_zbox_complete_containers)" -a "(__fish_zbox_complete_all_containers)"
 
-complete -f -c zbox-shell -s h -l help -d "show help"
-complete -c zbox-shell -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -r
-complete -c zbox-shell -s s -l shell -d "run the given shell instead of /bin/bash" -r
-complete -f -c zbox-shell -n "not __fish_seen_subcommand_from (__fish_zbox_complete_containers)" -a "(__fish_zbox_complete_containers)"
+complete -f -c zbox-cmd -s h -l help -d "show help"
+complete -c zbox-cmd -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -r
+complete -f -c zbox-cmd -n "not __fish_seen_subcommand_from (__fish_zbox_complete_containers)" -a "(__fish_zbox_complete_containers)"
 
 
 set -l pkg_commands install uninstall update list info search mark clean repair
@@ -54,3 +55,4 @@ complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a in
 complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a uninstall -d "uninstall a package and optionally its dependencies"
 complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a update -d "update some or all packages"
 complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a list -d "list installed packages"
+complete -f -c zbox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a search -d "search repositories"

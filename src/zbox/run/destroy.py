@@ -38,10 +38,10 @@ def main_argv(argv: list[str]) -> None:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Stop and remove a running zbox container")
+    parser = argparse.ArgumentParser(description="Stop and remove an active zbox container")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-f", "--force", action="store_true",
                         help="force destroy the container using SIGKILL if required")
-    parser.add_argument("container_name", type=str, help="name of the running zbox")
+    parser.add_argument("container_name", type=str, help="name of the active zbox")
     return parser.parse_args(argv)

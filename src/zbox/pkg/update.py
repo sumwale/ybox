@@ -1,5 +1,5 @@
 """
-Update some or all packages on a running zbox container.
+Update some or all packages on an active zbox container.
 """
 
 import argparse
