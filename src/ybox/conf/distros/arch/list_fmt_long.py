@@ -25,7 +25,8 @@ except OSError:
 available_width = terminal_width - 12  # -12 is for the borders and padding
 
 # using ratio of 4:4:6:6 for the four columns
-nv_width = int(available_width * 4.0 / 20.0)
+name_width = int(available_width * 4.0 / 20.0)
+ver_width = int(available_width * 4.0 / 20.0)
 desc_width = int(available_width * 6.0 / 20.0)
 dep_of_width = int(available_width * 6.0 / 20.0)
 
@@ -51,15 +52,15 @@ def format_dep_of(req_by: str, opt_for: str, description: str, plain_sep: str) -
         if opt_for:
             dep_of_parts.append(f"opt({opt_for})")
     else:
-        # description is not trimmed, so can use up to it's size
+        # description is not trimmed and is shown multi-line, so use its size as an upper limit
         max_width = max(dep_of_width, len(description))
         if dep_of_total_width > max_width:
             trim_factor = (dep_of_total_width - max_width) / float(len(req_by) + len(opt_for))
             if req_by:
-                trim_size = int(trim_factor * len(req_by) + 0.5)
+                trim_size = int(trim_factor * len(req_by) + 0.5)  # round off to nearest int
                 req_by = req_by[:max(0, len(req_by) - trim_size - 3)] + "..."
             if opt_for:
-                trim_size = int(trim_factor * len(opt_for) + 0.5)
+                trim_size = int(trim_factor * len(opt_for) + 0.5)  # round off to nearest int
                 opt_for = opt_for[:max(0, len(opt_for) - trim_size - 3)] + "..."
         if req_by:
             dep_of_parts.append(f"{FG_REQ}req({req_by}){FG_NONE}")
@@ -77,7 +78,6 @@ def process() -> None:
 
     def format_package() -> None:
         """format details of a package as a table or a plain line with given separator"""
-        # because opt_for can be multi-line which will be skipped if processed here
         dep_of = format_dep_of(req_by, opt_for, description, plain_sep)
         if plain_sep:
             print(f"{name}{plain_sep}{version}{plain_sep}{description}{plain_sep}{dep_of}")
@@ -120,7 +120,7 @@ def process() -> None:
                                            f"{FG_DESC}Description{FG_NONE}",
                                            f"Dependency Of ({FG_REQ}req {FG_OPT}opt{FG_NONE})"),
                            tablefmt="rounded_grid",
-                           maxcolwidths=[nv_width, nv_width, desc_width, dep_of_width]))
+                           maxcolwidths=[name_width, ver_width, desc_width, dep_of_width]))
         except BrokenPipeError:  # ignore error if subsequent pipe to pager is broken
             pass
 
