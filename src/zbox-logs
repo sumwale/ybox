@@ -1,6 +1,0 @@
-#!/usr/bin/python3
-
-from zbox.run.logs import main
-
-if __name__ == "__main__":
-    main()

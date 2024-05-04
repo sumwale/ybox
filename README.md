@@ -21,11 +21,11 @@ security, features off to minimum required for those set of applications.
 ## Features
 
 - simple creation of docker/podman containers hosting Linux distributions (Arch Linux for now)
-  using `zbox-create` with interactive menus
+  using `ybox-create` with interactive menus
 - special emphasis on security to lock down applications as much as possible to avoid
   "malicious" apps, backdoors etc., from affecting your main work space, so you can play/test
   software/games/... to your heart's content in these containers
-- pre-built profiles for common uses, so you can just run `zbox-create`, select profile and
+- pre-built profiles for common uses, so you can just run `ybox-create`, select profile and
   be done with it; or advanced users can micro-customize a profile ini file as required
 - allow for sharing root directories (like /usr, /etc) among various containers to reduce
   disk and memory usage (default behaviour in the shipped profiles)
@@ -33,7 +33,7 @@ security, features off to minimum required for those set of applications.
   in readonly mode (e.g. the basic.ini lists .bashrc, .vimrc etc.)
 - completely isolated home directories in the containers, but you can still precisely control
   which directories to mount for sharing between the host and guests
-- a high level generic package manager `zbox-pkg` with simple install/uninstall/... commands
+- a high level generic package manager `ybox-pkg` with simple install/uninstall/... commands
   that uses the distribution package manager for the operation, creates wrapper desktop and
   executable files to invoke the container's executables, allows specifying additional
   optional dependencies you need with an application, and so on
@@ -44,9 +44,9 @@ applications with its AUR. So, for example, if you want to run the latest and gr
 Intellij IDEA community, all you need to do is:
 
 ```sh
-zbox-create
+ybox-create
 
-zbox-pkg install intellij-idea-community-edition
+ybox-pkg install intellij-idea-community-edition
 ```
 
 This will automatically create a wrapper desktop file that launches from the container, so
@@ -56,7 +56,7 @@ In this way this acts as a complete replacement of flatpak/snap while being able
 from way bigger software repositories, and with applications configured the way they are
 supposed to be in the original Linux distribution (which is only Arch Linux for now).
 The big difference being that these are just containers where you can open a shell
-(using `zbox-cmd`) and learn/play as required, or micro-configure stuff. You will not
+(using `ybox-cmd`) and learn/play as required, or micro-configure stuff. You will not
 notice much difference from a full Linux installation in a shell apart from missing
 few things like systemd.
 
@@ -65,11 +65,11 @@ few things like systemd.
 
 If you have cloned the repository, then no further installation is required to run the utilities
 in `src` directory which can be done directly off the repository. In the near future this will
-also be published on `pypi.org`, so you will be able to install with `pip install zbox-py`.
+also be published on `pypi.org`, so you will be able to install with `pip install ybox-py`.
 
 As of now the following is required:
 
-- clone the repo: `git clone https://github.com/sumwale/zbox.git`
+- clone the repo: `git clone https://github.com/sumwale/ybox.git`
 - rootless podman or docker
   * for podman this only needs installation of `podman`, `slirp4netns` and `buildah` packages,
     then setup /etc/subuid and /etc/subgid as noted here:
@@ -90,15 +90,15 @@ As of now the following is required:
 
 In the future, installer will take care of setting all of these up.
 
-Now you can simply go to the repository and run the `zbox-create` and other utilities from
+Now you can simply go to the repository and run the `ybox-create` and other utilities from
 the `src` directory of the repository checkout. For convenience, you can symlink these to
 your `~/.local/bin` directory which should be in PATH in modern Linux distributions:
 
 ```sh
-ln -s <full path of checkout zbox directory>/src/zbox-* ~/.local/bin/
+ln -s <full path of checkout ybox directory>/src/ybox-* ~/.local/bin/
 ```
 
-All the `zbox-*` utilities will show detailed help with the `-h`/`--help` option.
+All the `ybox-*` utilities will show detailed help with the `-h`/`--help` option.
 
 
 ## Usage
@@ -109,35 +109,35 @@ packages in those containers and opening a shell into a container for more "dire
 You can also destroy the containers, list them, see their logs, or restart them using
 convenient utilities.
 
-### Create a new zbox container
+### Create a new ybox container
 
 ```sh
-zbox-create
+ybox-create
 ```
 
 This will allow choosing from the available profiles. You can start with the basic `apps.ini`
-to try it out. The container will have a name like `zbox-<distro>_<profile>` by default like
-`zbox-arch_apps` for the `apps.ini` profile.
+to try it out. The container will have a name like `ybox-<distro>_<profile>` by default like
+`ybox-arch_apps` for the `apps.ini` profile.
 
-The `$HOME` directory of the container can be found in `~/.local/share/zbox/<container>/home`
-e.g. `~/.local/share/zbox/zbox-arch_apps/home` for the above example.
+The `$HOME` directory of the container can be found in `~/.local/share/ybox/<container>/home`
+e.g. `~/.local/share/ybox/ybox-arch_apps/home` for the above example.
 
 When shared root directory is enabled (which is the default in the shipped profiles), then
-it uses the common distribution path in `~/.local/share/zbox/ROOTS/<distribution>`
-i.e. `~/.local/share/zbox/ROOTS/arch` for the Arch Linux guests.
+it uses the common distribution path in `~/.local/share/ybox/ROOTS/<distribution>`
+i.e. `~/.local/share/ybox/ROOTS/arch` for the Arch Linux guests.
 
-For more advanced usage, you can copy from the available profiles in `src/zbox/conf/profiles`
-into `~/.config/zbox/profiles`, then edit as required. The `basic.ini` profile lists
+For more advanced usage, you can copy from the available profiles in `src/ybox/conf/profiles`
+into `~/.config/ybox/profiles`, then edit as required. The `basic.ini` profile lists
 all the available options with detailed comments. There are a few more detailed examples
-in the `src/zbox/conf/profiles/examples` directory.
+in the `src/ybox/conf/profiles/examples` directory.
 
 
 ### Install/uninstall/list/search packages
 
-Install a new package with `zbox-pkg` like firefox below:
+Install a new package with `ybox-pkg` like firefox below:
 
 ```sh
-zbox-pkg install firefox
+ybox-pkg install firefox
 ```
 
 If you have created multiples containers, then this will allow you to choose one among
@@ -152,71 +152,71 @@ from your desktop environment's application menu and/or from command-line.
 Likewise, you can uninstall all the changes (including the optional packages chosen before):
 
 ```sh
-zbox-pkg uninstall firefox
+ybox-pkg uninstall firefox
 ```
 
 List the installed packages:
 
 ```sh
-zbox-pkg list
+ybox-pkg list
 ```
-This will list all the packages explicitly installed using `zbox-pkg`.
+This will list all the packages explicitly installed using `ybox-pkg`.
 
 ```sh
-zbox-pkg list -s
+ybox-pkg list -s
 ```
 This will show the dependent packages chosen in addition to the main packages.
 
 ```sh
-zbox-pkg list -a
+ybox-pkg list -a
 ```
 Will list all the distribution packages in the container including those not installed by
-`zbox-pkg` (either installed in the base image, or installed later using the distribution
+`ybox-pkg` (either installed in the base image, or installed later using the distribution
     package manager directly)
 
 ```sh
-zbox-pkg list -v
+ybox-pkg list -v
 ```
 Will show more details of the packages (combine with -a/-s as required)
 
 Search the repositories for packages with names matching search terms:
 
 ```sh
-zbox-pkg search intellij
+ybox-pkg search intellij
 ```
 
 Search the repositories for packages with names or descriptions matching search terms:
 
 ```sh
-zbox-pkg search intellij -f
+ybox-pkg search intellij -f
 ```
 
 You can also restrict the search to full word matches (can be combined with -f if required):
 
 ```sh
-zbox-pkg search intellij -w
+ybox-pkg search intellij -w
 ```
 
 
 ### List the available containers
 
 ```sh
-zbox-ls
+ybox-ls
 ```
 
-will list the active zbox containers
+will list the active ybox containers
 
 ```sh
-zbox-ls -a
+ybox-ls -a
 ```
 
-will list all zbox containers including stopped ones
+will list all ybox containers including stopped ones
 
 
 ### Destroy a container
 
 ```sh
-zbox-destroy zbox-arch_apps
+ybox-destroy ybox-arch_apps
 ```
 
 Will destroy the `apps` container created in the example before. This does not delete the
@@ -224,31 +224,31 @@ $HOME files, nor does it delete the shared root directory (if enabled). Hence, i
 a new container having the same shared root, then it will inherit everything installed
 previously. Likewise, if you create the container with the same profile again, then it
 will also have the $HOME as before if you do not explicitly delete the directories
-in `~/.local/share/zbox`.
+in `~/.local/share/ybox`.
 
 
 **NOTE:** an auto-complete file for fish shell has been provided in
-`src/zbox/conf/completions/zbox.fish`, so you can link that to your fish config:
+`src/ybox/conf/completions/ybox.fish`, so you can link that to your fish config:
 ```sh
-ln -s <full path of checkout zbox directory>/src/zbox/conf/completions/zbox.fish ~/.config/fish/conf.d/
+ln -s <full path of checkout ybox directory>/src/ybox/conf/completions/ybox.fish ~/.config/fish/conf.d/
 ```
-This will allow auto complete for zbox container names, profiles among others.
+This will allow auto complete for ybox container names, profiles among others.
 Auto-complete for bash/zsh will be added in the future.
 
 
 ### Running a command in a container
 
-The `zbox-cmd` runs `/bin/bash` in the container by default:
+The `ybox-cmd` runs `/bin/bash` in the container by default:
 
 ```sh
-zbox-cmd zbox-arch_apps
+ybox-cmd ybox-arch_apps
 ```
 
 You can run other commands instead of bash shell, but if those commands require options starting
-with a hyphen, then first end the options to `zbox-cmd` with a double hyphen:
+with a hyphen, then first end the options to `ybox-cmd` with a double hyphen:
 
 ```sh
-zbox-cmd zbox-arch_apps -- ls -l
+ybox-cmd ybox-arch_apps -- ls -l
 ```
 
 The default profiles also link the .bashrc and starship configuration files from your host
@@ -270,16 +270,16 @@ daemons and similar low level utilities which should be the job of your host sys
 ### Show the container logs
 
 ```sh
-zbox-logs zbox-arch_apps
+ybox-logs ybox-arch_apps
 ```
 
 Follow the logs like `tail -f`:
 
 ```sh
-zbox-logs zbox-arch_apps -f
+ybox-logs ybox-arch_apps -f
 ```
 
-In the shipped profiles, the container logs go to `~/.local/share/zbox/<container>/logs/`
+In the shipped profiles, the container logs go to `~/.local/share/ybox/<container>/logs/`
 directory instead of polluting your journald logs as the docker/podman do by default.
 You can delete old log files there safely if they start taking a lot of disk space.
 
@@ -287,9 +287,9 @@ You can delete old log files there safely if they start taking a lot of disk spa
 ### Restart a container
 
 A container may get stopped after a reboot if systemd/... is not configured to auto-start
-the docker/podman containers. You can check using `zbox-ls -a` and restart any stopped
+the docker/podman containers. You can check using `ybox-ls -a` and restart any stopped
 containers as below:
 
 ```sh
-zbox-restart zbox-arch_apps
+ybox-restart ybox-arch_apps
 ```

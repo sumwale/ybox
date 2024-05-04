@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "zbox-py"
+name = "ybox"
 version = "0.9.0"
 authors = [
   { name = "Sumedh Wale", email = "sumwale@yahoo.com" },
@@ -29,17 +29,17 @@ classifiers = [
 keywords = ["Linux in container", "toolbox"]
 
 [project.urls]
-Homepage = "https://github.com/sumwale/zbox"
-Issues = "https://github.com/sumwale/zbox/issues"
+Homepage = "https://github.com/sumwale/ybox"
+Issues = "https://github.com/sumwale/ybox/issues"
 
 [project.scripts]
-zbox-cmd = "zbox.run.cmd:main"
-zbox-create = "zbox.run.create:main"
-zbox-destroy = "zbox.run.destroy:main"
-zbox-logs = "zbox.run.logs:main"
-zbox-ls = "zbox.run.ls:main"
-zbox-pkg = "zbox.run.pkg:main"
-zbox-restart = "zbox.run.restart:main"
+ybox-cmd = "ybox.run.cmd:main"
+ybox-create = "ybox.run.create:main"
+ybox-destroy = "ybox.run.destroy:main"
+ybox-logs = "ybox.run.logs:main"
+ybox-ls = "ybox.run.ls:main"
+ybox-pkg = "ybox.run.pkg:main"
+ybox-restart = "ybox.run.restart:main"
 
 [tool.setuptools]
 include-package-data = true

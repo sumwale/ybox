@@ -1,0 +1,7 @@
+#!/usr/bin/python3
+
+from ybox.run.destroy import main
+
+if __name__ == "__main__":
+    # sys.tracebacklimit = 0
+    main()
