@@ -65,7 +65,7 @@ few things like systemd.
 
 If you have cloned the repository, then no further installation is required to run the utilities
 in `src` directory which can be done directly off the repository. In the near future this will
-also be published on `pypi.org`, so you will be able to install with `pip install zbox`.
+also be published on `pypi.org`, so you will be able to install with `pip install zbox-py`.
 
 As of now the following is required:
 
