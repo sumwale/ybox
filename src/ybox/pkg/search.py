@@ -15,6 +15,7 @@ from ybox.state import RuntimeConfiguration, YboxStateManagement
 def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
                     conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
                     state: YboxStateManagement) -> int:
+    # pylint: disable=unused-argument
     """
     Uninstall package specified by `args.package` on a ybox container with given docker/podman
     command. Additional flags honored are `args.quiet` to bypass user confirmation during

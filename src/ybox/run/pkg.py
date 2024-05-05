@@ -146,17 +146,19 @@ def add_update(subparser: argparse.ArgumentParser) -> None:
 
 def add_list(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-a", "--all", action="store_true",
+                           help="show all packages including dependent packages in the output "
+                                "otherwise only the packages that have been explicitly installed "
+                                "are shown")
+    subparser.add_argument("-o", "--os-pkgs", action="store_true",
                            help="list all packages installed in the container including those "
                                 "not managed by 'ybox-pkg'; when multiple containers share the "
                                 "same root directory, then it will include packages installed "
-                                "on other containers")
+                                "on other containers; this can be combined with -a/--all "
+                                "option to list all the packages including dependents")
     subparser.add_argument("-p", "--plain-separator", type=str,
                            help="show the output in 'plain' format rather than as a table with "
                                 "the fields separated by the given string; it will also skip "
                                 "any truncation of the 'Dependency Of' column")
-    subparser.add_argument("-s", "--show-dependents", action="store_true",
-                           help="include pure dependent packages in the output otherwise only "
-                                "the packages that have been explicitly installed are shown")
     subparser.add_argument("-v", "--verbose", action="store_true",
                            help="show some package details including version, description and "
                                 "whether it is a dependency or a top-level package")
