@@ -103,7 +103,7 @@ fi
 #   else the image size may get nearly doubled)
 groupadd -g $gid $group
 echo_color "$fg_blue" "Added group '$group'"
-useradd -m -g $group -G nobody,video,lp,mail \
+useradd -m -g $group \
   -u $uid -d /home/$user -s /bin/bash -c "$name" $user
 usermod --lock $user
 
