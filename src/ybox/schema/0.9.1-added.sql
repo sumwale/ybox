@@ -1,7 +1,7 @@
 -- records the version of the whole schema
 CREATE TABLE schema (
-    version TEXT NOT NULL
-);
+    version TEXT NOT NULL PRIMARY KEY
+) WITHOUT ROWID;
 
 -- containers that have been destroyed but use shared root which still exists having packages
 -- installed from this container (columns are the same as `containers` table)
