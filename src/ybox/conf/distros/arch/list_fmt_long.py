@@ -13,8 +13,8 @@ from tabulate import tabulate
 
 from list_fmt_common import FG_NAME, FG_VER, FG_DESC, FG_REQ, FG_OPT, FG_NONE, parse_separator
 
-__VAL_RE = re.compile(r"^\s*[^:]*:\s*")
-__WS_RE = re.compile(r"\s\s+")
+_VAL_RE = re.compile(r"^\s*[^:]*:\s*")
+_WS_RE = re.compile(r"\s\s+")
 
 # Adjust column widths as per the terminal width.
 # Use stderr for the terminal width since stdout is piped to pager.
@@ -37,12 +37,12 @@ def format_dep_of(req_by: str, opt_for: str, description: str, plain_sep: str) -
     if req_by == "None":
         req_by = ""
     elif req_by:
-        req_by = __WS_RE.sub(" ", req_by)
+        req_by = _WS_RE.sub(" ", req_by)
         dep_of_total_width += len(req_by) + 6  # +6 due to being surrounded by 'req()'
     if opt_for == "None":
         opt_for = ""
     elif opt_for:
-        opt_for = __WS_RE.sub(" ", opt_for)
+        opt_for = _WS_RE.sub(" ", opt_for)
         dep_of_total_width += len(opt_for) + 6  # +6 due to being surrounded by 'opt()'
 
     dep_of_parts: list[str] = []
@@ -90,17 +90,17 @@ def process() -> None:
             if name:
                 format_package()
                 req_by = opt_for = ""
-            name = __VAL_RE.sub("", line).rstrip()
+            name = _VAL_RE.sub("", line).rstrip()
         elif line.startswith("Version"):
-            version = __VAL_RE.sub("", line).rstrip()
+            version = _VAL_RE.sub("", line).rstrip()
         elif line.startswith("Description"):
-            description = __VAL_RE.sub("", line).rstrip()
+            description = _VAL_RE.sub("", line).rstrip()
         elif line.startswith("Required By"):
-            req_by = __VAL_RE.sub("", line).rstrip()
+            req_by = _VAL_RE.sub("", line).rstrip()
             req_by_start = True
             opt_for_start = False
         elif line.startswith("Optional For"):
-            opt_for = __VAL_RE.sub("", line).rstrip()
+            opt_for = _VAL_RE.sub("", line).rstrip()
             opt_for_start = True
             req_by_start = False
         elif line and line[0].isspace():

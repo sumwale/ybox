@@ -27,10 +27,8 @@ from ybox.state import RuntimeConfiguration, YboxStateManagement
 from ybox.util import EnvInterpolation, NotSupportedError, config_reader, ini_file_reader, \
     select_item_from_menu
 
-# TODO: change double underscore to single everywhere
-
-__EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
-__DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
+_EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
+_DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
 
 
 # Note: deliberately not using os.path.join for joining paths since the code only works on
@@ -241,7 +239,7 @@ def select_distribution(args: argparse.Namespace, env: Environ) -> str:
     print_info("Please select the distribution to use for the container:", file=sys.stderr)
     if (distro_name := select_item_from_menu(distro_names)) is None:
         sys.exit(1)
-    if match := __EXTRACT_PARENS_NAME.match(distro_name):
+    if match := _EXTRACT_PARENS_NAME.match(distro_name):
         return match.group(1)
     raise ValueError(f"Unexpected distribution name string: {distro_name}")
 
@@ -272,7 +270,7 @@ def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
     print_info("Please select the profile to use for the container:", file=sys.stderr)
     if (profile_name := select_item_from_menu(profile_names)) is None:
         sys.exit(1)
-    if match := __EXTRACT_PARENS_NAME.match(profile_name):
+    if match := _EXTRACT_PARENS_NAME.match(profile_name):
         return profiles_dir.joinpath(match.group(1))
     raise ValueError(f"Unexpected profile name string: {profile_name}")
 
@@ -579,9 +577,9 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
     with open(conf.app_list, "w", encoding="utf-8") as apps_fd:
         for key in apps_section:
             apps = [app.strip() for app in apps_section[key].split(",")]
-            deps = [capture_dep(match) for dep in apps if (match := __DEP_SUFFIX.match(dep))]
+            deps = [capture_dep(match) for dep in apps if (match := _DEP_SUFFIX.match(dep))]
             if deps:
-                apps = [app for app in apps if not __DEP_SUFFIX.match(app)]
+                apps = [app for app in apps if not _DEP_SUFFIX.match(app)]
                 apps_fd.write(f"{opt_dep_flag} {' '.join(deps)}\n")
             if apps:
                 apps_fd.write(f"{' '.join(apps)}\n")

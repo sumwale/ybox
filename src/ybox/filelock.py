@@ -36,18 +36,18 @@ class FileLock:
         :param timeout_secs: lock timeout in seconds (use negative for infinite wait)
         :param poll_interval: polling interval at which to check for lock to be available
         """
-        self.__lock_file = lock_file
-        self.__lock_fd: Optional[IOBase] = None
-        self.__timeout = timeout_secs
-        self.__poll = poll_interval
+        self._lock_file = lock_file
+        self._lock_fd: Optional[IOBase] = None
+        self._timeout = timeout_secs
+        self._poll = poll_interval
 
     def __enter__(self):
-        self.__lock_fd = open(self.__lock_file, "w+", encoding="utf-8")
+        self._lock_fd = open(self._lock_file, "w+", encoding="utf-8")
         start_time: Optional[datetime] = None
-        remaining_time = self.__timeout
+        remaining_time = self._timeout
         while remaining_time != 0:
             try:
-                fcntl.lockf(self.__lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.lockf(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 return
             except OSError as ex:
                 if ex.errno in (errno.EACCES, errno.EAGAIN):
@@ -55,17 +55,17 @@ class FileLock:
                     if not start_time:
                         start_time = datetime.now()
                     # wait for poll time, then try again
-                    time.sleep(self.__poll)
+                    time.sleep(self._poll)
                     # treat negative timeout as infinite where remaining_time will never reach 0
                     if remaining_time > 0:
-                        remaining_time -= self.__poll
+                        remaining_time -= self._poll
                         remaining_time = max(remaining_time, 0)
                 else:
                     raise
         wait_time = (datetime.now() - start_time).total_seconds() if start_time else 0.0
-        raise TimeoutError(f"Failed to lock '{self.__lock_file}' in {wait_time} seconds")
+        raise TimeoutError(f"Failed to lock '{self._lock_file}' in {wait_time} seconds")
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
-        if self.__lock_fd:
-            fcntl.lockf(self.__lock_fd, fcntl.LOCK_UN)
-            self.__lock_fd.close()
+        if self._lock_fd:
+            fcntl.lockf(self._lock_fd, fcntl.LOCK_UN)
+            self._lock_fd.close()

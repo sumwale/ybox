@@ -11,7 +11,7 @@ max-returns=11
 # Maximum number of branch for function / method body
 max-branches = 30 # EDIT: increased from 20 to 30
 # Maximum number of statements in function / method body
-max-statements = 50
+max-statements = 60 # EDIT: increased from 50 to 60
 # Maximum number of attributes for a class (see R0902).
 max-attributes=20 # EDIT: increased from 11 to 20
 # Maximum number of statements in a try-block

@@ -16,48 +16,48 @@ class StaticConfiguration:
     """
 
     def __init__(self, env: Environ, distribution: str, box_name: str):
-        self.__env = env
+        self._env = env
         # set up the additional environment variables
         os.environ["YBOX_DISTRIBUTION_NAME"] = distribution
         os.environ["YBOX_CONTAINER_NAME"] = box_name
-        self.__distribution = distribution
-        self.__box_name = box_name
-        self.__box_image = f"ybox-local/{distribution}/{box_name}"
-        self.__shared_box_image = f"ybox-shared-local/{distribution}"
+        self._distribution = distribution
+        self._box_name = box_name
+        self._box_image = f"ybox-local/{distribution}/{box_name}"
+        self._shared_box_image = f"ybox-shared-local/{distribution}"
         # timezone properties
-        self.__localtime = None
-        self.__timezone = None
+        self._localtime = None
+        self._timezone = None
         if os.path.islink("/etc/localtime"):
-            self.__localtime = os.readlink("/etc/localtime")
+            self._localtime = os.readlink("/etc/localtime")
         if os.path.exists("/etc/timezone"):
             with open("/etc/timezone", "r", encoding="utf-8") as timezone:
-                self.__timezone = timezone.read().rstrip("\n")
-        self.__shared_root_host_dir = f"{env.data_dir}/ROOTS/{distribution}"
+                self._timezone = timezone.read().rstrip("\n")
+        self._shared_root_host_dir = f"{env.data_dir}/ROOTS/{distribution}"
         container_dir = f"{env.data_dir}/{box_name}"
         os.environ["YBOX_CONTAINER_DIR"] = container_dir
-        self.__configs_dir = f"{container_dir}/configs"
-        self.__target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
-        self.__scripts_dir = f"{container_dir}/ybox-scripts"
-        self.__target_scripts_dir = "/usr/local/ybox"
+        self._configs_dir = f"{container_dir}/configs"
+        self._target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
+        self._scripts_dir = f"{container_dir}/ybox-scripts"
+        self._target_scripts_dir = "/usr/local/ybox"
         os.environ["YBOX_TARGET_SCRIPTS_DIR"] = self.target_scripts_dir
-        self.__status_file = f"{container_dir}/status"
-        self.__config_list = f"{self.scripts_dir}/config.list"
-        self.__app_list = f"{self.scripts_dir}/app.list"
+        self._status_file = f"{container_dir}/status"
+        self._config_list = f"{self.scripts_dir}/config.list"
+        self._app_list = f"{self.scripts_dir}/app.list"
 
     @property
     def env(self) -> Environ:
         """the `Environ` object used for this configuration"""
-        return self.__env
+        return self._env
 
     @property
     def distribution(self) -> str:
         """linux distribution being used by the ybox container"""
-        return self.__distribution
+        return self._distribution
 
     @property
     def box_name(self) -> str:
         """name of the ybox container"""
-        return self.__box_name
+        return self._box_name
 
     def box_image(self, shared_root: bool) -> str:
         """
@@ -67,48 +67,48 @@ class StaticConfiguration:
         :param shared_root: whether 'base.shared_root' is true in configuration file
         :return: the docker/podman image to be created and used for the ybox
         """
-        return self.__shared_box_image if shared_root else self.__box_image
+        return self._shared_box_image if shared_root else self._box_image
 
     @property
     def localtime(self) -> Optional[str]:
         """the target link for /etc/localtime"""
-        return self.__localtime
+        return self._localtime
 
     @property
     def timezone(self) -> Optional[str]:
         """the contents of /etc/timezone"""
-        return self.__timezone
+        return self._timezone
 
     @property
     def shared_root_host_dir(self) -> str:
         """host directory that is bind mounted as the shared root directory on containers"""
-        return self.__shared_root_host_dir
+        return self._shared_root_host_dir
 
     @property
     def configs_dir(self) -> str:
         """user directory where configuration files specified in [configs] are copied or
            hard-linked for sharing with the container"""
-        return self.__configs_dir
+        return self._configs_dir
 
     @property
     def target_configs_dir(self) -> str:
         """target container directory where shared [configs] are mounted in the container"""
-        return self.__target_configs_dir
+        return self._target_configs_dir
 
     @property
     def scripts_dir(self) -> str:
         """local directory where scripts to be shared with container are copied"""
-        return self.__scripts_dir
+        return self._scripts_dir
 
     @property
     def target_scripts_dir(self) -> str:
         """target container directory where shared scripts are mounted"""
-        return self.__target_scripts_dir
+        return self._target_scripts_dir
 
     @property
     def status_file(self) -> str:
         """local status file to communicate when the container is ready for use"""
-        return self.__status_file
+        return self._status_file
 
     # file containing list of configuration files to be linked on that container to host
     # as mentioned in the [configs] section
@@ -116,12 +116,12 @@ class StaticConfiguration:
     def config_list(self) -> str:
         """file containing list of configuration files to be linked on that container to host
             as mentioned in the [configs] section"""
-        return self.__config_list
+        return self._config_list
 
     @property
     def app_list(self) -> str:
         """file containing list of applications to be installed in the container"""
-        return self.__app_list
+        return self._app_list
 
 
 class Consts:
