@@ -58,7 +58,8 @@ def main_argv(argv: list[str]) -> None:
 
     conf = StaticConfiguration(env, distro, box_name)
     # read the distribution specific configuration
-    base_image_name, shared_root_dirs, distro_config = read_distribution_config(conf)
+    base_image_name, shared_root_dirs, secondary_groups, distro_config = read_distribution_config(
+        conf)
     # setup entrypoint and related scripts to share with the container on a mount point
     setup_ybox_scripts(conf, distro_config)
 
@@ -119,7 +120,8 @@ def main_argv(argv: list[str]) -> None:
                               stderr=subprocess.DEVNULL).returncode != 0:
                 # run the "base" container with appropriate arguments for the current user to
                 # the 'entrypoint-base.sh' script to create the user and group in the container
-                run_base_container(base_image_name, current_user, docker_cmd, conf)
+                run_base_container(base_image_name, current_user, secondary_groups, docker_cmd,
+                                   conf)
                 # commit the stopped container with a temporary name, then remove the container
                 tmp_image = f"{conf.box_image(False)}__ybox_tmp"
                 commit_container(current_user, docker_cmd, tmp_image, conf)
@@ -133,7 +135,7 @@ def main_argv(argv: list[str]) -> None:
         shared_root_dirs = ""
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
-        run_base_container(base_image_name, current_user, docker_cmd, conf)
+        run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
         # commit the stopped container, remove it, then start new container with the
         # "--userns=keep-id" option for the required container state
         commit_container(current_user, docker_cmd, conf.box_image(False), conf)
@@ -161,7 +163,8 @@ def main_argv(argv: list[str]) -> None:
     sys.stdout.flush()
     wait_for_container(docker_cmd, conf)
 
-    # finally add the state and register the installed packages
+    # finally add the state and register the installed packages that were reassigned to this
+    # container (because the previously destroyed one has the same configuration and shared root)
     with YboxStateManagement(env) as state:
         shared_root_dir = conf.shared_root_host_dir if shared_root else ""
         owned_packages = state.register_container(box_name, distro, shared_root_dir, box_conf)
@@ -647,17 +650,18 @@ def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
                 copy_file(resource, f"{dest_dir}/{resource.name}")
 
 
-def read_distribution_config(conf: StaticConfiguration) -> Tuple[str, str, ConfigParser]:
+def read_distribution_config(conf: StaticConfiguration) -> Tuple[str, str, str, ConfigParser]:
     env_interpolation = EnvInterpolation(conf.env, [])
     distro_config = config_reader(
         conf.env.search_config_path(f"distros/{conf.distribution}/distro.ini"), env_interpolation)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
     shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist
-    return image_name, shared_root_dirs, distro_config
+    secondary_groups = distro_base_section["secondary_groups"]  # should always exist
+    return image_name, shared_root_dirs, secondary_groups, distro_config
 
 
-def run_base_container(image_name: str, current_user: str, docker_cmd: str,
+def run_base_container(image_name: str, current_user: str, secondary_groups: str, docker_cmd: str,
                        conf: StaticConfiguration) -> None:
     # refresh the image locally first to decrease update size later
     print_info(f"Refreshing local copy of the base image '{image_name}'")
@@ -674,7 +678,7 @@ def run_base_container(image_name: str, current_user: str, docker_cmd: str,
                   f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_base()}",
                   image_name, "-u", current_user, "-U", str(user_entry.pw_uid),
                   "-n", user_entry.pw_gecos, "-g", group_entry.gr_name,
-                  "-G", str(group_entry.gr_gid)]
+                  "-G", str(group_entry.gr_gid), "-s", secondary_groups]
     if conf.localtime:
         docker_run.append("-l")
         docker_run.append(conf.localtime)

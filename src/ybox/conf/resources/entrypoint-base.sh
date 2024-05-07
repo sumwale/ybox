@@ -10,6 +10,7 @@ uid=1000
 name=ybox
 group=ybox
 gid=1000
+secondary_groups=video,lp,mail
 localtime=
 timezone=
 
@@ -19,11 +20,12 @@ function show_usage() {
   echo "       [-l LOCALTIME] [-z TIMEZONE] [-h]"
   echo
   echo "Options:"
-  echo "  -u USER       login of the user to add"
+  echo "  -u USER       login of the user being added"
   echo "  -U UID        UID of the user"
   echo "  -n FULLNAME   full name of the user"
-  echo "  -g GROUP      primary group of the user to add"
+  echo "  -g GROUP      primary group of the user being added"
   echo "  -G GID        GID of the primary group of the user"
+  echo "  -s GROUPS     secondary groups of the user being added"
   echo "  -l LOCALTIME  the destination link for /etc/localtime"
   echo "  -z TIMEZONE   the timezone to be written in /etc/timezone"
   echo "  -h            show this help message and exit"
@@ -47,7 +49,7 @@ function check_int() {
   fi
 }
 
-while getopts "u:U:n:g:G:l:z:h" opt; do
+while getopts "u:U:n:g:G:s:l:z:h" opt; do
   case "$opt" in
     u)
       check_space "$OPTARG" USER
@@ -67,6 +69,10 @@ while getopts "u:U:n:g:G:l:z:h" opt; do
     G)
       check_int "$OPTARG" GID
       gid=$OPTARG
+      ;;
+    s)
+      check_space "$OPTARG" GROUPS
+      secondary_groups=$OPTARG
       ;;
     l)
       localtime="$OPTARG"
@@ -106,7 +112,7 @@ fi
 #   else the image size may get nearly doubled)
 groupadd -g $gid $group
 echo_color "$fg_blue" "Added group '$group'"
-useradd -m -g $group -G nobody,video,lp,mail \
+useradd -m -g $group -G $secondary_groups \
   -u $uid -d /home/$user -s /bin/bash -c "$name" $user
 usermod --lock $user
 
