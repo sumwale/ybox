@@ -463,7 +463,7 @@ class YboxStateManagement:
         :return: flattened list of all the local wrapper files from the `local_copies` fields
         """
         # split local_copies field into an array using json then flatten
-        return [file for row in rows if row[lc_idx] for file in json.loads(row[lc_idx])]
+        return [file for row in rows if row[lc_idx] for file in json.loads(row[lc_idx]) if file]
 
     @staticmethod
     def _remove_local_copies(local_copies: list[str]) -> None:
