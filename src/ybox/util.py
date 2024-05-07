@@ -57,7 +57,7 @@ class EnvInterpolation(BasicInterpolation):
         if section not in self.__skip_expansion:
             value = os.path.expandvars(value)
         # replace ${NOW:...} pattern with appropriately formatted datetime string
-        return re.sub(self.__NOW_RE, lambda mt: self.__now.strftime(mt.group(1)), value)
+        return self.__NOW_RE.sub(lambda mt: self.__now.strftime(mt.group(1)), value)
 
 
 # read the ini file, recursing into the includes to build the final dictionary
@@ -67,7 +67,8 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
     Read the container configuration INI file, recursing into the includes to build the final
     dictionary having the sections with corresponding key-value pairs.
 
-    :param conf_file: the configuration file to be read
+    :param conf_file: the configuration file to be read as a `Path` or resource file from
+                      importlib (`Traversable`)
     :param interpolation: if provided then used for value interpolation
     :param top_level: the top-level configuration file; don't pass this when calling
                       externally (or set it the same as `conf_file` argument)

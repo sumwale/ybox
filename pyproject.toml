@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ybox"
-version = "0.9.0"
+dynamic = ["version"]
 authors = [
-  { name = "Sumedh Wale", email = "sumwale@yahoo.com" },
+    { name = "Sumedh Wale", email = "sumwale@yahoo.com" },
 ]
 description = "Run Linux distribution inside a container"
 readme = "README.md"
@@ -16,15 +16,15 @@ dependencies = [
     "simple-term-menu",
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Intended Audience :: End Users/Desktop",
-  "License :: OSI Approved :: Apache Software License",
-  "Operating System :: OS Independent",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 keywords = ["Linux in container", "toolbox"]
 
@@ -43,3 +43,6 @@ ybox-restart = "ybox.run.restart:main"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.dynamic]
+version = { attr = "ybox.__version__" }

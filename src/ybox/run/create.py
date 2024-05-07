@@ -20,12 +20,14 @@ from ybox.cmd import PkgMgr, YboxLabel, get_docker_command, run_command, verify_
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
-from ybox.pkg.inst import install_package
+from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import bgcolor, fgcolor, print_color, print_error, print_info, print_warn
 from ybox.run.pkg import parse_args as pkg_parse_args
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 from ybox.util import EnvInterpolation, NotSupportedError, config_reader, ini_file_reader, \
     select_item_from_menu
+
+# TODO: change double underscore to single everywhere
 
 __EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 __DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
@@ -64,8 +66,8 @@ def main_argv(argv: list[str]) -> None:
 
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the profile before any actions to ensure it is in proper shape
-    shared_root, config, apps_with_deps = process_sections(profile, conf, distro_config,
-                                                           docker_full_args)
+    shared_root, box_conf, apps_with_deps = process_sections(profile, conf, distro_config,
+                                                             docker_full_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -164,10 +166,14 @@ def main_argv(argv: list[str]) -> None:
     # finally add the state and register the installed packages
     with YboxStateManagement(env) as state:
         shared_root_dir = conf.shared_root_host_dir if shared_root else ""
-        state.register_container(box_name, distro, shared_root_dir, config)
+        owned_packages = state.register_container(box_name, distro, shared_root_dir, box_conf)
+        # create wrappers for owned_packages
+        pkgmgr = distro_config["pkgmgr"]
+        list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
+        for package, copy_type in owned_packages.items():
+            wrap_container_files(package, copy_type, list_cmd, docker_cmd, conf, box_conf)
         if apps_with_deps:
-            pkgmgr = distro_config["pkgmgr"]
-            runtime_conf = RuntimeConfiguration(box_name, distro, shared_root_dir, config)
+            runtime_conf = RuntimeConfiguration(box_name, distro, shared_root_dir, box_conf)
             for app, deps in apps_with_deps.items():
                 pkg_args = ["install", "-z", box_name, "-q", "-o", "-c"]
                 if deps:

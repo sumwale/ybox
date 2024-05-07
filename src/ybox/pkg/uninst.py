@@ -4,11 +4,10 @@ Methods for uninstalling package uninstallation on an active ybox container.
 
 import argparse
 from configparser import SectionProxy
-from pathlib import Path
 
 from ybox.cmd import PkgMgr, run_command
 from ybox.config import StaticConfiguration
-from ybox.print import print_info, print_warn
+from ybox.print import print_info
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 from ybox.util import check_installed_package
 
@@ -39,25 +38,8 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
     uninstall_cmd = pkgmgr[PkgMgr.UNINSTALL.value].format(quiet=quiet_flag, purge=purge_flag,
                                                           remove_deps=remove_deps_flag)
     check_cmd = pkgmgr[PkgMgr.INFO.value]
-    opt_deps: list[str] = []
-    if remove_deps_flag:
-        # TODO: this doesn't take care of the case when multiple packages have the same opt-dep
-        # more stuff can be added to the `type` field in the future, hence the '%' wildcards
-        package_type = f"%{state.optional_package_type(package)}%"
-        # package may be an orphan one sharing the same root directory, so search by shared_root
-        # if applicable
-        if runtime_conf.shared_root:
-            opt_deps = state.get_packages(shared_root=runtime_conf.shared_root,
-                                          package_type=package_type)
-        else:
-            opt_deps = state.get_packages(conf.box_name, package_type=package_type)
-
-    if (code := _uninstall_package(package, uninstall_cmd, check_cmd, docker_cmd, conf,
-                                   runtime_conf, state)) == 0:
-        for opt_dep in opt_deps:
-            _uninstall_package(opt_dep, uninstall_cmd, check_cmd, docker_cmd, conf, runtime_conf,
-                               state, dep_msg="dependency ")
-    return code
+    return _uninstall_package(package, uninstall_cmd, check_cmd, docker_cmd, conf,
+                              runtime_conf, state)
 
 
 def _uninstall_package(package: str, uninstall_cmd: str, check_cmd: str, docker_cmd: str,
@@ -72,7 +54,7 @@ def _uninstall_package(package: str, uninstall_cmd: str, check_cmd: str, docker_
     else:
         code = 0  # go ahead with removal from local state and wrappers if present
     if code == 0:
-        for file in state.unregister_package(conf.box_name, package, runtime_conf.shared_root):
-            print_warn(f"Removing local wrapper {file}")
-            Path(file).unlink(missing_ok=True)
+        for opt_dep in state.unregister_package(conf.box_name, package, runtime_conf.shared_root):
+            _uninstall_package(opt_dep, uninstall_cmd, check_cmd, docker_cmd, conf, runtime_conf,
+                               state, dep_msg="dependency ")
     return code

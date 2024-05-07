@@ -46,7 +46,8 @@ class Environ:
         (in that order). The path may refer to a file or a subdirectory.
 
         :param conf_path: the configuration file to search (expected to be a relative path)
-        :return: the full path of the configuration file
+        :return: the path of the configuration file as `Path` or resource file from
+                 importlib (`Traversable`)
         """
         # order is first search in user's config directory, and then the system config directory
         for config_dir in self.__configuration_dirs:

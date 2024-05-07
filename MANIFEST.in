@@ -1,3 +1,4 @@
 exclude src/ybox-*
 graft src/ybox/conf
+graft src/ybox/schema
 global-exclude **/.mypy_cache/**
