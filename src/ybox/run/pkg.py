@@ -168,7 +168,7 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
 def add_search(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-w", "--word", action="store_true",
                            help="match given search terms as full words")
-    subparser.add_argument("-f", "--full", action="store_true",
+    subparser.add_argument("-a", "--all", action="store_true",
                            help="search in package descriptions in addition to the package names")
     subparser.add_argument("-o", "--official", action="store_true",
                            help="search only in the official repositories and not the extra ones "

@@ -39,7 +39,7 @@ def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
         word_start = pkgmgr[PkgMgr.SEARCH_WORD_START_FLAG.value]
         word_end = pkgmgr[PkgMgr.SEARCH_WORD_END_FLAG.value]
     search_terms: list[str] = args.search  # there will be at least one search term in the list
-    search = pkgmgr[PkgMgr.SEARCH_FULL.value] if args.full else pkgmgr[PkgMgr.SEARCH.value]
+    search = pkgmgr[PkgMgr.SEARCH_ALL.value] if args.all else pkgmgr[PkgMgr.SEARCH.value]
     # quote the search terms for bash to properly see the full arguments if they contain spaces
     # or other special characters
     search_cmd = search.format(quiet=quiet_flag, official=official, word_start=word_start,

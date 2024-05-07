@@ -96,8 +96,10 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     # need to determine optional dependencies before installation else second level or higher
     # dependencies will never be found (as the dependencies are already installed)
     optional_deps: list[Tuple[str, str, int]] = []
+    installed_optional_deps: set[str] = set()
     if opt_deps_cmd and selected_deps is None:
-        optional_deps = get_optional_deps(package, docker_cmd, conf.box_name, opt_deps_cmd)
+        optional_deps, installed_optional_deps = get_optional_deps(package, docker_cmd,
+                                                                   conf.box_name, opt_deps_cmd)
     if opt_dep_install:
         resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
     else:
@@ -131,8 +133,10 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
             None, "")
         state.register_package(conf.box_name, package, local_copies=local_copies,
                                copy_type=copy_type, dep_type=dep_type, dep_of=dep_of)
-        # TODO: optional_deps should include already installed ones, because those need to be
-        # marked so in state.db in package_deps if they exist in packages
+        # register the recorded optional dependencies for this package too
+        if recorded_deps := state.check_packages(conf.box_name, installed_optional_deps):
+            for dep in recorded_deps:
+                state.register_dependency(conf.box_name, package, dep, DependencyType.OPTIONAL)
         if optional_deps and selected_deps is None:
             selected_deps = select_optional_deps(package, optional_deps)
         if selected_deps:
@@ -144,7 +148,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
 
 
 def get_optional_deps(package: str, docker_cmd: str, container_name: str,
-                      opt_deps_cmd: str) -> list[tuple[str, str, int]]:
+                      opt_deps_cmd: str) -> Tuple[list[Tuple[str, str, int]], set[str]]:
     """
     Find the optional dependencies recursively, removing the ones already installed.
 
@@ -153,15 +157,21 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     :param container_name: name of the ybox container
     :param opt_deps_cmd: command to determine optional dependencies as read from `distro.ini`
 
-    :return: list of tuples having the name of optional dependency, its description and
-             an integer `level` denoting its depth in the dependency tree
+    :return: first part is list of tuples having the name of optional dependency, its description
+             and an integer `level` denoting its depth in the dependency tree
              (i.e. level 1 means immediate dependency of the package, 2 means dependency of
-              another dependency which is being newly installed and so on)
+              another dependency which is being newly installed and so on);
+              second part of the tuple is the set of optional dependencies of the package that
+              are already installed and registered as dependency in state.db for some other package
     """
     optional_deps: list[Tuple[str, str, int]] = []
+    installed_optional_deps: set[str] = set()
     pkg_start = "Found optional dependencies"
-    pkg_prefix = "PKG: "
-    # Expected format of output below is -- PKG: <name>::::<description>::::<level>.
+    pkg_prefix = "PKG:"
+    pkg_sep = "::::"
+    # fill in the expected separator, prefix and header line
+    opt_deps_cmd = opt_deps_cmd.format(separator=pkg_sep, prefix=pkg_prefix, header=pkg_start)
+    # Expected format of output below is -- PKG:<name>::::<description>::::<level>::::<installed>
     # This is preceded by a line "Found optional dependencies".
     # Print other lines on output as is which are for informational purpose.
     # Code below does progressive display of output which is required for showing stuff like
@@ -176,19 +186,21 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     with subprocess.Popen([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
                            f"{opt_deps_cmd} {package}"], stdout=subprocess.PIPE) as deps_result:
         line = bytearray()
-        eol = b"\n"[0]  # end of line
+        # possible end of lines
+        eol1 = b"\r"[0]
+        eol2 = b"\n"[0]
         buffered = 0
         assert deps_result.stdout is not None
         # readline does not work for in-place updates like from aria2
         while char := deps_result.stdout.read(1):
             sys.stdout.buffer.write(char)
             buffered += 1
-            if char[0] == eol:
+            if char[0] == eol1 or char[0] == eol2:
                 sys.stdout.flush()
                 buffered = 0
                 output = line.decode("utf-8")
                 line.clear()
-                if output.startswith(pkg_start):  # output can have a trailing '\r'
+                if output == pkg_start:
                     break
             else:
                 line.append(char[0])
@@ -198,15 +210,21 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
         sys.stdout.flush()
         while pkg_out := deps_result.stdout.readline():
             output = pkg_out.decode("utf-8")
-            name, desc, level = output[len(pkg_prefix):].split("::::")
-            optional_deps.append((name, desc, int(level.strip())))
+            # there can be a trailing '\n' from the loop before due to '\r\n' ending
+            if output == "\n":
+                continue
+            name, desc, level, installed = output[len(pkg_prefix):].split(pkg_sep)
+            if installed.rstrip().lower() == "true":
+                installed_optional_deps.add(name)
+            else:
+                optional_deps.append((name, desc, int(level)))
 
         if deps_result.wait(60) != 0:
             print_warn(f"FAILED to determine optional dependencies of {package} -- "
                        "see above output for details. Skipping optional dependencies.")
-            optional_deps = []
+            return [], installed_optional_deps
 
-    return optional_deps
+    return optional_deps, installed_optional_deps
 
 
 def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list[str]:

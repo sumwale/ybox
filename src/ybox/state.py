@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sqlite3
+import typing
 from configparser import ConfigParser
 from contextlib import closing
 from dataclasses import dataclass
@@ -102,8 +103,8 @@ class YboxStateManagement:
 
         :param env: the current Environ
         """
-        # explicitly control transaction begin (in exclusive mode) since we need SERIALIZABLE
-        # isolation level while sqlite3 module will not start transactions before reads
+        # explicitly control transaction begin (in exclusive mode) since SERIALIZABLE isolation
+        # level is required while sqlite3 module will not start transactions before reads
         self._conn = sqlite3.connect(f"{env.data_dir}/state.db", timeout=60,
                                      isolation_level=None)
         # create the initial tables
@@ -294,9 +295,9 @@ class YboxStateManagement:
         """
         cursor.execute("DELETE FROM containers WHERE name = ? RETURNING distribution, "
                        "shared_root, configuration", (container_name,))
-        # if the container has 'shared_root', then packages will continue to exist, but we will
-        # have to make an entry in `destroyed_containers` with a new unique name (else there can
-        #   be clashes later) and update the container name in package tables
+        # if the container has 'shared_root', then packages will continue to exist, but make an
+        # entry in `destroyed_containers` with a new unique name (else there can be clashes later)
+        # and update the container name in package tables
         row = cursor.fetchone()
         # check if there are any packages registered for the container
         cursor.execute("SELECT 1 FROM packages WHERE container = ?", (container_name,))
@@ -313,7 +314,7 @@ class YboxStateManagement:
                                    (new_name, distro, shared_root, config))
                     insert_done = True
                 except sqlite3.IntegrityError:
-                    # retry if we are so unlucky (or buggy) to generate a repeat UUID
+                    # retry if unlucky (or buggy) to generate a repeat UUID
                     new_name = str(uuid4())
             cursor.execute("UPDATE packages SET container = ? WHERE container = ? "
                            "RETURNING local_copies", (new_name, container_name))
@@ -396,9 +397,38 @@ class YboxStateManagement:
             cursor.execute("INSERT OR REPLACE INTO packages VALUES (?, ?, ?, ?)",
                            (package, container_name, json.dumps(local_copies), copy_type.value))
             if dep_type:
-                cursor.execute("INSERT OR REPLACE INTO package_deps VALUES (?, ?, ?, ?)",
-                               (dep_of, container_name, package, dep_type.value))
+                self._register_dependency(container_name, dep_of, package, dep_type, cursor)
             self._conn.commit()
+
+    def register_dependency(self, container_name: str, package: str, dependency: str,
+                            dep_type: DependencyType) -> None:
+        """
+        Register a package dependency.
+
+        :param container_name: name of the container
+        :param package: the package whose dependency has to be registered
+        :param dependency: the dependency to be registered
+        :param dep_type: the `DependencyType` of the `dependency`
+        """
+        with closing(cursor := self._conn.cursor()):
+            self._begin_transaction(cursor)
+            self._register_dependency(container_name, package, dependency, dep_type, cursor)
+            self._conn.commit()
+
+    @staticmethod
+    def _register_dependency(container_name: str, package: str, dependency: str,
+                             dep_type: DependencyType, cursor: sqlite3.Cursor) -> None:
+        """
+        Internal method to register a package dependency.
+
+        :param container_name: name of the container
+        :param package: the package whose dependency has to be registered
+        :param dependency: the dependency to be registered
+        :param dep_type: the `DependencyType` of the `dependency`
+        :param cursor: the `Cursor` object to use for execution
+        """
+        cursor.execute("INSERT OR REPLACE INTO package_deps VALUES (?, ?, ?, ?)",
+                       (package, container_name, dependency, dep_type.value))
 
     def unregister_package(self, container_name: str, package: str,
                            shared_root: str) -> dict[str, DependencyType]:
@@ -505,6 +535,26 @@ class YboxStateManagement:
         with closing(cursor := self._conn.cursor()):
             cursor.execute(
                 f"SELECT name FROM packages WHERE {predicate} ORDER BY name ASC", args)
+            return [str(row[0]) for row in cursor.fetchall()]
+
+    def check_packages(self, container_name: str, packages: typing.Iterable[str]) -> list[str]:
+        """
+        Check if given set of packages are in the state database, and return the list of
+        the existing ones.
+
+        :param container_name: name of the container to filter packages
+        :param packages: list of packages to be checked
+        :return: list of packages that are recorded in the state database
+        """
+        if not packages:
+            return []
+        in_list = ", ".join(["?" for _ in packages])
+        args = [container_name]
+        for pkg in packages:
+            args.append(pkg)
+        with closing(cursor := self._conn.cursor()):
+            cursor.execute("SELECT name FROM packages pkgs "
+                           f"WHERE pkgs.container = ? AND pkgs.name IN ({in_list})", args)
             return [str(row[0]) for row in cursor.fetchall()]
 
     def close(self) -> None:

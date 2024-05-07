@@ -46,7 +46,7 @@ class EnvInterpolation(BasicInterpolation):
         # for the NOW substitution
         self._now = env.now
 
-    # override before_read rather than before_get because we need expanded vars when writing
+    # override before_read rather than before_get because expanded vars are needed when writing
     # into the state.db database too
     def before_read(self, parser, section: str, option: str, value: str):
         """Override before_read to substitute environment variables and ${NOW...} pattern.

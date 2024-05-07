@@ -77,7 +77,7 @@ def main_argv(argv: list[str]) -> None:
     #    user is available which matches the current host user so that "--userns" option
     #    will not try to remap the image that can substantially increase the size of image.
     #    Either way, the user created by "--userns" in the container does not have sudo
-    #    permissions, so we temporarily need to run such a container as root user in any case.
+    #    permissions, so temporarily need to run such a container as root user in any case.
     #    Hence, step 1 uses a cleaner and better option that also creates separate
     #    container-specific images that can be enhanced with more container-specific stuff
     #    later if required. Also change the USER and WORKDIR of the commit to point to the
