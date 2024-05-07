@@ -776,24 +776,26 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
 def wait_for_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     box_name = conf.box_name
     max_wait_secs = 600
+    status_line = ""  # keeps the last valid line read from status file
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
         for _ in range(max_wait_secs):
             # check the container status first
             if verify_ybox_state(docker_cmd, box_name, ["running"], exit_on_error=False):
-                while line := status_fd.readline():
-                    if line == "started\n":
+                while status_line := status_fd.readline():
+                    if status_line == "started\n":
                         # clear the status file and return
                         truncate_file(conf.status_file)
                         return
-                    print(line, end="")  # line already includes the terminating newline
+                    print(status_line, end="")  # line already includes the terminating newline
             else:
                 # check if container has explicitly stopped for restart later
                 while line := status_fd.readline():
+                    status_line = line
                     print(line, end="")  # line already includes the terminating newline
-                    if line == "stopped\n":
-                        # clear the status file and return
-                        truncate_file(conf.status_file)
-                        return
+                if status_line == "stopped\n":
+                    # clear the status file and return
+                    truncate_file(conf.status_file)
+                    return
                 print_error("FAILED waiting for container to be ready -- check "
                             f"'ybox-logs {box_name}' for details")
                 sys.exit(1)

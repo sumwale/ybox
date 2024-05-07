@@ -142,6 +142,7 @@ class YboxStateManagement:
         """
         schema_pkg = files("ybox.schema")
         ver_sep = ":"
+        new_version = parse_version(ybox.__version__)
         # full initialization if empty database, else migrate and update the version if required
         # ('containers' table exists in all versions)
         if self._table_exists("containers", cursor):
@@ -151,7 +152,6 @@ class YboxStateManagement:
                 old_version = parse_version(cursor.fetchone()[0])
             else:  # version = 0.9.0
                 old_version = self._PRE_SCHEMA_VERSION
-            new_version = parse_version(ybox.__version__)
             if new_version != old_version:
                 # determine the migration scripts that need to be run
                 def check_version(file: str) -> bool:
@@ -171,6 +171,7 @@ class YboxStateManagement:
                 cursor.execute("UPDATE schema SET version = ?", (str(new_version),))
         else:
             self._execute_script(schema_pkg.joinpath("init.sql"), cursor)
+            cursor.execute("INSERT INTO schema VALUES (?)", (str(new_version),))
 
     @staticmethod
     def _table_exists(name: str, cursor: sqlite3.Cursor) -> bool:
