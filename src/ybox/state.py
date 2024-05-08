@@ -46,7 +46,8 @@ class RuntimeConfiguration:
 
 class CopyType(IntFlag):
     """
-    Different types of local wrappers created for container desktop/executable files.
+    Different types of local wrappers created for container desktop/executable files which
+    is used in the `local_copy_type` field of the `packages` table.
     """
     DESKTOP = auto()
     EXECUTABLE = auto()
@@ -54,7 +55,7 @@ class CopyType(IntFlag):
 
 class DependencyType(str, Enum):
     """
-    Different types of package dependencies.
+    Different types of package dependencies. Used in `dep_type` field of the `package_deps` table.
     """
     REQUIRED = "required"
     OPTIONAL = "optional"
@@ -361,16 +362,16 @@ class YboxStateManagement:
                 except sqlite3.IntegrityError:
                     # retry if unlucky (or buggy) to generate a UUID already generated in the past
                     new_name = str(uuid4())
+            # UPDATE ... RETURNING gives the old value, hence getting local_copies separately
+            # and then update both container name and empty local_copies in a single update
+            cursor.execute("SELECT local_copies FROM packages WHERE container = ?",
+                           (container_name,))
+            local_copies = YboxStateManagement._extract_local_copies(cursor.fetchall())
             # update container name to the new one for destroyed container and clear local_copies
             cursor.execute("UPDATE packages SET container = ?, local_copies = '[]' "
-                           "WHERE container = ? RETURNING local_copies",
-                           (new_name, container_name))
-            local_copies = YboxStateManagement._extract_local_copies(cursor.fetchall())
+                           "WHERE container = ?", (new_name, container_name))
             cursor.execute("UPDATE package_deps SET container = ? WHERE container = ?",
                            (new_name, container_name))
-            # clear local copies field
-            cursor.execute("UPDATE packages SET local_copies = '' WHERE container = ?",
-                           (new_name,))
         else:
             cursor.execute("DELETE FROM packages WHERE container = ? RETURNING local_copies",
                            (container_name,))
