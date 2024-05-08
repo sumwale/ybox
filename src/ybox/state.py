@@ -263,16 +263,22 @@ class YboxStateManagement:
         cursor.executescript("".join(sql_lines))
 
     def register_container(self, container_name: str, distribution: str, shared_root: str,
-                           parser: ConfigParser) -> dict[str, CopyType]:
+                           parser: ConfigParser, force_own_orphans: bool) -> dict[str, CopyType]:
         """
         Register information of a ybox container including its name, distribution and
-        configuration.
+        configuration. In addition to the registration, this will also check for orphaned packages
+        on the same `shared_root` (if applicable), and reassign them to this container if
+        they were originally installed on a container having an :func:`equivalent_configuration`.
 
         :param container_name: name of the container
         :param distribution: the Linux distribution used when creating the container
         :param shared_root: the local shared root directory if `shared_root` flag is enabled
                             for the container
         :param parser: parser object for the configuration file used for creating the container
+        :param force_own_orphans: if true, then force the ownership of orphan packages on the
+                                  same shared root to this container even if the container
+                                  configuration is not equivalent to the original container
+                                  configuration under which those packages were installed
         :return: dictionary of previously installed packages (as the key) that got reassigned to
                  this container mapped to the `CopyType` for the wrapper files of those packages
                  (which can be used to recreate wrappers for container desktop/executable files)
@@ -293,8 +299,8 @@ class YboxStateManagement:
             # but only if the destroyed container had the same shared root and configuration.
             if shared_root:
                 cursor.execute("SELECT dc.name FROM containers dc WHERE dc.destroyed = true AND "
-                               "dc.shared_root = ? AND EQUIV_CONFIG(dc.configuration, ?)",
-                               (shared_root, config_str))
+                               f"dc.shared_root = ? AND ({force_own_orphans} OR "
+                               "EQUIV_CONFIG(dc.configuration, ?))", (shared_root, config_str))
                 equiv_destroyed = [row[0] for row in cursor.fetchall()]
                 if equiv_destroyed:
                     in_args = ", ".join(["?" for _ in equiv_destroyed])

@@ -167,7 +167,8 @@ def main_argv(argv: list[str]) -> None:
     # container (because the previously destroyed one has the same configuration and shared root)
     with YboxStateManagement(env) as state:
         shared_root_dir = conf.shared_root_host_dir if shared_root else ""
-        owned_packages = state.register_container(box_name, distro, shared_root_dir, box_conf)
+        owned_packages = state.register_container(box_name, distro, shared_root_dir, box_conf,
+                                                  args.force_own_orphans)
         # create wrappers for owned_packages
         pkgmgr = distro_config["pkgmgr"]
         if owned_packages:
@@ -205,6 +206,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "if not provided (removing the .ini suffix from <profile> file)")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
+    parser.add_argument("-F", "--force-own-orphans", action="store_true",
+                        help="force ownership of orphan packages on the same shared root even "
+                             "if container configuration does not match, meaning the packages "
+                             "on the shared root directory that got orphaned due to their "
+                             "owner container being destroyed will be assigned to this new "
+                             "container regardless of the container configuration")
     parser.add_argument("distribution", nargs="?", type=str,
                         help="short name of the distribution as listed in distros/supported.list "
                              "(either in ~/.config/ybox or package's ybox/conf); it is optional "
