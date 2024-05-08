@@ -173,7 +173,12 @@ def main_argv(argv: list[str]) -> None:
         if owned_packages:
             list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
             for package, copy_type in owned_packages.items():
-                wrap_container_files(package, copy_type, list_cmd, docker_cmd, conf, box_conf)
+                if local_copies := wrap_container_files(package, copy_type, list_cmd, docker_cmd,
+                                                        conf, box_conf):
+                    # register the package again with the local_copies (no change to package_deps)
+                    state.register_package(box_name, package, local_copies=local_copies,
+                                           copy_type=copy_type, shared_root=shared_root_dir,
+                                           dep_type=None, dep_of="")
         if apps_with_deps:
             runtime_conf = RuntimeConfiguration(box_name, distro, shared_root_dir, box_conf)
             for app, deps in apps_with_deps.items():
