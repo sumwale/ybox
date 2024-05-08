@@ -2,8 +2,11 @@
 
 SOURCE '../0.9.1-added.sql';
 
+-- add the destroyed column to containers
+ALTER TABLE containers ADD COLUMN destroyed BOOL NOT NULL DEFAULT false;
+
 -- delete the orphan packages having empty container fields since it is not possible to create
--- corresponding entries in destroy_containers due to lack of container configuration information
+-- corresponding entries in containers due to lack of container configuration information
 DELETE FROM packages WHERE container = '';
 
 -- change comma-separated local_copies field to json
@@ -30,5 +33,5 @@ UPDATE packages SET local_copy_type = (
   END
 );
 
--- add version entry since code assumes that a valid entry will be present in the schema table
+-- add version entry, since code assumes that a valid entry will be present in the schema table
 INSERT INTO schema VALUES ('0.9.1');

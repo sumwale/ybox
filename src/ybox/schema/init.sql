@@ -7,7 +7,10 @@ CREATE TABLE containers (
     -- shared root directory or empty string if not using shared root
     shared_root TEXT NOT NULL,
     -- configuration of container in INI format string
-    configuration TEXT NOT NULL
+    configuration TEXT NOT NULL,
+    -- if the container has been destroyed but still has packages installed in shared root
+    -- then it is retained with a new unique name denoting a destroyed container
+    destroyed BOOL NOT NULL
 ) WITHOUT ROWID;
 
 -- all packages installed in ybox containers using ybox-pkg including dependencies

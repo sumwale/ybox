@@ -170,9 +170,10 @@ def main_argv(argv: list[str]) -> None:
         owned_packages = state.register_container(box_name, distro, shared_root_dir, box_conf)
         # create wrappers for owned_packages
         pkgmgr = distro_config["pkgmgr"]
-        list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
-        for package, copy_type in owned_packages.items():
-            wrap_container_files(package, copy_type, list_cmd, docker_cmd, conf, box_conf)
+        if owned_packages:
+            list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
+            for package, copy_type in owned_packages.items():
+                wrap_container_files(package, copy_type, list_cmd, docker_cmd, conf, box_conf)
         if apps_with_deps:
             runtime_conf = RuntimeConfiguration(box_name, distro, shared_root_dir, box_conf)
             for app, deps in apps_with_deps.items():

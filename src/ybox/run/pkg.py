@@ -54,7 +54,7 @@ def main_argv(argv: list[str]) -> None:
     env = Environ()
     with YboxStateManagement(env) as state:
         if (runtime_conf := state.get_container_configuration(container_name)) is None:
-            print_error(f"No state for ybox container '{container_name}' found!")
+            print_error(f"No entry for ybox container '{container_name}' found!")
             sys.exit(1)
         conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
         env_interpolation = EnvInterpolation(env, [])

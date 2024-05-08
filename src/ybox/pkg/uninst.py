@@ -55,7 +55,7 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
                                 f"{uninstall_cmd} {package}"], exit_on_error=False,
                                error_msg=f"uninstalling '{package}'"))
     else:
-        print_error(f"Package '{package}' not installed in container '{conf.box_name}'")
+        print_error(f"Package '{package}' is not installed in container '{conf.box_name}'")
     # go ahead with removal from local state and wrappers, even if package was not installed
     if code == 0 or not installed:
         opt_deps = state.unregister_package(conf.box_name, package, runtime_conf.shared_root)

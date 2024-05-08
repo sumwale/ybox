@@ -97,6 +97,12 @@ class YboxStateManagement:
     # pattern to match "source '<file>'" in SQL script -- doesn't allow a quote in file name
     _SOURCE_SQLCMD_RE = re.compile(r"^\s*source\s+'([^']+)'\s*;\s*", re.IGNORECASE)
 
+    # when comparing two container configurations, delete the sections mentioned below and the
+    # keys in the [base] section (specifically log-file in log-opts will change)
+    _CONFIG_NORMALIZE_DEL_SECTIONS = ["configs", "apps", "startup"]
+    _CONFIG_NORMALIZE_DEL_BASE_KEYS = ["name", "includes", "home", "config_hardlinks",
+                                       "log_driver", "log_opts"]
+
     def __init__(self, env: Environ):
         """
         Initialize connection to database and create tables+indexes if not present.
@@ -112,6 +118,8 @@ class YboxStateManagement:
             self._begin_transaction(cursor)
             self._conn.create_function("REGEXP", 2, self.regexp, deterministic=True)
             self._conn.create_function("JSON_FROM_CSV", 1, self.json_from_csv, deterministic=True)
+            self._conn.create_function("EQUIV_CONFIG", 2, self.equivalent_configuration,
+                                       deterministic=True)
             self._init_schema(cursor)
             self._conn.commit()
 
@@ -125,6 +133,39 @@ class YboxStateManagement:
     def json_from_csv(val: str) -> str:
         """callable for the user-defined SQL JSON_FROM_CSV function"""
         return json.dumps(val.split(","))
+
+    @staticmethod
+    def equivalent_configuration(conf_str1: str, conf_str2: str) -> int:
+        """
+        Callable for the user-defined EQUIV_CONFIG function. Checking equivalence consists
+        of deleting sections and keys that don't affect behavior of the container in terms
+        of running the apps. Specifically the `log_opts` key from the `base` section has to
+        be removed because the log-file name, when set based on time, will change in every run.
+        """
+        config1 = ConfigParser(allow_no_value=True, interpolation=None, delimiters="=")
+        config1.optionxform = str  # type: ignore
+        with StringIO(conf_str1) as conf_io1:
+            config1.read_file(conf_io1)
+        YboxStateManagement.normalize_configuration(config1)
+
+        config2 = ConfigParser(allow_no_value=True, interpolation=None, delimiters="=")
+        config2.optionxform = str  # type: ignore
+        with StringIO(conf_str2) as conf_io2:
+            config2.read_file(conf_io2)
+        YboxStateManagement.normalize_configuration(config2)
+
+        return int(config1 == config2)
+
+    @staticmethod
+    def normalize_configuration(config: ConfigParser) -> None:
+        """
+        Normalize a configuration by deleting sections/keys that do not affect its overall
+        behavior in running applications in the container.
+        """
+        for del_section in YboxStateManagement._CONFIG_NORMALIZE_DEL_SECTIONS:
+            config.remove_section(del_section)
+        for del_key in YboxStateManagement._CONFIG_NORMALIZE_DEL_BASE_KEYS:
+            config.remove_option("base", del_key)
 
     @staticmethod
     def _begin_transaction(cursor: sqlite3.Cursor) -> None:
@@ -245,25 +286,29 @@ class YboxStateManagement:
             self._begin_transaction(cursor)
             # the ybox container may have been destroyed from outside ybox tools, so unregister
             self._unregister_container(container_name, cursor)
-            cursor.execute("INSERT INTO containers VALUES (?, ?, ?, ?)",
+            cursor.execute("INSERT INTO containers VALUES (?, ?, ?, ?, false)",
                            (container_name, distribution, shared_root, config_str))
             # Find the orphan packages with the same shared_root and assign to this container
-            # but only if the deleted container had the same shared root and configuration.
+            # but only if the destroyed container had the same shared root and configuration.
             if shared_root:
-                deleted = ("SELECT dc.name FROM destroyed_containers dc WHERE "
-                           "dc.shared_root = ? AND dc.configuration = ?")
-                # reassign packages to this container having matching destroyed container
-                cursor.execute(f"UPDATE packages SET container = ? WHERE container IN ({deleted}) "
-                               "RETURNING name, local_copy_type",
-                               (container_name, shared_root, config_str))
-                packages = {name: CopyType(copy_type) for (name, copy_type) in cursor.fetchall()}
-                if packages:  # no need to proceed if nothing matching was found in packages
+                cursor.execute("SELECT dc.name FROM containers dc WHERE dc.destroyed = true AND "
+                               "dc.shared_root = ? AND EQUIV_CONFIG(dc.configuration, ?)",
+                               (shared_root, config_str))
+                equiv_destroyed = [row[0] for row in cursor.fetchall()]
+                if equiv_destroyed:
+                    in_args = ", ".join(["?" for _ in equiv_destroyed])
+                    pkg_args = [container_name]
+                    pkg_args.extend(equiv_destroyed)
+                    # reassign packages to this container having matching destroyed container
+                    cursor.execute("UPDATE packages SET container = ? WHERE container IN "
+                                   f"({in_args}) RETURNING name, local_copy_type", pkg_args)
+                    packages = {name: CopyType(cp_type) for (name, cp_type) in cursor.fetchall()}
                     cursor.execute(
-                        f"UPDATE package_deps SET container = ? WHERE container IN ({deleted})",
-                        (container_name, shared_root, config_str))
+                        f"UPDATE package_deps SET container = ? WHERE container IN ({in_args})",
+                        pkg_args)
                     # get rid of destroyed containers whose packages all got reassigned
-                    cursor.execute(f"DELETE FROM destroyed_containers WHERE name IN ({deleted})",
-                                   (shared_root, config_str))
+                    cursor.execute(f"DELETE FROM containers WHERE name IN ({in_args})",
+                                   equiv_destroyed)
             self._conn.commit()
             return packages
 
@@ -295,8 +340,8 @@ class YboxStateManagement:
         """
         cursor.execute("DELETE FROM containers WHERE name = ? RETURNING distribution, "
                        "shared_root, configuration", (container_name,))
-        # if the container has 'shared_root', then packages will continue to exist, but make an
-        # entry in `destroyed_containers` with a new unique name (else there can be clashes later)
+        # if the container has 'shared_root', then packages will continue to exist, but update
+        # the entry in `containers` with a new unique name (else there can be clashes later)
         # and update the container name in package tables
         row = cursor.fetchone()
         # check if there are any packages registered for the container
@@ -310,14 +355,16 @@ class YboxStateManagement:
             insert_done = False
             while not insert_done:
                 try:
-                    cursor.execute("INSERT INTO destroyed_containers VALUES (?, ?, ?, ?)",
+                    cursor.execute("INSERT INTO containers VALUES (?, ?, ?, ?, true)",
                                    (new_name, distro, shared_root, config))
                     insert_done = True
                 except sqlite3.IntegrityError:
-                    # retry if unlucky (or buggy) to generate a repeat UUID
+                    # retry if unlucky (or buggy) to generate a UUID already generated in the past
                     new_name = str(uuid4())
-            cursor.execute("UPDATE packages SET container = ? WHERE container = ? "
-                           "RETURNING local_copies", (new_name, container_name))
+            # update container name to the new one for destroyed container and clear local_copies
+            cursor.execute("UPDATE packages SET container = ?, local_copies = '[]' "
+                           "WHERE container = ? RETURNING local_copies",
+                           (new_name, container_name))
             local_copies = YboxStateManagement._extract_local_copies(cursor.fetchall())
             cursor.execute("UPDATE package_deps SET container = ? WHERE container = ?",
                            (new_name, container_name))
@@ -378,8 +425,8 @@ class YboxStateManagement:
             return [str(row[0]) for row in rows]
 
     def register_package(self, container_name: str, package: str, local_copies: list[str],
-                         copy_type: CopyType, dep_type: Optional[DependencyType] = None,
-                         dep_of: str = "") -> None:
+                         copy_type: CopyType, shared_root: str, dep_type: Optional[DependencyType],
+                         dep_of: str) -> None:
         """
         Register a package as being owned by a container.
 
@@ -388,12 +435,30 @@ class YboxStateManagement:
         :param local_copies: map of package name to list of locally copied files (typically
                              desktop files and binary executables that invoke container ones)
         :param copy_type: the type of files (one of `CopyType`s or CopyType(0)) in `local_copies`
+        :param shared_root: the local shared root directory if `shared_root` flag is enabled
+                            for the container
         :param dep_type: the `DependencyType` for the package, or None if not a dependency
         :param dep_of: if `dep_type` is not None, then this is the package that has this one
                        as a dependency of that type
         """
         with closing(cursor := self._conn.cursor()):
             self._begin_transaction(cursor)
+            # if there is an entry for an orphaned package in the same shared root, then remove it
+            if shared_root:
+                # EXISTS query seems to be always faster than IN query in sqlite
+                cursor.execute("""
+                    DELETE from packages WHERE name = ? AND EXISTS (
+                        SELECT 1 FROM containers dc WHERE dc.destroyed = true AND
+                        dc.shared_root = ? AND packages.container = dc.name
+                    ) RETURNING container""", (package, shared_root))
+                if rows := cursor.fetchall():
+                    in_str = ", ".join(["?" for _ in rows])
+                    args = [package]
+                    for row in rows:
+                        args.append(row[0])
+                    cursor.execute("DELETE from package_deps WHERE name = ? AND "
+                                   f"container IN ({in_str})", args)
+                    self._clean_destroyed_containers(cursor)
             cursor.execute("INSERT OR REPLACE INTO packages VALUES (?, ?, ?, ?)",
                            (package, container_name, json.dumps(local_copies), copy_type.value))
             if dep_type:
@@ -444,10 +509,10 @@ class YboxStateManagement:
         with closing(cursor := self._conn.cursor()):
             self._begin_transaction(cursor)
             # Query below determines dependent packages that have been orphaned as follows:
-            # 1. select the dependencies of the package in the container
+            # 1. select the dependencies of the package in the container/shared root
             # 2. select dependencies of all other packages having either the same shared root
             #    OR same container (latter if container is not on a shared root)
-            # Select dependencies from 1 that do not exist in 2.
+            # Select dependencies from 1 that do not exist in 2, i.e. no one else refers to them.
             # An equivalent query can be created using left outer join with null check, but it was
             # tested to be slower. An alternative query can be formed using window function
             # by partitioning on `dependency` column and applying an aggregate like count to
@@ -458,31 +523,58 @@ class YboxStateManagement:
             #     FILTER (WHERE name <> ?) OVER (PARTITION BY dependency)
             #     AS dep_counts FROM package_deps WHERE container = ?) WHERE dep_counts = 0
             o_deps_container_query = """
-                SELECT dependency FROM package_deps d WHERE d.name <> ? AND d.container = ?"""
+                SELECT 1 FROM package_deps d WHERE d.name <> ? AND d.container = ?"""
             o_deps_shared_root_query = """
-                SELECT dependency FROM package_deps d INNER JOIN containers c
+                SELECT 1 FROM package_deps d INNER JOIN containers c
                 ON (d.container = c.name AND d.name <> ?) WHERE c.shared_root = ?"""
+            # EXISTS subquery for the containers with the same shared root as this container
+            # which includes any destroyed container entries
+            sr_exists = ("SELECT 1 FROM containers c WHERE c.shared_root = ? AND "
+                         "p.container = c.name")
+            pkgs_container_query = "container = ?"
+            pkgs_shared_root_query = f"EXISTS ({sr_exists})"
             orphans_query = """
-                SELECT dependency, dep_type FROM package_deps deps WHERE name = ? AND container = ?
-                AND NOT EXISTS ({o_deps_query} AND deps.dependency = d.dependency)"""
+                SELECT dependency, dep_type FROM package_deps p WHERE name = ? AND {pkgs_loc_query}
+                AND NOT EXISTS ({o_deps_query} AND p.dependency = d.dependency)"""
             if shared_root:
-                cursor.execute(orphans_query.format(o_deps_query=o_deps_shared_root_query),
-                               (package, container_name, package, shared_root))
+                cursor.execute(orphans_query.format(pkgs_loc_query=pkgs_shared_root_query,
+                                                    o_deps_query=o_deps_shared_root_query),
+                               (package, shared_root, package, shared_root))
             else:
-                cursor.execute(orphans_query.format(o_deps_query=o_deps_container_query),
+                cursor.execute(orphans_query.format(pkgs_loc_query=pkgs_container_query,
+                                                    o_deps_query=o_deps_container_query),
                                (package, container_name, package, container_name))
             orphans = {dep: DependencyType(dep_type) for (dep, dep_type) in cursor.fetchall()}
-            # delete from the packages table
-            cursor.execute("DELETE FROM packages WHERE name = ? AND container = ?"
-                           " RETURNING local_copies", (package, container_name))
-            local_copies = self._extract_local_copies(cursor.fetchall())
-            # and from the package_deps table
-            cursor.execute("DELETE FROM package_deps WHERE name = ? AND container = ?",
-                           (package, container_name))
-        self._conn.commit()
+
+            # for the case of common shared root, delete package regardless of the container
+            if shared_root:
+                # delete from the packages table
+                cursor.execute("DELETE FROM packages AS p WHERE name = ? AND EXISTS "
+                               f"({sr_exists}) RETURNING local_copies", (package, shared_root))
+                local_copies = self._extract_local_copies(cursor.fetchall())
+                # and from the package_deps table
+                cursor.execute("DELETE FROM package_deps AS p WHERE name = ? AND EXISTS "
+                               f"({sr_exists})", (package, shared_root))
+                self._clean_destroyed_containers(cursor)
+            else:
+                # delete from the packages and package_deps tables
+                cursor.execute("DELETE FROM packages WHERE name = ? AND container = ? "
+                               "RETURNING local_copies", (package, container_name))
+                local_copies = self._extract_local_copies(cursor.fetchall())
+                cursor.execute("DELETE FROM package_deps WHERE name = ? AND container = ?",
+                               (package, container_name))
+            self._conn.commit()
         # delete all the files created locally for the container
         self._remove_local_copies(local_copies)
         return orphans
+
+    @staticmethod
+    def _clean_destroyed_containers(cursor: sqlite3.Cursor) -> None:
+        """remove destroyed containers if there are no remaining packages for them"""
+        cursor.execute("""
+            DELETE FROM containers AS dc WHERE destroyed = true AND NOT EXISTS (
+                SELECT 1 FROM packages p WHERE dc.name = p.container
+            )""")
 
     @staticmethod
     def _extract_local_copies(rows: list, lc_idx: int = 0) -> list[str]:
@@ -521,7 +613,7 @@ class YboxStateManagement:
             predicate = "container = ? AND "
             args.append(container_name)
         if regex != ".*":
-            predicate += "name REGEXP ? AND "
+            predicate += "REGEXP(name, ?) AND "
             args.append(regex)
         if dependency_type == ".*":
             predicate += "1=1"
@@ -529,7 +621,7 @@ class YboxStateManagement:
             predicate += ("NOT EXISTS (SELECT 1 FROM package_deps WHERE "
                           "packages.container = container AND packages.name = dependency)")
         else:
-            predicate += ("EXISTS (SELECT 1 FROM package_deps WHERE dep_type REGEXP ? AND "
+            predicate += ("EXISTS (SELECT 1 FROM package_deps WHERE REGEXP(dep_type, ?) AND "
                           "packages.container = container AND packages.name = dependency)")
             args.append(dependency_type)
         with closing(cursor := self._conn.cursor()):

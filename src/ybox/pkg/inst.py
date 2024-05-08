@@ -56,8 +56,8 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="{opt_dep}")
     list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
     selected_deps = args.with_opt_deps.split(",") if args.with_opt_deps else None
-    opt_deps_cmd, opt_dep_flag = ("", "") if args.skip_opt_deps and not selected_deps else (
-        pkgmgr[PkgMgr.OPT_DEPS.value], pkgmgr[PkgMgr.OPT_DEP_FLAG.value])
+    opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS.value]
+    opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
     check_cmd = pkgmgr[PkgMgr.INFO.value] if args.check_package else ""
     return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,
                             runtime_conf, state, opt_deps_cmd, opt_dep_flag, False, check_cmd,
@@ -97,13 +97,12 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     # dependencies will never be found (as the dependencies are already installed)
     optional_deps: list[Tuple[str, str, int]] = []
     installed_optional_deps: set[str] = set()
-    if opt_deps_cmd and selected_deps is None:
-        optional_deps, installed_optional_deps = get_optional_deps(package, docker_cmd,
-                                                                   conf.box_name, opt_deps_cmd)
     if opt_dep_install:
         resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
     else:
         resolved_install_cmd = install_cmd.format(opt_dep="")
+        optional_deps, installed_optional_deps = get_optional_deps(package, docker_cmd,
+                                                                   conf.box_name, opt_deps_cmd)
     # don't exit on error here because the caller may have further actions to perform before exit
     code = -1
     if check_cmd and (code := check_installed_package(docker_cmd, check_cmd, package,
@@ -119,25 +118,26 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         skip_desktop_files = args.skip_desktop_files
         skip_executables = args.skip_executables
         copy_type = CopyType(0)
-        if not skip_desktop_files:
-            copy_type |= CopyType.DESKTOP
-        if not skip_executables:
-            copy_type |= CopyType.EXECUTABLE
-        # TODO: wrappers for newly installed required dependencies should also be created
-        # check if need to create wrappers for optional dependencies
-        local_copies: list[str] = []
+        # check if wrappers for optional dependencies have to be created
         if not opt_dep_install or args.add_dep_wrappers:
-            local_copies = wrap_container_files(package, copy_type, list_cmd, docker_cmd, conf,
-                                                rt_conf.ini_config)
+            if not skip_desktop_files:
+                copy_type |= CopyType.DESKTOP
+            if not skip_executables:
+                copy_type |= CopyType.EXECUTABLE
+        # TODO: wrappers for newly installed required dependencies should also be created;
+        #       handle DependencyType.SUGGESTION if supported by underlying package manager
+        local_copies = wrap_container_files(package, copy_type, list_cmd, docker_cmd, conf,
+                                            rt_conf.ini_config)
         dep_type, dep_of = (DependencyType.OPTIONAL, args.package) if opt_dep_install else (
             None, "")
         state.register_package(conf.box_name, package, local_copies=local_copies,
-                               copy_type=copy_type, dep_type=dep_type, dep_of=dep_of)
+                               copy_type=copy_type, shared_root=rt_conf.shared_root,
+                               dep_type=dep_type, dep_of=dep_of)
         # register the recorded optional dependencies for this package too
         if recorded_deps := state.check_packages(conf.box_name, installed_optional_deps):
             for dep in recorded_deps:
                 state.register_dependency(conf.box_name, package, dep, DependencyType.OPTIONAL)
-        if optional_deps and selected_deps is None:
+        if optional_deps and selected_deps is None and not args.skip_opt_deps:
             selected_deps = select_optional_deps(package, optional_deps)
         if selected_deps:
             for dep in selected_deps:

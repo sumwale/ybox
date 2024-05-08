@@ -3,18 +3,8 @@ CREATE TABLE schema (
     version TEXT NOT NULL PRIMARY KEY
 ) WITHOUT ROWID;
 
--- containers that have been destroyed but use shared root which still exists having packages
--- installed from this container (columns are the same as `containers` table)
-CREATE TABLE destroyed_containers (
-    name TEXT NOT NULL PRIMARY KEY,
-    distribution TEXT NOT NULL,
-    shared_root TEXT NOT NULL,
-    configuration TEXT NOT NULL
-) WITHOUT ROWID;
-
--- index on the shared_root column used in joins and lookups
+-- index on the shared_root column used in lookups
 CREATE INDEX container_roots ON containers(shared_root);
-CREATE INDEX destroyed_root ON destroyed_containers(shared_root);
 
 -- dependencies of packages are also recorded separately to keep a proper
 -- reference count and remove dependencies only if no package depends on it
