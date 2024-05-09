@@ -1,0 +1,16 @@
+name: ybox
+channels:
+  - conda-forge
+  - anaconda
+dependencies:
+  - python=3.10
+  - setuptools
+  - build
+  - pip
+  - tabulate
+  - types-tabulate
+  - ijson
+  - mypy
+  - pylint
+  - pip:
+    - simple-term-menu

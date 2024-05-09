@@ -293,3 +293,39 @@ containers as below:
 ```sh
 ybox-restart ybox-arch_apps
 ```
+
+
+## Development
+
+Scripts to setup a conda environment for a consistency have been provided in the 'conda'
+directory which creates an environment in 'conda/.conda' directory of the checkout.
+To set it up run:
+
+```sh
+conda/setup-conda.sh
+```
+
+Then you can activate it in bash:
+
+```sh
+source conda/activate-conda.bash
+```
+
+Or in fish shell:
+
+```
+source conda/activate-conda.fish
+```
+
+Script for zsh has also been provided but is untested (you can see the last two lines for
+    what is actually needed and run those manually if it does not work):
+
+```
+source conda/activate-conda.zsh
+```
+
+You can open the checkout directory as an existing project in Intellij IDEA and then
+add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
+Choose an existing environment in Conda environment where the path to conda should already
+be selected correctly (`<checkout dir>/conda/.conda/bin/conda`) while for interpreter
+choose `<checkout dir>/conda/.conda/envs/ybox/bin/python3`.

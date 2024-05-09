@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-SCRIPT_DIR=$(cd "$(dirname "$0")"; pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
@@ -65,7 +65,7 @@ $PAC -S --needed lesspipe bash-completion bc base-devel man-db man-pages \
   wget aria2 btop realtime-privileges shared-mime-info tree starship \
   python-ijson python-tabulate
 $PAC -S --needed --asdeps git ed unzip fastjar python-pynvim xsel intel-media-driver \
-  libva-mesa-driver vulkan-intel vulkan-mesa-layers python-pip
+  libva-mesa-driver vulkan-intel vulkan-mesa-layers python-pip dos2unix
 
 echo_color "$fg_cyan" "Configuring makepkg and system-wide bashrc" >> $status_file
 # use reasonable MAKEFLAGS and zstd compression level for AUR packages
