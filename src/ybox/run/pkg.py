@@ -24,6 +24,10 @@ def main() -> None:
 
 def main_argv(argv: list[str]) -> None:
     args = parse_args(argv)
+    # --quiet can be specified at most two times
+    if args.quiet > 2:
+        print_error("Argument -q/--quiet can be specified at most two times")
+        sys.exit(1)
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.ybox
 
@@ -97,10 +101,12 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-z", "--ybox", type=str,
                            help="the ybox container to use for package operations else the user "
                                 "is prompted to select a container from among the active ones")
-    subparser.add_argument("-q", "--quiet", action="store_true",
+    subparser.add_argument("-q", "--quiet", action="count", default=0,
                            help="proceed without asking any questions; the container selection "
                                 "is also skipped and it is assumed that there is only one "
-                                "active container which is selected else the operation fails")
+                                "active container which is selected else the operation fails; "
+                                "specifying this flag twice will make it real quiet (e.g. install "
+                                "will silently override system executables with local ones)")
 
 
 def add_install(subparser: argparse.ArgumentParser) -> None:

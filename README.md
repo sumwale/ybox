@@ -297,9 +297,9 @@ ybox-restart ybox-arch_apps
 
 ## Development
 
-Scripts to setup a conda environment for a consistency have been provided in the 'conda'
-directory which creates an environment in 'conda/.conda' directory of the checkout.
-To set it up run:
+Scripts to setup a conda environment for a consistent development and build have been
+provided in the 'conda' directory which creates an environment in 'conda/.conda'
+directory of the checkout. To set it up run:
 
 ```sh
 conda/setup-conda.sh
@@ -317,8 +317,7 @@ Or in fish shell:
 source conda/activate-conda.fish
 ```
 
-Script for zsh has also been provided but is untested (you can see the last two lines for
-    what is actually needed and run those manually if it does not work):
+Script for zsh has also been provided:
 
 ```
 source conda/activate-conda.zsh

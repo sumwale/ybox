@@ -22,6 +22,7 @@ from ybox.util import check_installed_package, ini_file_reader
 
 # match both "Exec=" and "TryExec=" lines
 _EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(.+?)((\s%[a-zA-Z])?\s*)$")
+_LOCAL_BIN_DIRS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
 
 
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
@@ -68,7 +69,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                      docker_cmd: str, conf: StaticConfiguration, rt_conf: RuntimeConfiguration,
                      state: YboxStateManagement, opt_deps_cmd: str, opt_dep_flag: str,
                      opt_dep_install: bool, check_cmd: str, selected_deps: Optional[list[str]],
-                     quiet: bool) -> int:
+                     quiet: int) -> int:
     """
     Real workhorse for :func:`install_package` that is invoked recursively for
     optional dependencies if required.
@@ -86,10 +87,10 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     :param opt_deps_cmd: command to determine optional dependencies as read from `distro.ini`
     :param opt_dep_flag: flag to be added during installation of an optional dependency to mark
                          it as a dependency (as read from `distro.ini`)
-    :param opt_dep_install: true if installation is for an optional dependency
+    :param opt_dep_install: `True` if installation is for an optional dependency
     :param check_cmd: command to check if package exists before installation
     :param selected_deps: list of dependencies to install if user has already provided them
-    :param quiet: perform some operations quietly
+    :param quiet: perform operations quietly
 
     :return: exit code of install command for the main package
     """
@@ -101,6 +102,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
     else:
         resolved_install_cmd = install_cmd.format(opt_dep="")
+        # get optional deps even if args.skip_opt_deps is true to obtain installed_optional_deps
+        # which need to be registered against this package too (state.register_dependency below)
         optional_deps, installed_optional_deps = get_optional_deps(package, docker_cmd,
                                                                    conf.box_name, opt_deps_cmd)
     # don't exit on error here because the caller may have further actions to perform before exit
@@ -127,7 +130,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         # TODO: wrappers for newly installed required dependencies should also be created;
         #       handle DependencyType.SUGGESTION if supported by underlying package manager
         local_copies = wrap_container_files(package, copy_type, list_cmd, docker_cmd, conf,
-                                            rt_conf.ini_config)
+                                            rt_conf.ini_config, quiet)
         dep_type, dep_of = (DependencyType.OPTIONAL, args.package) if opt_dep_install else (
             None, "")
         state.register_package(conf.box_name, package, local_copies=local_copies,
@@ -248,7 +251,7 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
 
 def wrap_container_files(package: str, copy_type: CopyType, list_cmd: str,
                          docker_cmd: str, conf: StaticConfiguration,
-                         box_conf: Union[str, ConfigParser]) -> list[str]:
+                         box_conf: Union[str, ConfigParser], quiet: int) -> list[str]:
     """
     Create wrappers in host environment to invoke container's desktop files and executables.
 
@@ -260,6 +263,7 @@ def wrap_container_files(package: str, copy_type: CopyType, list_cmd: str,
     :param conf: the `StaticConfiguration` of the container
     :param box_conf: the resolved INI format configuration of the container as a string or
                      a `ConfigParser` object
+    :param quiet: perform operations quietly
 
     :return: the list of paths of the wrapper files
     """
@@ -276,14 +280,22 @@ def wrap_container_files(package: str, copy_type: CopyType, list_cmd: str,
     executable_dirs = Consts.container_executable_dirs()
     # read the container configuration for [app_flags] section
     app_flags = _get_app_flags(box_conf)
+    file_paths = [(os.path.dirname(file), filename, file) for file in package_files.splitlines()
+                  if (filename := os.path.basename(file).strip())]  # empty name means directory
+
+    # if an executable from a package is skipped by user, then skip all of them for consistency
+    if quiet < 2:  # quiet = 2 means that actions will be done without user confirmation
+        for file_dir, filename, file in file_paths:
+            if (copy_type & CopyType.EXECUTABLE) and file_dir in executable_dirs:
+                if not _can_wrap_executable(filename, file, conf, quiet):
+                    # clear EXECUTABLE mask so that no wrapper executable is created
+                    copy_type &= ~CopyType.EXECUTABLE
+                    break
+
     # the "-it" flag is used for both desktop file and executable for docker/podman exec
     # since it is safe (unless the app may need stdin in which case Terminal must be true
     #   in its desktop file in which case a terminal will be opened during execution)
-    for file in str(package_files).splitlines():
-        file_dir = os.path.dirname(file)
-        filename = os.path.basename(file).strip()
-        if not filename:  # the case of directories
-            continue
+    for file_dir, filename, file in file_paths:
         # check if this is a .desktop directory and copy it over adding appropriate
         # "docker exec" prefix to the command
         if (copy_type & CopyType.DESKTOP) and file_dir in desktop_dirs:
@@ -302,6 +314,7 @@ def _get_app_flags(box_conf: Union[str, ConfigParser]) -> Optional[SectionProxy]
 
     :param box_conf: the resolved INI format configuration of the container as a string or
                      a `ConfigParser` object
+
     :return: the [app_flags] section as a `SectionProxy` object
     """
     if isinstance(box_conf, ConfigParser):
@@ -353,8 +366,41 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
         tmp_file.unlink(missing_ok=True)
 
 
+def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, quiet: int) -> bool:
+    """
+    For an executable, check if a wrapper executable that invokes "docker/podman exec" should
+    be created (with user confirmation or allow without confirmation if `quiet` is non-zero).
+
+    :param filename: name of the executable file being wrapped
+    :param file: full path of the executable file being wrapped
+    :param conf: the `StaticConfiguration` of the container
+    :param quiet: perform operations quietly: a value of 1 will overwrite existing wrapper file
+                  without confirmation while a value of 2 will also override system executable,
+                  if present, without confirmation
+
+    :return: `True` if the wrapper executable file name if allowed else `False`
+    """
+    wrapper_exec = _get_wrapper_executable(filename, conf)
+    if quiet == 0 and os.path.exists(wrapper_exec):
+        resp = input(f"Target file {wrapper_exec} already exists. Overwrite? (y/N) ")
+        if resp.lower() != "y":
+            print_warn(f"Skipping local wrapper for {file}")
+            return False
+    # also check if creating user executable will override system executable
+    if quiet < 2:
+        for bin_dir in _LOCAL_BIN_DIRS:
+            sys_exec = f"{bin_dir}/{filename}"
+            if os.path.exists(sys_exec):
+                resp = input(f"Target file {wrapper_exec} will override system installed "
+                             f"{sys_exec}. Continue? (y/N) ")
+                if resp.lower() != "y":
+                    print_warn(f"Skipping local wrapper for {file}")
+                    return False
+    return True
+
+
 def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
-                     app_flags: Optional[SectionProxy], wrapper_files: list[str]) -> bool:
+                     app_flags: Optional[SectionProxy], wrapper_files: list[str]) -> None:
     """
     For an executable, create a wrapper executable that invokes "docker/podman exec".
 
@@ -364,16 +410,9 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     :param conf: the `StaticConfiguration` of the container
     :param app_flags: the [app_flags] section from the container configuration as a `SectionProxy`
     :param wrapper_files: the accumulated list of all wrapper files so far
-
-    :return: true if a wrapper for executable file was created else false if skipped by the user
     """
-    wrapper_exec = f"{conf.env.user_executables_dir}/{filename}"
+    wrapper_exec = _get_wrapper_executable(filename, conf)
     print_warn(f"Linking container executable {file} to {wrapper_exec}")
-    if os.path.exists(wrapper_exec):
-        resp = input(f"Target file {wrapper_exec} already exists. Overwrite? (y/N) ")
-        if resp.lower() != "y":
-            print_warn(f"Skipping local wrapper for {file}")
-            return False
     # check for additional flags to be added
     flags = app_flags.get(filename, "") if app_flags else ""
     exec_content = ("#!/bin/sh\n",
@@ -382,4 +421,8 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)
     wrapper_files.append(wrapper_exec)
-    return True
+
+
+def _get_wrapper_executable(filename: str, conf: StaticConfiguration) -> str:
+    """get the file path for local wrapper executable"""
+    return f"{conf.env.user_executables_dir}/{filename}"

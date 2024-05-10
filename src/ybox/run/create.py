@@ -174,8 +174,11 @@ def main_argv(argv: list[str]) -> None:
         if owned_packages:
             list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
             for package, copy_type in owned_packages.items():
+                # skip packages already scheduled to be installed
+                if package in apps_with_deps:
+                    continue
                 if local_copies := wrap_container_files(package, copy_type, list_cmd, docker_cmd,
-                                                        conf, box_conf):
+                                                        conf, box_conf, 1):
                     # register the package again with the local_copies (no change to package_deps)
                     state.register_package(box_name, package, local_copies=local_copies,
                                            copy_type=copy_type, shared_root=shared_root_dir,
