@@ -188,7 +188,22 @@ echo started >> $status_file
 tail -s10 -f /dev/null &
 childPID=$!
 
-# truncate status file and cleanly kill the infinite wait on hup/int/quit/pipe/term signals
-trap "echo -n > $status_file; kill -TERM $childPID" 1 2 3 13 15
+function cleanup() {
+  # clear status file first just in case other operations do not finish before SIGKILL comes
+  echo -n > $status_file
+  # first send SIGTERM to all "docker exec" processes that will have parent PID as 0
+  exec_pids=$(ps -e -o ppid=,pid= | awk '{ if ($1 == 0 && $2 != 1) print $2 }')
+  for pid in $exec_pids; do
+    echo "Sending SIGTERM to $pid"
+    kill -TERM $pid
+  done
+  # sleep a bit for $exec_pids to finish
+  [ -n "$exec_pids" ] && sleep 3
+  # lastly kill the infinite tail process
+  kill -TERM $childPID
+}
+
+# truncate status file and cleanly kill the processes on hup/int/quit/pipe/term signals
+trap "cleanup" 1 2 3 13 15
 
 wait $childPID
