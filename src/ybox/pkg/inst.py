@@ -381,21 +381,21 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
     :return: `True` if the wrapper executable file name if allowed else `False`
     """
     wrapper_exec = _get_wrapper_executable(filename, conf)
-    if quiet == 0 and os.path.exists(wrapper_exec):
-        resp = input(f"Target file {wrapper_exec} already exists. Overwrite? (y/N) ")
-        if resp.lower() != "y":
+    if os.path.exists(wrapper_exec):
+        resp = input(
+            f"Target file {wrapper_exec} already exists. Overwrite? (y/N) ") if quiet == 0 else "N"
+        if resp.strip().lower() != "y":
             print_warn(f"Skipping local wrapper for {file}")
             return False
     # also check if creating user executable will override system executable
-    if quiet < 2:
-        for bin_dir in _LOCAL_BIN_DIRS:
-            sys_exec = f"{bin_dir}/{filename}"
-            if os.path.exists(sys_exec):
-                resp = input(f"Target file {wrapper_exec} will override system installed "
-                             f"{sys_exec}. Continue? (y/N) ")
-                if resp.lower() != "y":
-                    print_warn(f"Skipping local wrapper for {file}")
-                    return False
+    for bin_dir in _LOCAL_BIN_DIRS:
+        sys_exec = f"{bin_dir}/{filename}"
+        if os.path.exists(sys_exec):
+            resp = input(f"Target file {wrapper_exec} will override system installed "
+                         f"{sys_exec}. Continue? (y/N) ") if quiet < 2 else "N"
+            if resp.strip().lower() != "y":
+                print_warn(f"Skipping local wrapper for {file}")
+                return False
     return True
 
 

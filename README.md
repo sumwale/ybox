@@ -123,7 +123,7 @@ The `$HOME` directory of the container can be found in `~/.local/share/ybox/<con
 e.g. `~/.local/share/ybox/ybox-arch_apps/home` for the above example.
 
 When shared root directory is enabled (which is the default in the shipped profiles), then
-it uses the common distribution path in `~/.local/share/ybox/ROOTS/<distribution>`
+it uses the common distribution path in `~/.local/share/ybox/ROOTS/<distribution>` by default
 i.e. `~/.local/share/ybox/ROOTS/arch` for the Arch Linux guests.
 
 For more advanced usage, you can copy from the available profiles in `src/ybox/conf/profiles`

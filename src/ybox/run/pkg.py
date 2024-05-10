@@ -44,7 +44,7 @@ def main_argv(argv: list[str]) -> None:
             sys.exit(1)
         elif args.quiet:
             print_error(
-                f"Expected one active ybox container but found {', '.join(containers)}")
+                f"Expected one active ybox container but found: {', '.join(containers)}")
             sys.exit(1)
         else:
             print_info("Please select the container to use:", file=sys.stderr)
@@ -102,9 +102,10 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
                            help="the ybox container to use for package operations else the user "
                                 "is prompted to select a container from among the active ones")
     subparser.add_argument("-q", "--quiet", action="count", default=0,
-                           help="proceed without asking any questions; the container selection "
-                                "is also skipped and it is assumed that there is only one "
-                                "active container which is selected else the operation fails; "
+                           help="proceed without asking any questions using default where "
+                                "possible; this should usually be used with explicit -z/--ybox "
+                                "argument for the container else it is assumed that there is only "
+                                "one active container which is selected else the operation fails; "
                                 "specifying this flag twice will make it real quiet (e.g. install "
                                 "will silently override system executables with local ones)")
 

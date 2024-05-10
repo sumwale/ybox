@@ -32,7 +32,6 @@ class StaticConfiguration:
         if os.path.exists("/etc/timezone"):
             with open("/etc/timezone", "r", encoding="utf-8") as timezone:
                 self._timezone = timezone.read().rstrip("\n")
-        self._shared_root_host_dir = f"{env.data_dir}/ROOTS/{distribution}"
         container_dir = f"{env.data_dir}/{box_name}"
         os.environ["YBOX_CONTAINER_DIR"] = container_dir
         self._configs_dir = f"{container_dir}/configs"
@@ -59,15 +58,15 @@ class StaticConfiguration:
         """name of the ybox container"""
         return self._box_name
 
-    def box_image(self, shared_root: bool) -> str:
+    def box_image(self, has_shared_root: bool) -> str:
         """
         Container image created with basic required user configuration from base image.
-        This can either be container specific, or if 'base.shared_root' is true, then
+        This can either be container specific, or if 'base.shared_root' is enabled, then
         it will be common for all such images for the same distribution.
-        :param shared_root: whether 'base.shared_root' is true in configuration file
+        :param has_shared_root: whether 'base.shared_root' is enabled in configuration file
         :return: the docker/podman image to be created and used for the ybox
         """
-        return self._shared_box_image if shared_root else self._box_image
+        return self._shared_box_image if has_shared_root else self._box_image
 
     @property
     def localtime(self) -> Optional[str]:
@@ -78,11 +77,6 @@ class StaticConfiguration:
     def timezone(self) -> Optional[str]:
         """the contents of /etc/timezone"""
         return self._timezone
-
-    @property
-    def shared_root_host_dir(self) -> str:
-        """host directory that is bind mounted as the shared root directory on containers"""
-        return self._shared_root_host_dir
 
     @property
     def configs_dir(self) -> str:

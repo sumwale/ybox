@@ -68,7 +68,7 @@ class YboxStateManagement:
 
     1. The full configuration used for the creation of a container.
     2. The packages installed explicitly on each of the containers (though all
-         packages may be visible on all containers having `shared_root` as true)
+         packages may be visible on all containers having `shared_root` enabled)
     3. Cleanup state of containers removed explicitly or those that got stopped/removed.
 
     Expected usage is using a `with` statement to ensure proper cleanup other the database
@@ -325,7 +325,7 @@ class YboxStateManagement:
         for the container if 'shared_root' is false for the container. However, if 'shared_root'
         is true for the container, its packages are marked as "zombie" (i.e. its owner is empty)
         if no other container refers to them. This is because the packages will still be visible
-        in all other containers having 'shared_root' as true.
+        in all other containers having 'shared_root' as enabled.
 
         :param container_name: name of the container
         :return: true if container was found in the database and removed

@@ -70,8 +70,8 @@ def main_argv(argv: list[str]) -> None:
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
-    # 1) First start a basic container with the smallest upstream distro image (important to
-    #    save space when 'base.shared_root' is true) with "entrypoint-base.sh" as the entrypoint
+    # 1) First start a basic container with the smallest upstream distro image (important to save
+    #    space when 'base.shared_root' is enabled) with "entrypoint-base.sh" as the entrypoint
     #    script giving user/group arguments to be same as the user as on the host machine.
     # 2) Next do a docker/podman commit and save the stopped container as local image which
     #    will be used henceforth. The main point of doing #1 is to ensure that a sudo enabled
@@ -93,7 +93,7 @@ def main_argv(argv: list[str]) -> None:
     # 5) Mounts and environment variables are set up for step 3 which are automatically also
     #    available in step 4, and hence no special setup is required in step 4.
     #
-    # If 'base.shared_root' is true, the above sequence has the following changes:
+    # If 'base.shared_root' is enabled, the above sequence has the following changes:
     # 1) First acquire a file/process lock so that no other container creation can interfere.
     # 2) Once the lock has been acquired, check if the shared container image already exists.
     #    If it does exist, then skip to step 7.
@@ -111,8 +111,8 @@ def main_argv(argv: list[str]) -> None:
 
     # handle the shared_root case: acquire file lock and check if shared container image exists
     if shared_root:
-        os.makedirs(os.path.dirname(conf.shared_root_host_dir), exist_ok=True)
-        with FileLock(f"{conf.shared_root_host_dir}-image.lock"):
+        os.makedirs(os.path.dirname(shared_root), exist_ok=True)
+        with FileLock(f"{shared_root}-image.lock"):
             # if image already exists, then skip the subsequent steps
             if subprocess.run([docker_cmd, "inspect", "--type=image",
                                "--format={{.Id}}", conf.box_image(True)], check=False,
@@ -127,7 +127,8 @@ def main_argv(argv: list[str]) -> None:
                 commit_container(current_user, docker_cmd, tmp_image, conf)
                 # start a container using the temporary image with "--userns" option to make
                 # a copy of the container root directories to the shared location
-                run_shared_copy_container(docker_cmd, tmp_image, shared_root_dirs, conf)
+                run_shared_copy_container(docker_cmd, tmp_image, shared_root, shared_root_dirs,
+                                          conf, args.quiet)
                 # finally commit this container with the name of the shared image
                 commit_container(current_user, docker_cmd, conf.box_image(True), conf)
                 remove_image(docker_cmd, tmp_image)
@@ -146,7 +147,7 @@ def main_argv(argv: list[str]) -> None:
 
     # set up the final container with all the required arguments
     print_info(f"Initializing container for '{distro}' using '{profile}'")
-    start_container(docker_full_args, current_user, shared_root_dirs, conf)
+    start_container(docker_full_args, current_user, shared_root, shared_root_dirs, conf)
     print_info("Waiting for the container to initialize (see "
                f"'ybox-logs -f {box_name}' for detailed progress)")
     sys.stdout.flush()
@@ -166,8 +167,7 @@ def main_argv(argv: list[str]) -> None:
     # finally add the state and register the installed packages that were reassigned to this
     # container (because the previously destroyed one has the same configuration and shared root)
     with YboxStateManagement(env) as state:
-        shared_root_dir = conf.shared_root_host_dir if shared_root else ""
-        owned_packages = state.register_container(box_name, distro, shared_root_dir, box_conf,
+        owned_packages = state.register_container(box_name, distro, shared_root, box_conf,
                                                   args.force_own_orphans)
         # create wrappers for owned_packages
         pkgmgr = distro_config["pkgmgr"]
@@ -181,12 +181,14 @@ def main_argv(argv: list[str]) -> None:
                                                         conf, box_conf, 1):
                     # register the package again with the local_copies (no change to package_deps)
                     state.register_package(box_name, package, local_copies=local_copies,
-                                           copy_type=copy_type, shared_root=shared_root_dir,
+                                           copy_type=copy_type, shared_root=shared_root,
                                            dep_type=None, dep_of="")
         if apps_with_deps:
-            runtime_conf = RuntimeConfiguration(box_name, distro, shared_root_dir, box_conf)
+            runtime_conf = RuntimeConfiguration(box_name, distro, shared_root, box_conf)
             for app, deps in apps_with_deps.items():
                 pkg_args = ["install", "-z", box_name, "-q", "-o", "-c"]
+                if args.quiet:
+                    pkg_args.append("-q")
                 if deps:
                     pkg_args.append("-w")
                     pkg_args.append(",".join(deps))
@@ -215,6 +217,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "on the shared root directory that got orphaned due to their "
                              "owner container being destroyed will be assigned to this new "
                              "container regardless of the container configuration")
+    parser.add_argument("-q", "--quiet", action="store_true",
+                        help="proceed without asking any questions using defaults where possible; "
+                             "this should usually be used with explicit specification of "
+                             "distribution and profile arguments else the operation will fail if "
+                             "there more than one of them available")
     parser.add_argument("distribution", nargs="?", type=str,
                         help="short name of the distribution as listed in distros/supported.list "
                              "(either in ~/.config/ybox or package's ybox/conf); it is optional "
@@ -249,6 +256,10 @@ def select_distribution(args: argparse.Namespace, env: Environ) -> str:
     if len(supported_distros) == 1:
         print_info(f"Using distribution '{supported_distros[0]}'")
         return supported_distros[0]
+    if args.quiet:
+        print_error(
+            f"Expected one supported distribution but found: {', '.join(supported_distros)}")
+        sys.exit(1)
 
     # show a menu to choose from if the number of supported distributions exceeds 1
     distro_names: list[str] = []
@@ -283,6 +294,11 @@ def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
         sys.exit(1)
 
     profiles.sort(key=str)
+    if args.quiet:
+        print_error(
+            f"Expected one configured profile but found: {', '.join([p.name for p in profiles])}")
+        sys.exit(1)
+
     for profile in profiles:
         profile_config = quick_config_read(profile)
         profile_names.append(f"{profile_config['base']['name']} ({profile.name})")
@@ -299,10 +315,14 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> Tu
     if args.name:
         box_name = args.name
     else:
-        box_name = profile.name
-        if box_name.endswith(ini_suffix):
-            box_name = box_name[:-len(ini_suffix)]
-        box_name = f"ybox-{distro}_{box_name}"
+        def_name = profile.name
+        if def_name.endswith(ini_suffix):
+            def_name = def_name[:-len(ini_suffix)]
+        def_name = f"ybox-{distro}_{def_name}"
+        box_name = def_name if args.quiet else input(
+            f"Name of the container to create (default: {def_name}): ").strip()
+        if not box_name:
+            box_name = def_name
 
     # don't allow spaces or weird characters in the name
     if not re.match(r"^[\w\-]+$", box_name):
@@ -314,7 +334,7 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> Tu
 
 
 def process_sections(profile: PathName, conf: StaticConfiguration, distro_config: ConfigParser,
-                     docker_args: list[str]) -> Tuple[bool, ConfigParser, dict[str, list[str]]]:
+                     docker_args: list[str]) -> Tuple[str, ConfigParser, dict[str, list[str]]]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
     # Skip environment variable substitution for the "configs" section since the values
@@ -322,8 +342,8 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
     #   $HOME variable can be different inside the container).
     env_interpolation = EnvInterpolation(conf.env, ["configs"])
     config = config_reader(profile, env_interpolation)
-    # shared_root is false by default
-    shared_root = False
+    # shared_root is disabled by default
+    shared_root = ""
     # hard links are false by default
     config_hardlinks = False
     apps_with_deps: dict[str, list[str]] = {}
@@ -349,9 +369,9 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
 
 
 def process_base_section(base_section: SectionProxy, profile: PathName,
-                         env: Environ, args: list[str]) -> Tuple[bool, bool]:
-    # shared root is true by default
-    shared_root = True
+                         env: Environ, args: list[str]) -> Tuple[str, bool]:
+    # shared root is disabled by default
+    shared_root = ""
     # hard links are false by default
     config_hardlinks = False
     for key in base_section:
@@ -361,7 +381,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
             os.makedirs(source_home, exist_ok=True)
             add_mount_option(args, source_home, env.target_home)
         elif key == "shared_root":
-            shared_root = base_section.getboolean("shared_root")
+            shared_root = base_section["shared_root"]
         elif key == "config_hardlinks":
             config_hardlinks = base_section.getboolean("config_hardlinks")
         elif key == "x11":
@@ -704,37 +724,38 @@ def run_base_container(image_name: str, current_user: str, secondary_groups: str
     run_command(docker_run, error_msg="running container with base image")
 
 
-def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root_dirs: str,
-                              conf: StaticConfiguration) -> None:
-    root_host = conf.shared_root_host_dir
+def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root: str,
+                              shared_root_dirs: str, conf: StaticConfiguration,
+                              quiet: bool) -> None:
     # if shared root copy exists locally, then prompt user to delete it or else exit
-    if os.path.exists(root_host):
+    if os.path.exists(shared_root):
         input_msg = f"""
             The shared root directory for '{conf.distribution}' already exists in:
-                {root_host}
+                {shared_root}
             However, the corresponding ybox container image for '{conf.distribution}' does not
             exist. This can happen if an old copy of shared root directory is lying around and
             is usually safe to remove, but you should be sure that no other ybox is running
             for '{conf.distribution}' with 'shared_root' configuration that is using that
             directory. Should the root directory be removed (y/N): """
-        response = input(dedent(input_msg))
-        if response.lower() == "y":
+        response = "N" if quiet else input(dedent(input_msg))
+        if response.strip().lower() == "y":
             try:
-                shutil.rmtree(root_host)
+                shutil.rmtree(shared_root)
             except OSError:
                 # try with sudo
-                run_command(["sudo", "/bin/rm", "-rf", root_host], error_msg="deleting directory")
+                run_command(["sudo", "/bin/rm", "-rf", shared_root],
+                            error_msg="deleting directory")
         else:
             print_error(f"Aborting creation of ybox container '{conf.box_name}'")
             # remove the temporary image before exit
             remove_image(docker_cmd, image_name)
             sys.exit(1)
-    os.makedirs(root_host)
+    os.makedirs(shared_root)
     # the entrypoint-cp.sh script requires two arguments: first is the comma separated
     # list of directories to be copied, and second the target directory
     run_command([docker_cmd, "run", "-it", f"--name={conf.box_name}",
                  f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
-                 f"-v={root_host}:{Consts.shared_root_mount_dir()}",
+                 f"-v={shared_root}:{Consts.shared_root_mount_dir()}",
                  f"--label={YboxLabel.CONTAINER_COPY}", "--userns=keep-id", "--user=0",
                  f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_cp()}",
                  image_name, shared_root_dirs, Consts.shared_root_mount_dir()],
@@ -754,8 +775,8 @@ def remove_image(docker_cmd: str, box_image: str) -> None:
                 error_msg="image remove")
 
 
-def start_container(docker_full_cmd: list[str], current_user: str, shared_root_dirs: str,
-                    conf: StaticConfiguration) -> None:
+def start_container(docker_full_cmd: list[str], current_user: str, shared_root: str,
+                    shared_root_dirs: str, conf: StaticConfiguration) -> None:
     add_mount_option(docker_full_cmd, conf.scripts_dir, conf.target_scripts_dir, "ro")
     # touch the status file and mount it
     status_path = Path(conf.status_file)
@@ -764,7 +785,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     add_mount_option(docker_full_cmd, conf.status_file, Consts.status_target_file())
 
     for shared_dir in shared_root_dirs.split(","):
-        add_mount_option(docker_full_cmd, f"{conf.shared_root_host_dir}{shared_dir}", shared_dir)
+        add_mount_option(docker_full_cmd, f"{shared_root}{shared_dir}", shared_dir)
     for lang_var in ["LANG", "LANGUAGE"]:
         docker_full_cmd.append(f"-e={lang_var}")
     docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
@@ -776,7 +797,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root_d
     # (https://github.com/containers/bubblewrap/issues/380#issuecomment-648169485)
     user_entry = pwd.getpwnam(current_user)
     docker_full_cmd.append(f"--user={user_entry.pw_uid}")
-    docker_full_cmd.append(conf.box_image(bool(shared_root_dirs)))
+    docker_full_cmd.append(conf.box_image(bool(shared_root)))
     if os.access(conf.config_list, os.R_OK):
         docker_full_cmd.extend(["-c", f"{conf.target_scripts_dir}/config.list",
                                 "-d", conf.target_configs_dir])
