@@ -1,9 +1,11 @@
 import argparse
 import gzip
 import os
+import re
 import sys
 import time
 import zlib
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -20,9 +22,10 @@ _AUR_META_FILE = f"{_AUR_META_CACHE_DIR}/packages-meta-ext-v1.json.gz"
 _FETCH_AUR_META = f"/usr/bin/aria2c -x8 -j8 -s8 -k1M -d{_AUR_META_CACHE_DIR} {_AUR_META_URL}"
 _REFRESH_AGE = 24.0 * 60 * 60  # consider AUR metadata file as stale after a day
 _DEFAULT_SEP = "::::"  # something that does not appear in descriptions (at least so far)
+_PACKAGE_NAME_RE = re.compile(r"^[\w@.+-]+")  # used to strip out version comparisons
 
 # fields: name of original package, description, required dependencies, optional dependencies
-PackageAlternate = Tuple[str, str, Optional[list[str]], Optional[list[str]]]
+PackageAlternate = Tuple[str, str, list[str], list[str]]
 
 
 def main() -> None:
@@ -55,7 +58,7 @@ def main_argv(argv: list[str]) -> None:
     # next build a map of all packages in pacman database from their provides, dependencies and
     # optional dependencies; the map key will be original package name and their provides mapped
     # to a tuple having the name, description with list of required and optional dependencies
-    all_packages: dict[str, list[PackageAlternate]] = {}
+    all_packages = defaultdict[str, list[PackageAlternate]](list[PackageAlternate])
     sep = args.separator
     build_pacman_db_map(all_packages, sep)
 
@@ -71,25 +74,23 @@ def main_argv(argv: list[str]) -> None:
             print(f"{prefix}{key}{sep}{desc}{sep}{level}{sep}{installed}")
 
 
-def build_pacman_db_map(arch_packages: dict[str, list[PackageAlternate]], sep: str) -> None:
+def build_pacman_db_map(arch_packages: defaultdict[str, list[PackageAlternate]], sep: str) -> None:
     for package_list in str(run_command(f"/usr/bin/expac -S %n{sep}%d{sep}%S{sep}%E{sep}%o",
                                         capture_output=True)).splitlines():
         if not package_list:
             continue
         name, desc, provides, required, optional = package_list.split(sep)
-        deps = required.split() if required else None
-        opt_deps = optional.split() if optional else None
+        deps = _process_pkg_names(required.split()) if required else []
+        opt_deps = _process_pkg_names(optional.split()) if optional else []
         # arch linux packages are always lower case which is enforced below for the map
         map_val = (name.lower(), desc, deps, opt_deps)
-        if existing := arch_packages.get(map_val[0]):
-            existing.append(map_val)
-        else:
-            arch_packages[map_val[0]] = [map_val]
-        for provide in provides.split():
-            if existing := arch_packages.get(provide):
-                existing.append(map_val)
-            else:
-                arch_packages[provide] = [map_val]
+        arch_packages[map_val[0]].append(map_val)
+        for provide in _process_pkg_names(provides.split()):
+            arch_packages[provide].append(map_val)
+
+
+def _process_pkg_names(pkgs: Optional[list[str]]) -> list[str]:
+    return [m.group(0) for pkg in pkgs if (m := _PACKAGE_NAME_RE.match(pkg))] if pkgs else []
 
 
 def refresh_aur_metadata() -> None:
@@ -107,27 +108,21 @@ def refresh_aur_metadata() -> None:
 
 # using ijson instead of the standard json because latter always loads the entire
 # JSON in memory whereas here only a few fields are required
-def build_aur_db_map(aur_packages: dict[str, list[PackageAlternate]], raise_error: bool) -> bool:
+def build_aur_db_map(aur_packages: defaultdict[str, list[PackageAlternate]],
+                     raise_error: bool) -> bool:
     try:
         with gzip.open(_AUR_META_FILE, mode="rt", encoding="utf-8") as aur_meta:
             for package in ijson.items(aur_meta, "item"):
                 desc = package.get("Description")
                 if not desc:
                     desc = ""
-                deps = package.get("Depends")
-                opt_deps = package.get("OptDepends")
+                deps = _process_pkg_names(package.get("Depends"))
+                opt_deps = _process_pkg_names(package.get("OptDepends"))
                 # arch linux packages are always lower case which is enforced below for the map
                 map_val = (package.get("Name").lower(), desc, deps, opt_deps)
-                if existing := aur_packages.get(map_val[0]):
-                    existing.append(map_val)
-                else:
-                    aur_packages[map_val[0]] = [map_val]
-                if provides := package.get("Provides"):
-                    for provide in provides:
-                        if existing := aur_packages.get(provide):
-                            existing.append(map_val)
-                        else:
-                            aur_packages[provide] = [map_val]
+                aur_packages[map_val[0]].append(map_val)
+                for provide in _process_pkg_names(package.get("Provides")):
+                    aur_packages[provide].append(map_val)
         return True
     except (gzip.BadGzipFile, EOFError, zlib.error):
         if raise_error:
@@ -136,7 +131,7 @@ def build_aur_db_map(aur_packages: dict[str, list[PackageAlternate]], raise_erro
 
 
 def find_opt_deps(package: str, installed: set[str],
-                  all_packages: dict[str, list[PackageAlternate]],
+                  all_packages: defaultdict[str, list[PackageAlternate]],
                   opt_deps: dict[str, Tuple[str, int, bool]], max_level: int,
                   level: int = 1) -> None:
     if level > max_level:
