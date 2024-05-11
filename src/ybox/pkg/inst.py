@@ -21,7 +21,7 @@ from ybox.state import CopyType, DependencyType, RuntimeConfiguration, YboxState
 from ybox.util import check_installed_package, ini_file_reader
 
 # match both "Exec=" and "TryExec=" lines
-_EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(.+?)((\s%[a-zA-Z])?\s*)$")
+_EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)(.*)$")
 _LOCAL_BIN_DIRS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
 
 
@@ -279,18 +279,21 @@ def wrap_container_files(package: str, copy_type: CopyType, list_cmd: str,
     desktop_dirs = Consts.container_desktop_dirs()
     executable_dirs = Consts.container_executable_dirs()
     # read the container configuration for [app_flags] section
-    app_flags = _get_app_flags(box_conf)
+    app_flags_section = _get_app_flags(box_conf)
+    app_flags: dict[str, str] = {}
     file_paths = [(os.path.dirname(file), filename, file) for file in package_files.splitlines()
                   if (filename := os.path.basename(file).strip())]  # empty name means directory
 
     # if an executable from a package is skipped by user, then skip all of them for consistency
-    if quiet < 2:  # quiet = 2 means that actions will be done without user confirmation
-        for file_dir, filename, file in file_paths:
-            if (copy_type & CopyType.EXECUTABLE) and file_dir in executable_dirs:
+    for file_dir, filename, file in file_paths:
+        if file_dir in executable_dirs:
+            # check for additional flags for the executables as specified in [app_flags] section
+            if app_flags_section and (flags := app_flags_section.get(filename)):
+                app_flags[filename] = flags
+            if copy_type & CopyType.EXECUTABLE:
                 if not _can_wrap_executable(filename, file, conf, quiet):
                     # clear EXECUTABLE mask so that no wrapper executable is created
                     copy_type &= ~CopyType.EXECUTABLE
-                    break
 
     # the "-it" flag is used for both desktop file and executable for docker/podman exec
     # since it is safe (unless the app may need stdin in which case Terminal must be true
@@ -327,7 +330,7 @@ def _get_app_flags(box_conf: Union[str, ConfigParser]) -> Optional[SectionProxy]
 
 
 def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
-                       conf: StaticConfiguration, app_flags: Optional[SectionProxy],
+                       conf: StaticConfiguration, app_flags: dict[str, str],
                        wrapper_files: list[str]) -> None:
     """
     For a desktop file, add "docker/podman exec ..." to its Exec/TryExec lines. Also read
@@ -339,7 +342,8 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
     :param package: the package being installed
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
-    :param app_flags: the [app_flags] section from the container configuration as a `SectionProxy`
+    :param app_flags: map of executable file name to the value from [app_flags] section from the
+                      container configuration
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
     # container name is added to desktop file to make it unique
@@ -349,18 +353,21 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
     if run_command([docker_cmd, "cp", f"{conf.box_name}:{file}", str(tmp_file)],
                    exit_on_error=False, error_msg=f"copying of file from '{package}'") != 0:
         return
-    try:
+
+    def replace_executable(match: re.Match) -> str:
         # check for additional flags to be added
-        if app_flags and (flags := app_flags.get(filename.removesuffix(".desktop"))):
-            repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3 {flags}\4"
-        else:
-            repl = rf"\1{docker_cmd} exec -it {conf.box_name} \3\4"
+        if flags := app_flags.get(os.path.basename(match.group(3)), ""):
+            flags = " " + flags
+        return (f"{match.group(1)}{docker_cmd} exec -it {conf.box_name} "
+                f"{match.group(3)}{flags}{match.group(4)}")
+
+    try:
         # the destination will be $HOME/.local/share/applications
         wrapper_file = f"{conf.env.user_applications_dir}/{wrapper_name}"
         print_warn(f"Linking container desktop file {file} to {wrapper_file}")
         with open(wrapper_file, "w", encoding="utf-8") as wrapper_fd:
             with tmp_file.open("r", encoding="utf-8") as tmp_fd:
-                wrapper_fd.writelines(_EXEC_RE.sub(repl, line) for line in tmp_fd)
+                wrapper_fd.writelines(_EXEC_RE.sub(replace_executable, line) for line in tmp_fd)
         wrapper_files.append(wrapper_file)
     finally:
         tmp_file.unlink(missing_ok=True)
@@ -400,7 +407,7 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
 
 
 def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
-                     app_flags: Optional[SectionProxy], wrapper_files: list[str]) -> None:
+                     app_flags: dict[str, str], wrapper_files: list[str]) -> None:
     """
     For an executable, create a wrapper executable that invokes "docker/podman exec".
 
@@ -408,15 +415,14 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     :param file: full path of the executable file being wrapped
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
-    :param app_flags: the [app_flags] section from the container configuration as a `SectionProxy`
+    :param app_flags: map of executable file name to the value from [app_flags] section from the
+                      container configuration
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
     wrapper_exec = _get_wrapper_executable(filename, conf)
     print_warn(f"Linking container executable {file} to {wrapper_exec}")
-    # check for additional flags to be added
-    flags = app_flags.get(filename, "") if app_flags else ""
-    exec_content = ("#!/bin/sh\n",
-                    f'exec {docker_cmd} exec -it {conf.box_name} "{file}" {flags} "$@"')
+    exec_content = ("#!/bin/sh\n", f'exec {docker_cmd} exec -it {conf.box_name} "{file}" '
+                                   f'{app_flags.get(filename, "")} "$@"')
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)
