@@ -186,8 +186,10 @@ def main_argv(argv: list[str]) -> None:
                 # skip packages already scheduled to be installed
                 if package in apps_with_deps:
                     continue
-                if local_copies := wrap_container_files(package, copy_type, list_cmd, docker_cmd,
-                                                        conf, box_conf, 1):
+                # TODO: this does not handle the command-line app-flags that were passed to orphan
+                #       packages previously (will need column packages table in state.db)
+                if local_copies := wrap_container_files(package, copy_type, "", list_cmd,
+                                                        docker_cmd, conf, box_conf, 1):
                     # register the package again with the local_copies (no change to package_deps)
                     state.register_package(box_name, package, local_copies=local_copies,
                                            copy_type=copy_type, shared_root=shared_root,

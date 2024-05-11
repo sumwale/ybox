@@ -129,8 +129,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                 copy_type |= CopyType.EXECUTABLE
         # TODO: wrappers for newly installed required dependencies should also be created;
         #       handle DependencyType.SUGGESTION if supported by underlying package manager
-        local_copies = wrap_container_files(package, copy_type, list_cmd, docker_cmd, conf,
-                                            rt_conf.ini_config, quiet)
+        local_copies = wrap_container_files(package, copy_type, args.app_flags, list_cmd,
+                                            docker_cmd, conf, rt_conf.ini_config, quiet)
         dep_type, dep_of = (DependencyType.OPTIONAL, args.package) if opt_dep_install else (
             None, "")
         state.register_package(conf.box_name, package, local_copies=local_copies,
@@ -249,7 +249,7 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
     return [deps[index][0] for index in selection] if selection else []
 
 
-def wrap_container_files(package: str, copy_type: CopyType, list_cmd: str,
+def wrap_container_files(package: str, copy_type: CopyType, app_flags_arg: str, list_cmd: str,
                          docker_cmd: str, conf: StaticConfiguration,
                          box_conf: Union[str, ConfigParser], quiet: int) -> list[str]:
     """
@@ -258,6 +258,7 @@ def wrap_container_files(package: str, copy_type: CopyType, list_cmd: str,
     :param package: the package to be installed
     :param copy_type: the `CopyType` to tell whether to create wrapper .desktop files and/or
                       wrapper executables that invoke corresponding ones of the container
+    :param app_flags_arg: if application flags have been explicitly specified with --app-flags
     :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
@@ -294,6 +295,11 @@ def wrap_container_files(package: str, copy_type: CopyType, list_cmd: str,
                 if not _can_wrap_executable(filename, file, conf, quiet):
                     # clear EXECUTABLE mask so that no wrapper executable is created
                     copy_type &= ~CopyType.EXECUTABLE
+    # command-line --app-flags will override those in the configuration files
+    if app_flags_arg:
+        for flag in app_flags_arg.split(","):
+            if (split_idx := flag.find("=")) != -1:
+                app_flags[flag[:split_idx]] = flag[split_idx + 1:]
 
     # the "-it" flag is used for both desktop file and executable for docker/podman exec
     # since it is safe (unless the app may need stdin in which case Terminal must be true

@@ -116,6 +116,9 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-w", "--with-opt-deps", type=str,
                            help="provide comma-separated optional dependencies to install "
                                 "(in which case user will not be prompted to select them)")
+    subparser.add_argument("-f", "--app-flags", type=str,
+                           help="comma separated key-value pairs for the flags to be used when "
+                                "invoking the container executables (e.g. 'chromium=...,...'")
     subparser.add_argument("-l", "--add-dep-wrappers", action="store_true",
                            help="create local wrapper desktop and executables for the newly "
                                 "installed package dependencies too (both required and optional)")
