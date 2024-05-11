@@ -22,8 +22,8 @@ class StaticConfiguration:
         os.environ["YBOX_CONTAINER_NAME"] = box_name
         self._distribution = distribution
         self._box_name = box_name
-        self._box_image = f"ybox-local/{distribution}/{box_name}"
-        self._shared_box_image = f"ybox-shared-local/{distribution}"
+        self._box_image = f"{Consts.image_prefix()}/{distribution}/{box_name}"
+        self._shared_box_image = f"{Consts.shared_image_prefix()}/{distribution}"
         # timezone properties
         self._localtime = None
         self._timezone = None
@@ -120,8 +120,18 @@ class StaticConfiguration:
 
 class Consts:
     """
-    Defines fixed file/path names used by ybox that are not configurable.
+    Defines fixed file/path and other names used by ybox that are not configurable.
     """
+
+    @staticmethod
+    def image_prefix() -> str:
+        """prefix used for the non-shared root images"""
+        return "ybox-local"
+
+    @staticmethod
+    def shared_image_prefix() -> str:
+        """prefix used for the shared root images"""
+        return "ybox-shared-local"
 
     @staticmethod
     def entrypoint_common() -> str:

@@ -61,7 +61,7 @@ fi
 echo_color "$fg_cyan" "Installing base set of packages" >> $status_file
 $PAC -S --needed lesspipe bash-completion bc base-devel man-db man-pages \
   pulseaudio-alsa neovim eza ncdu fd bat expac libva-utils mesa-utils vulkan-tools \
-  cantarell-fonts ttf-fira-code noto-fonts kitty-terminfo rxvt-unicode-terminfo \
+  cantarell-fonts ttf-fira-code ttf-liberation noto-fonts kitty-terminfo rxvt-unicode-terminfo \
   wget aria2 btop realtime-privileges shared-mime-info tree starship \
   python-ijson python-tabulate
 $PAC -S --needed --asdeps git ed unzip fastjar python-pynvim xsel intel-media-driver \

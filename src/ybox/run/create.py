@@ -122,7 +122,9 @@ def main_argv(argv: list[str]) -> None:
                 # the 'entrypoint-base.sh' script to create the user and group in the container
                 run_base_container(base_image_name, current_user, secondary_groups, docker_cmd,
                                    conf)
-                # commit the stopped container with a temporary name, then remove the container
+                # commit the stopped container with a temporary name, then remove the container;
+                # keeping a separate tmp_image helps reduce size of final image a bit because
+                # this one is without --userns while the final shared image is with --userns
                 tmp_image = f"{conf.box_image(False)}__ybox_tmp"
                 commit_container(current_user, docker_cmd, tmp_image, conf)
                 # start a container using the temporary image with "--userns" option to make
@@ -132,6 +134,13 @@ def main_argv(argv: list[str]) -> None:
                 # finally commit this container with the name of the shared image
                 commit_container(current_user, docker_cmd, conf.box_image(True), conf)
                 remove_image(docker_cmd, tmp_image)
+            # in case a shared root directory is not present but shared image is present,
+            # need to run the container to copy to shared root
+            elif any((not os.path.exists(f"{shared_root}{s_dir}") for s_dir in
+                      shared_root_dirs.split(","))):
+                run_shared_copy_container(docker_cmd, conf.box_image(True), shared_root,
+                                          shared_root_dirs, conf, args.quiet)
+                remove_container(docker_cmd, conf)
     else:
         shared_root_dirs = ""
         # run the "base" container with appropriate arguments for the current user to the
@@ -767,6 +776,10 @@ def commit_container(current_user: str, docker_cmd: str, box_image: str,
     run_command([docker_cmd, "commit", f"-c=USER={current_user}",
                  f"-c=WORKDIR=/home/{current_user}", conf.box_name, box_image],
                 error_msg="container commit")
+    remove_container(docker_cmd, conf)
+
+
+def remove_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     run_command([docker_cmd, "container", "rm", conf.box_name], error_msg="container rm")
 
 
