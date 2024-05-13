@@ -9,11 +9,11 @@ from datetime import datetime
 from importlib.abc import Traversable
 from importlib.resources import files
 from pathlib import Path
-from typing import TypeAlias
+from typing import Union
 
 from ybox.print import print_error
 
-PathName: TypeAlias = Path | Traversable
+PathName = Union[Path, Traversable]
 
 
 class Environ:
