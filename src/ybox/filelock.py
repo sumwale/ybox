@@ -42,28 +42,34 @@ class FileLock:
         self._poll = poll_interval
 
     def __enter__(self):
+        success = False
         self._lock_fd = open(self._lock_file, "w+", encoding="utf-8")
-        start_time: Optional[datetime] = None
-        remaining_time = self._timeout
-        while remaining_time != 0:
-            try:
-                fcntl.lockf(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                return
-            except OSError as ex:
-                if ex.errno in (errno.EACCES, errno.EAGAIN):
-                    # start proper timing only after first failure
-                    if not start_time:
-                        start_time = datetime.now()
-                    # wait for poll time, then try again
-                    time.sleep(self._poll)
-                    # treat negative timeout as infinite where remaining_time will never reach 0
-                    if remaining_time > 0:
-                        remaining_time -= self._poll
-                        remaining_time = max(remaining_time, 0)
-                else:
-                    raise
-        wait_time = (datetime.now() - start_time).total_seconds() if start_time else 0.0
-        raise TimeoutError(f"Failed to lock '{self._lock_file}' in {wait_time} seconds")
+        try:
+            start_time: Optional[datetime] = None
+            remaining_time = self._timeout
+            while remaining_time != 0:
+                try:
+                    fcntl.lockf(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    success = True
+                    return
+                except OSError as ex:
+                    if ex.errno in (errno.EACCES, errno.EAGAIN):
+                        # start proper timing only after first failure
+                        if not start_time:
+                            start_time = datetime.now()
+                        # wait for poll time, then try again
+                        time.sleep(self._poll)
+                        # treat -ve timeout as infinite where remaining_time will never reach 0
+                        if remaining_time > 0:
+                            remaining_time -= self._poll
+                            remaining_time = max(remaining_time, 0)
+                    else:
+                        raise
+            wait_time = (datetime.now() - start_time).total_seconds() if start_time else 0.0
+            raise TimeoutError(f"Failed to lock '{self._lock_file}' in {wait_time} seconds")
+        finally:
+            if not success:
+                self._lock_fd.close()
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
         if self._lock_fd:

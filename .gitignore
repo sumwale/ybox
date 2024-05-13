@@ -2,6 +2,7 @@
 **/.mypy_cache/
 dist/
 src/ybox.egg-info
+.tox
 .venv
 conda/.conda
 build/
