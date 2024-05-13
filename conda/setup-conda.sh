@@ -27,5 +27,6 @@ source "$conda_env/etc/profile.d/conda.sh"
 
 conda config --set solver libmamba --set changeps1 no --set channel_priority disabled
 conda config --append channels anaconda
+conda install python=3.9 -y
 conda env create -f "$SCRIPT_DIR/ybox-conda.yaml"
 conda clean -ay

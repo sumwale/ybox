@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - anaconda
 dependencies:
-  - python=3.10
+  - python=3.9
   - setuptools
   - build
   - pip
@@ -12,5 +12,6 @@ dependencies:
   - ijson
   - mypy
   - pylint
+  - tox
   - pip:
     - simple-term-menu
