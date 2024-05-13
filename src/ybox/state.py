@@ -15,7 +15,7 @@ from enum import Enum, IntFlag, auto
 from importlib.resources import files
 from io import StringIO
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 from uuid import uuid4
 
 from packaging.version import parse as parse_version
@@ -96,7 +96,7 @@ class YboxStateManagement:
     # last version when versioning and schema migration did not exist
     _PRE_SCHEMA_VERSION = parse_version("0.9.0")
     # pattern to match "source '<file>'" in SQL script -- doesn't allow a quote in file name
-    _SOURCE_SQLCMD_RE = re.compile(r"^\s*source\s+'([^']+)'\s*;\s*", re.IGNORECASE)
+    _SOURCE_SQLCMD_RE = re.compile(r"^\s*source\s*'([^']+)'\s*;\s*", re.IGNORECASE)
 
     # when comparing two container configurations, delete the sections mentioned below and the
     # keys in the [base] section (specifically log-file in log-opts will change)
@@ -263,7 +263,8 @@ class YboxStateManagement:
         cursor.executescript("".join(sql_lines))
 
     def register_container(self, container_name: str, distribution: str, shared_root: str,
-                           parser: ConfigParser, force_own_orphans: bool) -> dict[str, CopyType]:
+                           parser: ConfigParser,
+                           force_own_orphans: bool) -> dict[str, Tuple[CopyType, dict[str, str]]]:
         """
         Register information of a ybox container including its name, distribution and
         configuration. In addition to the registration, this will also check for orphaned packages
@@ -283,7 +284,7 @@ class YboxStateManagement:
                  this container mapped to the `CopyType` for the wrapper files of those packages
                  (which can be used to recreate wrappers for container desktop/executable files)
         """
-        packages: dict[str, CopyType] = {}
+        packages: dict[str, Tuple[CopyType, dict[str, str]]] = {}
         # build the ini string from parser
         with StringIO() as config:
             parser.write(config)
@@ -308,8 +309,9 @@ class YboxStateManagement:
                     pkg_args.extend(equiv_destroyed)
                     # reassign packages to this container having matching destroyed container
                     cursor.execute("UPDATE packages SET container = ? WHERE container IN "
-                                   f"({in_args}) RETURNING name, local_copy_type", pkg_args)
-                    packages = {name: CopyType(cp_type) for (name, cp_type) in cursor.fetchall()}
+                                   f"({in_args}) RETURNING name, local_copy_type, flags", pkg_args)
+                    packages = {name: (CopyType(cp_type), json.loads(flags)) for
+                                (name, cp_type, flags) in cursor.fetchall()}
                     cursor.execute(
                         f"UPDATE package_deps SET container = ? WHERE container IN ({in_args})",
                         pkg_args)
@@ -323,7 +325,7 @@ class YboxStateManagement:
         """
         Unregister information of a ybox container. This also clears any registered packages
         for the container if 'shared_root' is false for the container. However, if 'shared_root'
-        is true for the container, its packages are marked as "zombie" (i.e. its owner is empty)
+        is true for the container, its packages are marked as "orphan" (i.e. owner was destroyed)
         if no other container refers to them. This is because the packages will still be visible
         in all other containers having 'shared_root' as enabled.
 
@@ -432,16 +434,18 @@ class YboxStateManagement:
             return [str(row[0]) for row in rows]
 
     def register_package(self, container_name: str, package: str, local_copies: list[str],
-                         copy_type: CopyType, shared_root: str, dep_type: Optional[DependencyType],
-                         dep_of: str) -> None:
+                         copy_type: CopyType, app_flags: dict[str, str], shared_root: str,
+                         dep_type: Optional[DependencyType], dep_of: str) -> None:
         """
         Register a package as being owned by a container.
 
         :param container_name: name of the container
         :param package: the package to be registered
-        :param local_copies: map of package name to list of locally copied files (typically
-                             desktop files and binary executables that invoke container ones)
+        :param local_copies: list of locally wrapped files for the package (typically desktop
+                             files and binary executables that invoke container ones)
         :param copy_type: the type of files (one of `CopyType`s or CopyType(0)) in `local_copies`
+        :param app_flags: the flags from [app_flags] section and --app-flags option to add to
+                          executable invocation in the local wrappers (`local_copies`)
         :param shared_root: the local shared root directory if `shared_root` flag is enabled
                             for the container
         :param dep_type: the `DependencyType` for the package, or None if not a dependency
@@ -466,8 +470,9 @@ class YboxStateManagement:
                     cursor.execute("DELETE from package_deps WHERE name = ? AND "
                                    f"container IN ({in_str})", args)
                     self._clean_destroyed_containers(cursor)
-            cursor.execute("INSERT OR REPLACE INTO packages VALUES (?, ?, ?, ?)",
-                           (package, container_name, json.dumps(local_copies), copy_type.value))
+            cursor.execute("INSERT OR REPLACE INTO packages VALUES (?, ?, ?, ?, ?)",
+                           (package, container_name, json.dumps(local_copies), copy_type.value,
+                            json.dumps(app_flags)))
             if dep_type:
                 self._register_dependency(container_name, dep_of, package, dep_type, cursor)
             self._conn.commit()

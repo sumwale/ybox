@@ -182,24 +182,24 @@ def main_argv(argv: list[str]) -> None:
         pkgmgr = distro_config["pkgmgr"]
         if owned_packages:
             list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
-            for package, copy_type in owned_packages.items():
+            for package, (copy_type, app_flags) in owned_packages.items():
                 # skip packages already scheduled to be installed
                 if package in apps_with_deps:
                     continue
-                # TODO: this does not handle the command-line app-flags that were passed to orphan
-                #       packages previously (will need column packages table in state.db)
-                if local_copies := wrap_container_files(package, copy_type, "", list_cmd,
-                                                        docker_cmd, conf, box_conf, 1):
+                # skip all questions for -q/--quiet (equivalent to -qq to `ybox-pkg install`)
+                quiet = 2 if args.quiet else 0
+                # box_conf can be skipped in new state.db but not for pre 0.9.3 having empty flags
+                if local_copies := wrap_container_files(package, copy_type, app_flags, list_cmd,
+                                                        docker_cmd, conf, box_conf, quiet):
                     # register the package again with the local_copies (no change to package_deps)
-                    state.register_package(box_name, package, local_copies=local_copies,
-                                           copy_type=copy_type, shared_root=shared_root,
-                                           dep_type=None, dep_of="")
+                    state.register_package(box_name, package, local_copies, copy_type, app_flags,
+                                           shared_root, dep_type=None, dep_of="")
         if apps_with_deps:
             runtime_conf = RuntimeConfiguration(box_name, distro, shared_root, box_conf)
             for app, deps in apps_with_deps.items():
-                pkg_args = ["install", "-z", box_name, "-q", "-o", "-c"]
+                pkg_args = ["install", "-z", box_name, "-o", "-c"]
                 if args.quiet:
-                    pkg_args.append("-q")
+                    pkg_args.append("-qq")
                 if deps:
                     pkg_args.append("-w")
                     pkg_args.append(",".join(deps))

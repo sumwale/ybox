@@ -129,13 +129,17 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                 copy_type |= CopyType.EXECUTABLE
         # TODO: wrappers for newly installed required dependencies should also be created;
         #       handle DependencyType.SUGGESTION if supported by underlying package manager
-        local_copies = wrap_container_files(package, copy_type, args.app_flags, list_cmd,
+        app_flags: dict[str, str] = {}
+        if args.app_flags:
+            for flag in args.app_flags.split(","):
+                if (split_idx := flag.find("=")) != -1:
+                    app_flags[flag[:split_idx]] = flag[split_idx + 1:]
+        local_copies = wrap_container_files(package, copy_type, app_flags, list_cmd,
                                             docker_cmd, conf, rt_conf.ini_config, quiet)
         dep_type, dep_of = (DependencyType.OPTIONAL, args.package) if opt_dep_install else (
             None, "")
-        state.register_package(conf.box_name, package, local_copies=local_copies,
-                               copy_type=copy_type, shared_root=rt_conf.shared_root,
-                               dep_type=dep_type, dep_of=dep_of)
+        state.register_package(conf.box_name, package, local_copies, copy_type, app_flags,
+                               rt_conf.shared_root, dep_type, dep_of)
         # register the recorded optional dependencies for this package too
         if recorded_deps := state.check_packages(conf.box_name, installed_optional_deps):
             for dep in recorded_deps:
@@ -249,8 +253,8 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
     return [deps[index][0] for index in selection] if selection else []
 
 
-def wrap_container_files(package: str, copy_type: CopyType, app_flags_arg: str, list_cmd: str,
-                         docker_cmd: str, conf: StaticConfiguration,
+def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str, str],
+                         list_cmd: str, docker_cmd: str, conf: StaticConfiguration,
                          box_conf: Union[str, ConfigParser], quiet: int) -> list[str]:
     """
     Create wrappers in host environment to invoke container's desktop files and executables.
@@ -258,7 +262,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags_arg: str, 
     :param package: the package to be installed
     :param copy_type: the `CopyType` to tell whether to create wrapper .desktop files and/or
                       wrapper executables that invoke corresponding ones of the container
-    :param app_flags_arg: if application flags have been explicitly specified with --app-flags
+    :param app_flags: application flags that have been explicitly specified with --app-flags
     :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
@@ -281,7 +285,6 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags_arg: str, 
     executable_dirs = Consts.container_executable_dirs()
     # read the container configuration for [app_flags] section
     app_flags_section = _get_app_flags(box_conf)
-    app_flags: dict[str, str] = {}
     file_paths = [(os.path.dirname(file), filename, file) for file in package_files.splitlines()
                   if (filename := os.path.basename(file).strip())]  # empty name means directory
 
@@ -290,16 +293,12 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags_arg: str, 
         if file_dir in executable_dirs:
             # check for additional flags for the executables as specified in [app_flags] section
             if app_flags_section and (flags := app_flags_section.get(filename)):
-                app_flags[filename] = flags
+                # command-line --app-flags will override those in the configuration files
+                app_flags.setdefault(filename, flags)
             if copy_type & CopyType.EXECUTABLE:
                 if not _can_wrap_executable(filename, file, conf, quiet):
                     # clear EXECUTABLE mask so that no wrapper executable is created
                     copy_type &= ~CopyType.EXECUTABLE
-    # command-line --app-flags will override those in the configuration files
-    if app_flags_arg:
-        for flag in app_flags_arg.split(","):
-            if (split_idx := flag.find("=")) != -1:
-                app_flags[flag[:split_idx]] = flag[split_idx + 1:]
 
     # the "-it" flag is used for both desktop file and executable for docker/podman exec
     # since it is safe (unless the app may need stdin in which case Terminal must be true
@@ -329,6 +328,8 @@ def _get_app_flags(box_conf: Union[str, ConfigParser]) -> Optional[SectionProxy]
     if isinstance(box_conf, ConfigParser):
         box_config = box_conf
     else:
+        if not box_conf:
+            return None
         with io.StringIO(box_conf) as box_conf_fd:
             box_config = ini_file_reader(box_conf_fd, interpolation=None,
                                          case_sensitive=False)  # case-insensitive

@@ -19,11 +19,13 @@ CREATE TABLE packages (
     name TEXT NOT NULL,
     -- name of the container that owns this package
     container TEXT NOT NULL,
-    -- local wrappers desktop/executables created for the package
+    -- local wrappers desktop/executables created for the package (array as json)
     local_copies TEXT NOT NULL,
     -- type of local wrappers created which is a bit mask:
     --  0 for none, 1 for .desktop files, 2 for executables, 3 for both
     local_copy_type INT NOT NULL,
+    -- set of flags to append to the executables when invoking from local_copies (dict as json)
+    flags TEXT NOT NULL,
     PRIMARY KEY(name, container)
 ) WITHOUT ROWID;
 
