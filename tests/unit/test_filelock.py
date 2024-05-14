@@ -10,9 +10,18 @@ from ybox.filelock import FileLock
 
 
 class FileLockTest(unittest.TestCase):
+    """unit tests for the `ybox.filelock` module"""
+
     _lock_file = "test_locking.lck"
 
     def _run_in_process(self, func, args=(), expected_exitcode: int = 0) -> None:
+        """
+        Run a given function with arguments in a separate process.
+
+        :param func: the function to be run
+        :param args: arguments to the function as an `Iterable` (default is empty tuple)
+        :param expected_exitcode: the expected exit code of the process (default is 0)
+        """
         proc = Process(target=func, args=args)
         proc.start()
         proc.join()
@@ -86,6 +95,7 @@ class FileLockTest(unittest.TestCase):
             self._run_in_process(do_lock)
 
     def tearDown(self) -> None:
+        """tearDown will clean up the lock file"""
         Path(self._lock_file).unlink(missing_ok=True)
 
 

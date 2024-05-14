@@ -41,12 +41,13 @@ class Environ:
         self._user_applications_dir = f"{user_base}/share/applications"
         self._user_executables_dir = f"{user_base}/bin"
 
-    def search_config_path(self, conf_path: str) -> PathName:
+    def search_config_path(self, conf_path: str, quiet: bool = False) -> PathName:
         """
         Search for given configuration path in user and system configuration directories
         (in that order). The path may refer to a file or a subdirectory.
 
         :param conf_path: the configuration file to search (expected to be a relative path)
+        :param quiet: if False then prints an error message on standard output on failure
         :return: the path of the configuration file as `Path` or resource file from
                  importlib (`Traversable`)
         """
@@ -56,7 +57,8 @@ class Environ:
             if os.access(path, os.R_OK):  # type: ignore
                 return path
         search_dirs = ', '.join([str(file) for file in self._configuration_dirs])
-        print_error(f"Configuration file '{conf_path}' not found in [{search_dirs}]")
+        if not quiet:
+            print_error(f"Configuration file '{conf_path}' not found in [{search_dirs}]")
         raise FileNotFoundError
 
     @property
