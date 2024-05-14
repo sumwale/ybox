@@ -664,7 +664,9 @@ def copy_file(src: PathName, dest: str, permissions: Optional[int] = None) -> No
     if permissions is not None:
         os.chmod(dest, permissions)
     elif hasattr(src, "stat"):  # copy the permissions
-        perms = stat.S_IMODE(src.stat(follow_symlinks=True).st_mode)
+        if hasattr(src, "resolve"):
+            src = src.resolve()
+        perms = stat.S_IMODE(src.stat().st_mode)
         os.chmod(dest, perms)
 
 

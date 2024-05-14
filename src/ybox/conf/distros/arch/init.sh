@@ -63,9 +63,9 @@ $PAC -S --needed lesspipe bash-completion bc base-devel man-db man-pages \
   pulseaudio-alsa neovim eza ncdu fd bat expac libva-utils mesa-utils vulkan-tools \
   cantarell-fonts ttf-fira-code ttf-liberation noto-fonts kitty-terminfo rxvt-unicode-terminfo \
   wget aria2 btop realtime-privileges shared-mime-info tree starship \
-  python-ijson python-tabulate
+  python-ijson python-tabulate zip dos2unix
 $PAC -S --needed --asdeps git ed unzip fastjar python-pynvim xsel intel-media-driver \
-  libva-mesa-driver vulkan-intel vulkan-mesa-layers python-pip dos2unix
+  libva-mesa-driver vulkan-intel vulkan-mesa-layers python-pip
 
 echo_color "$fg_cyan" "Configuring makepkg and system-wide bashrc" >> $status_file
 # use reasonable MAKEFLAGS and zstd compression level for AUR packages

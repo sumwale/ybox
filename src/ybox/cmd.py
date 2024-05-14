@@ -112,6 +112,8 @@ def verify_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str]
                     return exists
             else:
                 return True
+    if exit_on_error:
+        sys.exit(1)
     return False
 
 
@@ -137,7 +139,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
     result = subprocess.run(args, capture_output=capture_output, check=False)
     if result.returncode != 0:
         if capture_output:
-            print_subprocess_output(result)
+            _print_subprocess_output(result)
         if not error_msg:
             error_msg = f"'{' '.join(cmd)}'"
         if error_msg != "SKIP":
@@ -151,7 +153,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
     return result.stdout.decode("utf-8") if capture_output else result.returncode
 
 
-def print_subprocess_output(result: subprocess.CompletedProcess) -> None:
+def _print_subprocess_output(result: subprocess.CompletedProcess) -> None:
     """print completed subprocess output in color (orange for standard output and purple
        for standard error)"""
     print_notice(result.stdout.decode("utf-8"))

@@ -58,6 +58,7 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
     selected_deps = args.with_opt_deps.split(",") if args.with_opt_deps else None
     opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS.value]
+    # TODO: use this flag for -w option only if get_optional_deps returned the package/provides
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
     check_cmd = pkgmgr[PkgMgr.INFO.value] if args.check_package else ""
     return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,

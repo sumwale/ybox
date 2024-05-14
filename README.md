@@ -297,9 +297,73 @@ ybox-restart ybox-arch_apps
 
 ## Development
 
-Scripts to setup a conda environment for a consistent development and build have been
-provided in the 'conda' directory which creates an environment in 'conda/.conda'
-directory of the checkout. To set it up run:
+Virtual environment setups have been provided for consistent development, test and build
+with multiple python versions. The minimum python version required is 3.9 and tests are
+run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12 and others
+in future).
+
+As of now pyenv with venv is the actively maintained one which can be used for development
+with IDEA/PyCharm, running tests against all supported python versions using `tox` etc.
+While conda environment setup scripts are still provided, they are no longer maintained.
+
+### pyenv with venv
+
+Scripts to set up a pyenv with venv environment for a consistent development and build have
+been provided in the `pyenv` directory which creates a `venv` environment in `.venv` directory
+of the checkout.
+
+If you do not have `pyenv` installed and configured, then you can install it using:
+
+```sh
+pyenv/install.sh
+```
+
+**NOTE:** this script will delete any existing `pyenv` artifacts in `$HOME/.pyenv`, so use
+it only if you have never installed `pyenv` before.
+
+The script will try to handle installation of required packages on most modern Linux
+distributions (Ubuntu/Debian, Fedora, Arch Linux, OpenSUSE, macOS with homebrew), but if
+yours is a different one, then check [pyenv wiki](https://github.com/pyenv/pyenv/wiki) or
+your distribution docs/forums.
+
+Next you can install the required python versions and venv environment:
+
+```sh
+pyenv/setup-venv.sh
+```
+
+Finally, you can activate it in bash/zsh:
+
+```sh
+source pyenv/activate.sh
+source .venv/bin/activate
+```
+
+Or in fish shell:
+
+```
+source pyenv/activate.fish
+source .venv/bin/activate.fish
+```
+
+**NOTE:** while the pyenv installation and venv set up needs to be done only once, the last
+step of `source` of the two files will need to be done for every shell. Hence, you can consider
+placing those in your bashrc/zshrc or fish conf.d so that they get applied in every interactive
+shell automatically.
+
+You can open the checkout directory as an existing project in Intellij IDEA and then
+add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
+Choose an existing environment in Virtualenv environment and select the
+`<checkout dir>/.venv/bin/python3` for the interpreter.
+
+
+### Conda
+
+**NOTE:** this set up is no longer actively maintained.
+
+Scripts to set up a conda environment appropriate for the project have been provided
+in the 'conda' directory which creates an environment in 'conda/.conda' directory
+of the checkout. To set it up run:
 
 ```sh
 conda/setup-conda.sh

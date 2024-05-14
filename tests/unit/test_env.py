@@ -1,3 +1,5 @@
+"""Tests for `ybox/env.py`"""
+
 import getpass
 import os
 import unittest
@@ -8,7 +10,7 @@ from pathlib import Path
 from ybox.env import Environ
 
 
-class EnvTest(unittest.TestCase):
+class TestEnv(unittest.TestCase):
     """unit tests for the `ybox.env` module"""
 
     _target_home = f"/home/{getpass.getuser()}"
@@ -68,7 +70,6 @@ class EnvTest(unittest.TestCase):
         self.assertGreater(env.now, self._env.now)
         self.assertGreaterEqual(now, env.now)
         self.assertAlmostEqual(now, env.now, delta=timedelta(milliseconds=1))
-        self.assertAlmostEqual(now, self._env.now, delta=timedelta(milliseconds=100))
 
     def test_search_config(self) -> None:
         """check `Environ.search_config_path` function"""

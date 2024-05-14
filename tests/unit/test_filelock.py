@@ -1,3 +1,5 @@
+"""Tests for `ybox/filelock.py`"""
+
 import errno
 import fcntl
 import os
@@ -9,10 +11,11 @@ from pathlib import Path
 from ybox.filelock import FileLock
 
 
-class FileLockTest(unittest.TestCase):
+class TestFileLock(unittest.TestCase):
     """unit tests for the `ybox.filelock` module"""
 
-    _lock_file = "test_locking.lck"
+    # keep unique so that parallel runs in tox/nox will work
+    _lock_file = f"test_locking-{datetime.now()}.lck"
 
     def _run_in_process(self, func, args=(), expected_exitcode: int = 0) -> None:
         """
