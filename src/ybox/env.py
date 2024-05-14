@@ -36,7 +36,8 @@ class Environ:
         self._xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
         self._now = datetime.now()
         os.environ["NOW"] = str(self._now)
-        self._configuration_dirs = (Path(f"{self._home_dir}/.config/ybox"), files("ybox.conf"))
+        self._configuration_dirs = (Path(f"{self._home_dir}/.config/ybox"),
+                                    files("ybox").joinpath("conf"))
         self._user_applications_dir = f"{user_base}/share/applications"
         self._user_executables_dir = f"{user_base}/bin"
 

@@ -6,10 +6,10 @@ from datetime import datetime
 from multiprocessing import Process
 from pathlib import Path
 
-from src.ybox.filelock import FileLock
+from ybox.filelock import FileLock
 
 
-class MyTestCase(unittest.TestCase):
+class FileLockTest(unittest.TestCase):
     _lock_file = "test_locking.lck"
 
     def _run_in_process(self, func, args=(), expected_exitcode: int = 0) -> None:

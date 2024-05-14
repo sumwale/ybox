@@ -183,7 +183,7 @@ class YboxStateManagement:
 
         :param cursor: the `Cursor` object to use for execution
         """
-        schema_pkg = files("ybox.schema")
+        schema_pkg = files("ybox").joinpath("schema")
         ver_sep = ":"
         new_version = parse_version(ybox.__version__)
         # full initialization if empty database, else migrate and update the version if required
