@@ -392,3 +392,15 @@ add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...)
 Choose an existing environment in Conda environment where the path to conda should already
 be selected correctly (`<checkout dir>/conda/.conda/bin/conda`) while for interpreter
 choose `<checkout dir>/conda/.conda/envs/ybox/bin/python3`.
+
+### Running the test suite
+
+Once pyenv+venv set up is working, you can run the entire test suite and other checks
+using `tox` in the checkout directory, or `tox -p` for parallel run. It will run with
+all supported python versions (i.e. from 3.9 onwards).
+
+There is also a simple script `run-tests.sh` in the top-level directory which can be used
+to run just the tests with the current python version. This will skip other stuff like
+`mypy`, for example, which is invoked by `tox`.
+
+See `tox` and `unittest` documentation for more details like running individual tests.
