@@ -1,0 +1,7 @@
+build
+simple-term-menu
+tabulate
+types-tabulate
+ijson
+mypy
+pylint

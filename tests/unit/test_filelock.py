@@ -4,6 +4,7 @@ import os
 import unittest
 from datetime import datetime
 from multiprocessing import Process
+from pathlib import Path
 
 from src.ybox.filelock import FileLock
 
@@ -53,7 +54,7 @@ class MyTestCase(unittest.TestCase):
             def do_lock() -> None:
                 start = datetime.now()
                 with self.assertRaises(TimeoutError):
-                    with FileLock(self._lock_file, timeout_secs=3):
+                    with FileLock(self._lock_file, timeout_secs=3.0):
                         pass
                 elapsed = (datetime.now() - start).total_seconds()
                 self.assertGreaterEqual(elapsed, 3.0)
@@ -69,11 +70,11 @@ class MyTestCase(unittest.TestCase):
             def do_lock() -> None:
                 start1 = datetime.now()
                 with self.assertRaises(TimeoutError):
-                    with FileLock(self._lock_file, timeout_secs=2, poll_interval=0.5):
+                    with FileLock(self._lock_file, timeout_secs=2.0, poll_interval=0.5):
                         pass
                 start2 = datetime.now()
                 with self.assertRaises(TimeoutError):
-                    with FileLock(self._lock_file, timeout_secs=2, poll_interval=2.0):
+                    with FileLock(self._lock_file, timeout_secs=2.0, poll_interval=2.0):
                         pass
                 elapsed1 = (start2 - start1).total_seconds()
                 self.assertGreaterEqual(elapsed1, 2.0)
@@ -85,8 +86,7 @@ class MyTestCase(unittest.TestCase):
             self._run_in_process(do_lock)
 
     def tearDown(self) -> None:
-        if os.path.exists(self._lock_file):
-            os.unlink(self._lock_file)
+        Path(self._lock_file).unlink(missing_ok=True)
 
 
 if __name__ == '__main__':
