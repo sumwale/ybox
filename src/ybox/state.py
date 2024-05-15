@@ -530,7 +530,7 @@ class YboxStateManagement:
             # by partitioning on `dependency` column and applying an aggregate like count to
             # filter out those having only this package as the dependent. However, this
             # alternative is much slower probably due to sorting the entire table.
-            # For reference, the no shared root query looks like this:
+            # For reference, the no shared root query using window function looks like this:
             #   SELECT dependency, dep_type FROM (SELECT dependency, dep_type, COUNT()
             #     FILTER (WHERE name <> ?) OVER (PARTITION BY dependency)
             #     AS dep_counts FROM package_deps WHERE container = ?) WHERE dep_counts = 0
@@ -564,17 +564,18 @@ class YboxStateManagement:
                 cursor.execute("DELETE FROM packages AS p WHERE name = ? AND EXISTS "
                                f"({sr_exists}) RETURNING local_copies", (package, shared_root))
                 local_copies = self._extract_local_copies(cursor.fetchall())
-                # and from the package_deps table
-                cursor.execute("DELETE FROM package_deps AS p WHERE name = ? AND EXISTS "
-                               f"({sr_exists})", (package, shared_root))
+                # and from the package_deps table (including dependency entries for the package)
+                cursor.execute("DELETE FROM package_deps AS p WHERE "
+                               f"(name = ? OR dependency = ?) AND EXISTS ({sr_exists})",
+                               (package, package, shared_root))
                 self._clean_destroyed_containers(cursor)
             else:
                 # delete from the packages and package_deps tables
                 cursor.execute("DELETE FROM packages WHERE name = ? AND container = ? "
                                "RETURNING local_copies", (package, container_name))
                 local_copies = self._extract_local_copies(cursor.fetchall())
-                cursor.execute("DELETE FROM package_deps WHERE name = ? AND container = ?",
-                               (package, container_name))
+                cursor.execute("DELETE FROM package_deps WHERE (name = ? OR dependency = ?) "
+                               "AND container = ?", (package, package, container_name))
             self._conn.commit()
         # delete all the files created locally for the container
         self._remove_local_copies(local_copies)

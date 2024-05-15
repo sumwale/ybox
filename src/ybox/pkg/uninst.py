@@ -58,9 +58,10 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
         print_error(f"Package '{package}' is not installed in container '{conf.box_name}'")
     # go ahead with removal from local state and wrappers, even if package was not installed
     if code == 0 or not installed:
-        opt_deps = state.unregister_package(conf.box_name, package, runtime_conf.shared_root)
-        if not skip_deps and opt_deps:
-            for opt_dep in opt_deps:
+        orphans = state.unregister_package(conf.box_name, package, runtime_conf.shared_root)
+        if not skip_deps and orphans:
+            print_info(f"Uninstalling orphaned dependencies of '{package}' {list(orphans.keys())}")
+            for opt_dep in orphans:
                 _uninstall_package(opt_dep, skip_deps, uninstall_cmd, check_cmd, docker_cmd, conf,
                                    runtime_conf, state, dep_msg="dependency ")
     return code
