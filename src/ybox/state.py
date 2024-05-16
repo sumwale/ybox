@@ -100,7 +100,7 @@ class YboxStateManagement:
 
     # when comparing two container configurations, delete the sections mentioned below and the
     # keys in the [base] section (specifically log-file in log-opts will change)
-    _CONFIG_NORMALIZE_DEL_SECTIONS = ["configs", "apps", "startup"]
+    _CONFIG_NORMALIZE_DEL_SECTIONS = ["mounts", "configs", "env", "apps", "app_flags", "startup"]
     _CONFIG_NORMALIZE_DEL_BASE_KEYS = ["name", "includes", "home", "config_hardlinks",
                                        "log_driver", "log_opts"]
 

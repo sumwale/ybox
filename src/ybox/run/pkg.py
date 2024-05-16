@@ -34,7 +34,7 @@ def main_argv(argv: list[str]) -> None:
     if not container_name:
         # check active containers
         containers = str(run_command([docker_cmd, "container", "ls", "--format={{ .Names }}",
-                                      f"--filter=label={YboxLabel.CONTAINER_PRIMARY}"],
+                                      f"--filter=label={YboxLabel.CONTAINER_PRIMARY.value}"],
                                      capture_output=True, error_msg="container ls")).splitlines()
         # use the active container if there is only one of them
         if len(containers) == 1:
@@ -61,9 +61,11 @@ def main_argv(argv: list[str]) -> None:
             print_error(f"No entry for ybox container '{container_name}' found!")
             sys.exit(1)
         conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
+        distribution_config_file = args.distribution_config if args.distribution_config \
+            else conf.distribution_config(conf.distribution)
         env_interpolation = EnvInterpolation(env, [])
-        distro_config = config_reader(
-            env.search_config_path(f"distros/{conf.distribution}/distro.ini"), env_interpolation)
+        distro_config = config_reader(env.search_config_path(distribution_config_file),
+                                      env_interpolation)
         pkgmgr = distro_config["pkgmgr"]
         if (code := args.func(args, pkgmgr, docker_cmd, conf, runtime_conf, state)) != 0:
             sys.exit(code)
@@ -101,6 +103,9 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-z", "--ybox", type=str,
                            help="the ybox container to use for package operations else the user "
                                 "is prompted to select a container from among the active ones")
+    subparser.add_argument("-C", "--distribution-config", type=str,
+                           help="path to distribution configuration file to use instead of the "
+                                "`distro.ini` from user/system configuration paths")
     subparser.add_argument("-q", "--quiet", action="count", default=0,
                            help="proceed without asking any questions using default where "
                                 "possible; this should usually be used with explicit -z/--ybox "

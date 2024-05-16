@@ -3,5 +3,9 @@
 set -e
 
 pip install .
-python3 -m unittest discover -s tests/unit
-python3 -m unittest discover -s tests/functional
+if [ -z "$1" -o "$1" = "-u" ]; then
+  python3 -m unittest discover -s tests/unit
+fi
+if [ -z "$1" -o "$1" = "-f" ]; then
+  python3 -m unittest discover -s tests/functional
+fi

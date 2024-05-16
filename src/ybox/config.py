@@ -53,6 +53,11 @@ class StaticConfiguration:
         """linux distribution being used by the ybox container"""
         return self._distribution
 
+    @staticmethod
+    def distribution_config(distribution: str) -> str:
+        """relative configuration file path for the linux distribution being used"""
+        return f"distros/{distribution}/distro.ini"
+
     @property
     def box_name(self) -> str:
         """name of the ybox container"""

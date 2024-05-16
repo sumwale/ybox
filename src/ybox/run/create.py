@@ -29,6 +29,7 @@ from ybox.util import EnvInterpolation, NotSupportedError, config_reader, ini_fi
 
 _EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 _DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
+_WS_RE = re.compile(r"\s+")
 
 
 # Note: deliberately not using os.path.join for joining paths since the code only works on
@@ -59,7 +60,7 @@ def main_argv(argv: list[str]) -> None:
     conf = StaticConfiguration(env, distro, box_name)
     # read the distribution specific configuration
     base_image_name, shared_root_dirs, secondary_groups, distro_config = read_distribution_config(
-        conf)
+        args, conf)
     # setup entrypoint and related scripts to share with the container on a mount point
     setup_ybox_scripts(conf, distro_config)
 
@@ -67,6 +68,7 @@ def main_argv(argv: list[str]) -> None:
     # process the profile before any actions to ensure it is in proper shape
     shared_root, box_conf, apps_with_deps = process_sections(profile, conf, distro_config,
                                                              docker_full_args)
+    process_distribution_config(distro_config, docker_full_args)
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
@@ -142,7 +144,6 @@ def main_argv(argv: list[str]) -> None:
                                           shared_root_dirs, conf, args.quiet)
                 remove_container(docker_cmd, conf)
     else:
-        shared_root_dirs = ""
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
         run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
@@ -228,6 +229,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "on the shared root directory that got orphaned due to their "
                              "owner container being destroyed will be assigned to this new "
                              "container regardless of the container configuration")
+    parser.add_argument("-C", "--distribution-config", type=str,
+                        help="path to distribution configuration file to use instead of the "
+                             "`distro.ini` from user/system configuration paths")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="proceed without asking any questions using defaults where possible; "
                              "this should usually be used with explicit specification of "
@@ -275,7 +279,8 @@ def select_distribution(args: argparse.Namespace, env: Environ) -> str:
     # show a menu to choose from if the number of supported distributions exceeds 1
     distro_names: list[str] = []
     for distro in supported_distros:
-        distro_config = quick_config_read(env.search_config_path(f"distros/{distro}/distro.ini"))
+        distro_config = quick_config_read(
+            env.search_config_path(StaticConfiguration.distribution_config(distro)))
         distro_names.append(f"{distro_config['base']['name']} ({distro})")  # should always exist
     print_info("Please select the distribution to use for the container:", file=sys.stderr)
     if (distro_name := select_item_from_menu(distro_names)) is None:
@@ -336,7 +341,7 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> Tu
             box_name = def_name
 
     # don't allow spaces or weird characters in the name
-    if not re.match(r"^[\w\-]+$", box_name):
+    if not re.fullmatch(r"[\w.\-]+", box_name):
         print_error(f"Invalid container name '{box_name}' -- only alphanumeric, underscore and "
                     "hyphen characters are accepted")
         sys.exit(1)
@@ -355,8 +360,8 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
     config = config_reader(profile, env_interpolation)
     # shared_root is disabled by default
     shared_root = ""
-    # hard links are false by default
-    config_hardlinks = False
+    # hard links are false by default (value of None means skip the [configs] section entirely)
+    config_hardlinks: Optional[bool] = False
     apps_with_deps: dict[str, list[str]] = {}
     # finally process all the sections and the keys forming the docker/podman command-line
     for section in config.sections():
@@ -370,7 +375,8 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
         elif section == "env":
             process_env_section(config["env"], docker_args)
         elif section == "configs":
-            process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
+            if config_hardlinks is not None:
+                process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
         elif section == "apps":
             apps_with_deps = process_apps_section(config["apps"], conf, distro_config)
         elif section not in ("app_flags", "startup"):
@@ -379,54 +385,70 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
     return shared_root, config, apps_with_deps
 
 
+def process_distribution_config(distro_config: ConfigParser, docker_args: list[str]) -> None:
+    if distro_config.getboolean("base", "configure_fastest_mirrors", fallback=False):
+        add_env_option(docker_args, "CONFIGURE_FASTEST_MIRRORS", "1")
+    if distro_config.has_section("packages"):
+        packages_section = distro_config["packages"]
+        for key, env_var in (("required", "REQUIRED_PKGS"), ("recommended", "RECOMMENDED_PKGS"),
+                             ("suggested", "SUGGESTED_PKGS"), ("required_deps", "REQUIRED_DEPS"),
+                             ("recommended_deps", "RECOMMENDED_DEPS"),
+                             ("suggested_deps", "SUGGESTED_DEPS"), ("extra", "EXTRA_PKGS")):
+            if value := packages_section.get(key):
+                add_env_option(docker_args, env_var, _WS_RE.sub(" ", value))
+
+
 def process_base_section(base_section: SectionProxy, profile: PathName,
-                         env: Environ, args: list[str]) -> Tuple[str, bool]:
+                         env: Environ, args: list[str]) -> Tuple[str, Optional[bool]]:
     # shared root is disabled by default
     shared_root = ""
-    # hard links are false by default
-    config_hardlinks = False
-    for key in base_section:
+    # hard links are false by default (value of None means skip the [configs] section entirely)
+    config_hardlinks: Optional[bool] = False
+    # configure locale by default
+    config_locale = True
+    for key, val in base_section.items():
         if key == "home":
-            source_home = base_section[key]
             # create the source directory if it does not exist
-            os.makedirs(source_home, exist_ok=True)
-            add_mount_option(args, source_home, env.target_home)
+            os.makedirs(val, exist_ok=True)
+            add_mount_option(args, val, env.target_home)
         elif key == "shared_root":
-            shared_root = base_section["shared_root"]
+            shared_root = "" if val is None else val
         elif key == "config_hardlinks":
-            config_hardlinks = base_section.getboolean("config_hardlinks")
+            if val:
+                config_hardlinks = _get_boolean(val)
+            else:
+                config_hardlinks = None
+        elif key == "config_locale":
+            config_locale = _get_boolean(val)
         elif key == "x11":
-            if base_section.getboolean("x11"):
+            if _get_boolean(val):
                 enable_x11(args)
         elif key == "wayland":
-            if base_section.getboolean("wayland"):
+            if _get_boolean(val):
                 enable_wayland(args, env)
         elif key == "pulseaudio":
-            if base_section.getboolean("pulseaudio"):
+            if _get_boolean(val):
                 enable_pulse(args, env)
         elif key == "dbus":
-            if base_section.getboolean("dbus"):
+            if _get_boolean(val):
                 enable_dbus(args, base_section.getboolean("dbus_sys", fallback=False))
         elif key == "dri":
-            if base_section.getboolean("dri"):
+            if _get_boolean(val):
                 args.append("--device=/dev/dri")
         elif key == "nvidia":
-            if base_section.getboolean("nvidia"):
+            if _get_boolean(val):
                 args.append("--device=nvidia.com/gpu=all")
         elif key == "shm_size":
-            shm_size = base_section["shm_size"]
-            if shm_size:
-                args.append(f"--shm-size={shm_size}")
+            if val:
+                args.append(f"--shm-size={val}")
         elif key == "pids_limit":
-            pids_limit = base_section["pids_limit"]
-            if pids_limit:
-                args.append(f"--pids-limit={pids_limit}")
+            if val:
+                args.append(f"--pids-limit={val}")
         elif key == "log_driver":
-            log_driver = base_section["log_driver"]
-            if log_driver:
-                args.append(f"--log-driver={log_driver}")
+            if val:
+                args.append(f"--log-driver={val}")
         elif key == "log_opts":
-            add_multi_opt(args, base_section, "log_opts", "log-opt")
+            add_multi_opt(args, val, "log-opt")
             # create the log directory if required
             log_dirs = [mt.group(1) for mt in
                         (re.match("^--log-opt=path=(.*)/.*$", path) for path in args) if mt]
@@ -435,7 +457,17 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
         elif key not in ("name", "dbus_sys", "includes"):
             raise NotSupportedError(f"Unknown key '{key}' in the [base] of {profile} "
                                     "or its includes")
+    if config_locale:
+        for lang_var in ("LANG", "LANGUAGE"):
+            add_env_option(args, lang_var)
     return shared_root, config_hardlinks
+
+
+def _get_boolean(value: str) -> bool:
+    """convert a string value to boolean else raise an exception if the value is not a boolean"""
+    if (result := ConfigParser.BOOLEAN_STATES.get(value.lower())) is not None:
+        return result
+    raise ValueError(f"Not a boolean: {value}")
 
 
 def add_env_option(args: list[str], env_var: str, env_val: Optional[str] = None) -> None:
@@ -500,49 +532,49 @@ def enable_dbus(args: list[str], sys_enable: bool) -> None:
             add_mount_option(args, dbus_sys2, dbus_sys)
 
 
-def add_multi_opt(args: list[str], section: SectionProxy, key: str, opt: str) -> None:
-    if opts := section.get(key):
-        for opt_val in opts.split(","):
+def add_multi_opt(args: list[str], val: str, opt: str) -> None:
+    if val:
+        for opt_val in val.split(","):
             args.append(f"--{opt}={opt_val}")
 
 
 def process_security_section(sec_section: SectionProxy, profile: PathName,
                              args: list[str]) -> None:
-    sec_options = ["label", "apparmor", "seccomp", "mask", "umask", "proc_opts"]
-    single_options = ["seccomp_policy", "ipc", "cgroup_parent", "cgroupns", "cgroups"]
+    sec_options = {"label", "apparmor", "seccomp", "mask", "umask", "proc_opts"}
+    single_options = {"seccomp_policy", "ipc", "cgroup_parent", "cgroupns", "cgroups"}
     multi_options = {"caps_add": "cap-add", "caps_drop": "cap-drop", "ulimits": "ulimit",
                      "cgroup_confs": "cgroup-conf", "device_cgroup_rules": "device-cgroup-rule",
                      "secrets": "secret"}
-    for key in sec_section:
+    for key, val in sec_section.items():
         if key in sec_options:
-            add_sec_option_if_exists(args, sec_section, key.replace("_", "-"))
+            add_sec_option_if_exists(args, key.replace("_", "-"), val)
         elif opt := multi_options.get(key):
-            add_multi_opt(args, sec_section, key, opt)
+            add_multi_opt(args, val, opt)
         elif key in single_options:
-            add_option_if_exists(args, sec_section, key, key.replace("_", "-"))
+            add_option_if_exists(args, key.replace("_", "-"), val)
         elif key == "no_new_privileges":
-            if sec_section.getboolean(key):
+            if _get_boolean(val):
                 args.append("--security-opt=no-new-privileges")
         else:
             raise NotSupportedError(f"Unknown key '{key}' in the [security] of {profile} "
                                     "or its includes")
 
 
-def add_sec_option_if_exists(args: list[str], sec_section: SectionProxy, key: str) -> None:
-    if val := sec_section[key]:
+def add_sec_option_if_exists(args: list[str], key: str, val: str) -> None:
+    if val:
         args.append(f"--security-opt={key}={val}")
 
 
-def add_option_if_exists(args: list[str], section: SectionProxy, key: str, opt: str) -> None:
-    if val := section[key]:
+def add_option_if_exists(args: list[str], opt: str, val: str) -> None:
+    if val:
         args.append(f"--{opt}={val}")
 
 
 def process_mounts_section(mounts_section: SectionProxy, args: list[str]) -> None:
-    for key in mounts_section:
-        # keys here are only symbolic names and serve no purpose other than allowing
-        # later profile files to override previous ones
-        if val := mounts_section[key]:
+    # keys here are only symbolic names and serve no purpose other than allowing
+    # later profile files to override previous ones
+    for _, val in mounts_section.items():
+        if val:
             if "=" in val or "," in val:
                 args.append(f"--mount={val}")
             else:
@@ -566,8 +598,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
     # write the links to be created in a file that will be passed to container
     # entrypoint to create symlinks from container user's home to the mounted config files
     with open(conf.config_list, "w", encoding="utf-8") as config_list_fd:
-        for key in configs_section:
-            val = configs_section[key]
+        for key, val in configs_section.items():
             # perform environment variable substitution now which was skipped earlier
             f_val = os.path.expandvars(val)
             split_idx = f_val.find("->")
@@ -595,8 +626,8 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
 
 
 def process_env_section(env_section: SectionProxy, args: list[str]) -> None:
-    for key in env_section:
-        add_env_option(args, key, env_section[key])
+    for key, val in env_section.items():
+        add_env_option(args, key, val)
 
 
 def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
@@ -625,8 +656,8 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
         return dep
 
     with open(conf.app_list, "w", encoding="utf-8") as apps_fd:
-        for key in apps_section:
-            apps = [app.strip() for app in apps_section[key].split(",")]
+        for _, val in apps_section.items():
+            apps = [app.strip() for app in val.split(",")]
             deps = [capture_dep(match) for dep in apps if (match := _DEP_SUFFIX.match(dep))]
             if deps:
                 apps = [app for app in apps if not _DEP_SUFFIX.match(app)]
@@ -699,10 +730,13 @@ def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
                 copy_file(resource, f"{dest_dir}/{resource.name}")
 
 
-def read_distribution_config(conf: StaticConfiguration) -> Tuple[str, str, str, ConfigParser]:
+def read_distribution_config(args: argparse.Namespace,
+                             conf: StaticConfiguration) -> Tuple[str, str, str, ConfigParser]:
     env_interpolation = EnvInterpolation(conf.env, [])
-    distro_config = config_reader(
-        conf.env.search_config_path(f"distros/{conf.distribution}/distro.ini"), env_interpolation)
+    distribution_config_file = args.distribution_config if args.distribution_config \
+        else conf.distribution_config(conf.distribution)
+    distro_config = config_reader(conf.env.search_config_path(distribution_config_file),
+                                  env_interpolation)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
     shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist
@@ -712,18 +746,13 @@ def read_distribution_config(conf: StaticConfiguration) -> Tuple[str, str, str, 
 
 def run_base_container(image_name: str, current_user: str, secondary_groups: str, docker_cmd: str,
                        conf: StaticConfiguration) -> None:
-    # refresh the image locally first to decrease update size later
-    print_info(f"Refreshing local copy of the base image '{image_name}'")
-    if run_command([docker_cmd, "pull", image_name], exit_on_error=False,
-                   error_msg=f"pulling {image_name}") != 0:
-        print_warn("Trying to continue with local copy of the image")
     # get current user and group details to pass to the entrypoint script
     user_entry = pwd.getpwnam(current_user)
     group_entry = grp.getgrgid(user_entry.pw_gid)
     print_warn(f"Creating container specific image having sudo user '{current_user}'")
     docker_run = [docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR", f"--name={conf.box_name}",
                   f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
-                  f"--label={YboxLabel.CONTAINER_BASE}",
+                  f"--label={YboxLabel.CONTAINER_BASE.value}",
                   f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_base()}",
                   image_name, "-u", current_user, "-U", str(user_entry.pw_uid),
                   "-n", user_entry.pw_gecos, "-g", group_entry.gr_name,
@@ -769,7 +798,7 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root: str
     run_command([docker_cmd, "run", "-it", f"--name={conf.box_name}",
                  f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
                  f"-v={shared_root}:{Consts.shared_root_mount_dir()}",
-                 f"--label={YboxLabel.CONTAINER_COPY}", "--userns=keep-id", "--user=0",
+                 f"--label={YboxLabel.CONTAINER_COPY.value}", "--userns=keep-id", "--user=0",
                  f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_cp()}",
                  image_name, shared_root_dirs, Consts.shared_root_mount_dir()],
                 error_msg="running container for copying shared root")
@@ -801,13 +830,12 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
     status_path.touch(mode=0o600, exist_ok=False)
     add_mount_option(docker_full_cmd, conf.status_file, Consts.status_target_file())
 
-    for shared_dir in shared_root_dirs.split(","):
-        add_mount_option(docker_full_cmd, f"{shared_root}{shared_dir}", shared_dir)
-    for lang_var in ["LANG", "LANGUAGE"]:
-        docker_full_cmd.append(f"-e={lang_var}")
+    if shared_root:
+        for shared_dir in shared_root_dirs.split(","):
+            add_mount_option(docker_full_cmd, f"{shared_root}{shared_dir}", shared_dir)
     docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
-    docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_PRIMARY}")
-    docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_DISTRIBUTION}={conf.distribution}")
+    docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_PRIMARY.value}")
+    docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_DISTRIBUTION.value}={conf.distribution}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint()}")
     docker_full_cmd.append("--userns=keep-id")
     # bubblewrap and thereby programs like steam do not work without --user
@@ -834,33 +862,35 @@ def wait_for_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     max_wait_secs = 600
     status_line = ""  # keeps the last valid line read from status file
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
+
+        def read_lines() -> bool:
+            nonlocal status_line
+            while line := status_fd.readline():
+                status_line = line
+                if status_line.strip() in ("started", "stopped"):
+                    # clear the status file and return
+                    truncate_file(conf.status_file)
+                    return True
+                print(line, end="")  # line already includes the terminating newline
+            return False
+
         for _ in range(max_wait_secs):
             # check the container status first
             if verify_ybox_state(docker_cmd, box_name, ["running"], exit_on_error=False):
-                while status_line := status_fd.readline():
-                    if status_line == "started\n":
-                        # clear the status file and return
-                        truncate_file(conf.status_file)
-                        return
-                    print(status_line, end="")  # line already includes the terminating newline
-            else:
-                # check if container has explicitly stopped for restart later
-                while line := status_fd.readline():
-                    status_line = line
-                    print(line, end="")  # line already includes the terminating newline
-                if status_line == "stopped\n":
-                    # clear the status file and return
-                    truncate_file(conf.status_file)
+                if read_lines():
                     return
-                print_error("FAILED waiting for container to be ready -- check "
-                            f"'ybox-logs {box_name}' for details")
+            else:
+                if read_lines():
+                    return
+                print_error("FAILED waiting for container to be ready (last status: "
+                            f"{status_line}).\nCheck 'ybox-logs {box_name}' for more details.")
                 sys.exit(1)
             # using simple poll per second rather than inotify or similar because the
             # initialization will take a good amount of time and second granularity is enough
             time.sleep(1)
     # reading did not end after max_wait_secs
-    print_error(f"TIMED OUT waiting for ready container after {max_wait_secs}secs -- check "
-                f"'ybox-logs -f {box_name}' for details")
+    print_error(f"TIMED OUT waiting for ready container after {max_wait_secs}secs (last status: "
+                f"{status_line}).\nCheck 'ybox-logs -f {box_name}' for more details.")
     sys.exit(1)
 
 

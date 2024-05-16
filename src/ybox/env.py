@@ -27,17 +27,19 @@ class Environ:
         self._home_dir = os.path.expanduser("~")
         # local user home might be in a different location than /home but target user in the
         # container will always be in /home as ensured by ybox/entrypoint.py script
-        self._target_home = "/home/" + getpass.getuser()
+        self._target_home = f"/home/{getpass.getuser()}"
         os.environ["TARGET_HOME"] = self._target_home
         user_base = site.getuserbase()
-        target_user_base = self._target_home + "/.local"
+        target_user_base = f"{self._target_home}/.local"
         self._data_dir = f"{user_base}/share/ybox"
         self._target_data_dir = f"{target_user_base}/share/ybox"
         self._xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
         self._now = datetime.now()
         os.environ["NOW"] = str(self._now)
+        pkg_dir = files("ybox")
+        os.environ["YBOX_PKG_DIR"] = str(pkg_dir)
         self._configuration_dirs = (Path(f"{self._home_dir}/.config/ybox"),
-                                    files("ybox").joinpath("conf"))
+                                    pkg_dir.joinpath("conf"))
         self._user_applications_dir = f"{user_base}/share/applications"
         self._user_executables_dir = f"{user_base}/bin"
 

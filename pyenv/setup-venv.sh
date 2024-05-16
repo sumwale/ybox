@@ -30,5 +30,5 @@ source "$SRC_DIR/.venv/bin/activate"
 
 pip3 install pip --upgrade
 pip3 install setuptools --upgrade
-pip3 install -r "$SRC_DIR/requirements-test.txt"
+pip3 install -r "$SRC_DIR/requirements-venv.txt"
 pip3 cache purge

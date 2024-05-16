@@ -7,6 +7,7 @@ import unittest
 from datetime import datetime
 from multiprocessing import Process
 from pathlib import Path
+from uuid import uuid4
 
 from ybox.filelock import FileLock
 
@@ -15,7 +16,7 @@ class TestFileLock(unittest.TestCase):
     """unit tests for the `ybox.filelock` module"""
 
     # keep unique so that parallel runs in tox/nox will work
-    _lock_file = f"test_locking-{datetime.now()}.lck"
+    _lock_file = f"test_locking-{uuid4()}.lck"
 
     def _run_in_process(self, func, args=(), expected_exitcode: int = 0) -> None:
         """
