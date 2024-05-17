@@ -6,6 +6,7 @@ import unittest
 from datetime import datetime, timedelta
 from importlib.resources import files
 from pathlib import Path
+from uuid import uuid4
 
 from ybox.env import Environ
 
@@ -79,7 +80,8 @@ class TestEnv(unittest.TestCase):
         config_dir = Path(os.environ['HOME'], ".config", "ybox")
         config_dir.mkdir(mode=dir_mode, parents=True, exist_ok=True)
         # create temporary file in $HOME/.config/ybox and check that it is picked
-        conf_file = "test_search.config"
+        uuid = uuid4()
+        conf_file = f"test_search-{uuid}.config"
         conf_path = config_dir.joinpath(conf_file)
         conf_path.touch(mode=file_mode, exist_ok=True)
         try:
@@ -88,7 +90,7 @@ class TestEnv(unittest.TestCase):
             conf_path.unlink()
         self.assertRaises(FileNotFoundError, self._env.search_config_path, conf_file, quiet=True)
         # check for a standard config file in $HOME
-        prof_file = "profiles/test_search_config.ini"
+        prof_file = f"profiles/test_search_config-{uuid}.ini"
         prof_path = config_dir.joinpath(prof_file)
         prof_path.parent.mkdir(mode=dir_mode, exist_ok=True)
         prof_path.touch(mode=file_mode, exist_ok=True)
@@ -97,6 +99,16 @@ class TestEnv(unittest.TestCase):
         finally:
             prof_path.unlink()
         self.assertRaises(FileNotFoundError, self._env.search_config_path, prof_file, quiet=True)
+        # $HOME should not be used when $YBOX_TESTING is set
+        os.environ["YBOX_TESTING"] = "1"
+        try:
+            prof_path.touch(mode=file_mode, exist_ok=True)
+            self.assertEqual(prof_path, self._env.search_config_path(prof_file))
+            env = Environ()
+            self.assertRaises(FileNotFoundError, env.search_config_path, prof_file, quiet=True)
+        finally:
+            del os.environ["YBOX_TESTING"]
+            prof_path.unlink(missing_ok=True)
         # switch $HOME and search for config files which should be picked from package location
         with self.NewHome():
             env = Environ()

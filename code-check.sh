@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 PYLINT=
 if [ "$1" = "-l" ]; then
   echo -e '\033[35mWill also run pylint on the code\033[00m'
@@ -10,8 +12,8 @@ fi
 MYPY_FAILED=
 PYLINT_FAILED=
 
-export MYPYPATH=./src
-for f in src/ybox/*.py src/ybox/pkg/*.py src/ybox/run/*.py tests/**/*.py; do
+export MYPYPATH="$SCRIPT_DIR/src"
+for f in src/ybox/*.py src/ybox/pkg/*.py src/ybox/run/*.py; do
   echo -------------------------------------------
   echo Output of mypy on $f
   echo -------------------------------------------
@@ -21,7 +23,7 @@ for f in src/ybox/*.py src/ybox/pkg/*.py src/ybox/run/*.py tests/**/*.py; do
     MYPY_FAILED=1
   fi
 done
-for f in src/ybox/conf/distros/*/*.py; do
+for f in tests/**/*.py src/ybox/conf/distros/*/*.py; do
   echo -------------------------------------------
   echo Output of mypy on $f
   echo -------------------------------------------

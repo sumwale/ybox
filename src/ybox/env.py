@@ -38,8 +38,13 @@ class Environ:
         os.environ["NOW"] = str(self._now)
         pkg_dir = files("ybox")
         os.environ["YBOX_PKG_DIR"] = str(pkg_dir)
-        self._configuration_dirs = (Path(f"{self._home_dir}/.config/ybox"),
-                                    pkg_dir.joinpath("conf"))
+        # for tests, only the bundled configurations should be tested
+        self._configuration_dirs: list[PathName] = []
+        if os.environ.get("YBOX_TESTING"):
+            self._configuration_dirs = [pkg_dir.joinpath("conf")]
+        else:
+            self._configuration_dirs = [Path(f"{self._home_dir}/.config/ybox"),
+                                        pkg_dir.joinpath("conf")]
         self._user_applications_dir = f"{user_base}/share/applications"
         self._user_executables_dir = f"{user_base}/bin"
 
