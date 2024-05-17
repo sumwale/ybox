@@ -48,31 +48,31 @@ class DistributionBase(unittest.TestCase):
             self.cleanup()
 
     @property
-    def _distribution(self) -> str:
+    def distribution(self) -> str:
         return self._helper.distribution if self._helper else ""
 
     @property
-    def _box_name(self) -> str:
+    def box_name(self) -> str:
         return self._helper.box_name if self._helper else ""
 
     @property
-    def _box_home(self) -> str:
+    def box_home(self) -> str:
         return self._helper.box_home if self._helper else ""
 
     @property
-    def _box_image(self) -> str:
+    def box_image(self) -> str:
         return self._helper.box_image if self._helper else ""
 
     def cleanup(self) -> None:
-        subprocess.run([self._docker_cmd, "container", "stop", self._box_name],
+        subprocess.run([self._docker_cmd, "container", "stop", self.box_name],
                        stderr=subprocess.DEVNULL, check=False)
-        subprocess.run([self._docker_cmd, "container", "rm", self._box_name],
+        subprocess.run([self._docker_cmd, "container", "rm", self.box_name],
                        stderr=subprocess.DEVNULL, check=False)
-        subprocess.run([self._docker_cmd, "image", "rm", self._box_image],
+        subprocess.run([self._docker_cmd, "image", "rm", self.box_image],
                        stderr=subprocess.DEVNULL, check=False)
         subprocess.run([self._docker_cmd, "image", "prune", "-f"], check=False)
-        shutil.rmtree(self._box_home, ignore_errors=True)
-        shutil.rmtree(f"{self._home}/.local/share/ybox/{self._box_name}",
+        shutil.rmtree(self.box_home, ignore_errors=True)
+        shutil.rmtree(f"{self._home}/.local/share/ybox/{self.box_name}",
                       ignore_errors=True)
 
     def for_all_distros(self, test_func) -> None:
@@ -84,7 +84,7 @@ class DistributionBase(unittest.TestCase):
 
     def run_on_container(self, cmd: Union[str, list[str]],
                          capture_output: bool = True) -> subprocess.CompletedProcess[bytes]:
-        docker_args = [self._docker_cmd, "exec", "-it", self._box_name]
+        docker_args = [self._docker_cmd, "exec", "-it", self.box_name]
         if isinstance(cmd, str):
             docker_args.extend(cmd.split())
         else:
@@ -93,6 +93,6 @@ class DistributionBase(unittest.TestCase):
 
     def distribution_config(self, config_file: PathName) -> configparser.ConfigParser:
         # instance of StaticConfiguration only required to set up the environment variables
-        conf = StaticConfiguration(Environ(), self._distribution, self._box_name)
+        conf = StaticConfiguration(Environ(), self.distribution, self.box_name)
         env_interpolation = EnvInterpolation(conf.env, [])
         return config_reader(config_file, env_interpolation)

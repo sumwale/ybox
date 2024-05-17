@@ -19,16 +19,16 @@ class TestCreateDestroy(DistributionBase):
         self.for_all_distros(self.create_no_shared)
 
     def create_no_shared(self) -> None:
-        print(f"Running create_no_shared for Linux distribution '{self._distribution}'")
+        print(f"Running create_no_shared for Linux distribution '{self.distribution}'")
         distro_config_file = f"{self._resources_dir}/distro_minimal.ini"
         box_config = f"{self._resources_dir}/basic_no_shared.ini"
-        os.environ["YBOX_TEST_HOME"] = self._box_home
+        os.environ["YBOX_TEST_HOME"] = self.box_home
         ybox_create(
-            ["-n", self._box_name, "-C", distro_config_file, "-q", self._distribution, box_config])
+            ["-n", self.box_name, "-C", distro_config_file, "-q", self.distribution, box_config])
         # basic checks for directories
-        self.assertTrue(os.access(self._box_home, os.W_OK))
+        self.assertTrue(os.access(self.box_home, os.W_OK))
         self.assertFalse(os.path.exists(
-            f"{self._home}/.local/share/ybox/SHARED_ROOTS/{self._distribution}"))
+            f"{self._home}/.local/share/ybox/SHARED_ROOTS/{self.distribution}"))
         # run a command on the container
         result = self.run_on_container("whoami")
         self._check_output(result, getpass.getuser())
@@ -42,12 +42,12 @@ class TestCreateDestroy(DistributionBase):
         # pipe output to remove colors
         result = self.run_on_container(["/bin/bash", "-c", "libtree /usr/bin/pwd | /bin/cat"])
         self._check_output(result, "/usr/bin/pwd")
-        ybox_destroy([self._box_name])
-        result = subprocess.run([self._docker_cmd, "ps", "-aqf", f"name={self._box_name}"],
+        ybox_destroy([self.box_name])
+        result = subprocess.run([self._docker_cmd, "ps", "-aqf", f"name={self.box_name}"],
                                 capture_output=True, check=False)
         self.assertEqual(0, result.returncode)
         self.assertFalse(result.stdout.decode("utf-8").strip())
-        result = subprocess.run([self._docker_cmd, "image", "rm", self._box_image],
+        result = subprocess.run([self._docker_cmd, "image", "rm", self.box_image],
                                 check=False)
         self.assertEqual(0, result.returncode)
 
