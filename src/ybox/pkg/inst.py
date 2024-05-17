@@ -411,8 +411,7 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
             if resp.strip().lower() != "y":
                 print_warn(f"Skipping local wrapper for {file}")
                 return False
-            else:
-                break
+            break
     return True
 
 

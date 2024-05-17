@@ -18,12 +18,29 @@ from ybox.util import EnvInterpolation, config_reader
 
 
 class _DistributionHelper:
+
     def __init__(self, distribution: str):
-        self.distribution = distribution
+        self._distribution = distribution
         uuid = uuid4()
-        self.box_name = f"ybox-test-{uuid}"
-        self.box_home = f"/tmp/ybox-test-home-{uuid}"
-        self.box_image = f"{Consts.image_prefix()}/{distribution}/{self.box_name}"
+        self._box_name = f"ybox-test-{uuid}"
+        self._box_home = f"/tmp/ybox-test-home-{uuid}"
+        self._box_image = f"{Consts.image_prefix()}/{distribution}/{self.box_name}"
+
+    @property
+    def distribution(self) -> str:
+        return self._distribution
+
+    @property
+    def box_name(self) -> str:
+        return self._box_name
+
+    @property
+    def box_home(self) -> str:
+        return self._box_home
+
+    @property
+    def box_image(self) -> str:
+        return self._box_image
 
 
 class DistributionBase(unittest.TestCase):
@@ -81,6 +98,7 @@ class DistributionBase(unittest.TestCase):
                 test_func()
             finally:
                 self.cleanup()
+                self._helper = None
 
     def run_on_container(self, cmd: Union[str, list[str]],
                          capture_output: bool = True) -> subprocess.CompletedProcess[bytes]:

@@ -2,16 +2,20 @@
 
 import argparse
 import os
+import subprocess
 import time
 import unittest
 from datetime import datetime, timedelta
-from subprocess import DEVNULL, run as proc_run
 from typing import Tuple
 from uuid import uuid4
 
 from ybox.cmd import YboxLabel, get_docker_command, verify_ybox_state
 
 _TEST_IMAGE = "busybox"
+
+
+def proc_run(cmd: list[str], capture_output=False, **kwargs) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(cmd, capture_output=capture_output, check=False, **kwargs)
 
 
 class TestCmd(unittest.TestCase):
@@ -97,7 +101,7 @@ class TestCmd(unittest.TestCase):
                               expected_states=["running"])
         finally:
             proc_run([docker_cmd, "container", "stop", cnt_name])
-            proc_run([docker_cmd, "container", "rm", cnt_name], stderr=DEVNULL)
+            proc_run([docker_cmd, "container", "rm", cnt_name], stderr=subprocess.DEVNULL)
 
     def test_run_command(self) -> None:
         """check various cases for `run_command` function"""
