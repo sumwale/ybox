@@ -53,6 +53,8 @@ class Environ:
         :return: the path of the configuration file as `Path` or resource file from
                  importlib (`Traversable`)
         """
+        if os.path.isabs(conf_path):
+            return Path(conf_path)
         # order is first search in user's config directory, and then the system config directory
         for config_dir in self._configuration_dirs:
             path = config_dir.joinpath(conf_path)

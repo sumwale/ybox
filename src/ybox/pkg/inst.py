@@ -411,6 +411,8 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
             if resp.strip().lower() != "y":
                 print_warn(f"Skipping local wrapper for {file}")
                 return False
+            else:
+                break
     return True
 
 
@@ -429,8 +431,10 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     """
     wrapper_exec = _get_wrapper_executable(filename, conf)
     print_warn(f"Linking container executable {file} to {wrapper_exec}")
-    exec_content = ("#!/bin/sh\n", f'exec {docker_cmd} exec -it {conf.box_name} "{file}" '
-                                   f'{app_flags.get(filename, "")} "$@"')
+    # ensure to change working directory to same on as on host if possible using `run-in-dir`
+    exec_content = ("#!/bin/sh\n",
+                    f'exec {docker_cmd} exec -it {conf.box_name} /usr/local/bin/run-in-dir '
+                    f'"`pwd`" "{file}" {app_flags.get(filename, "")} "$@"')
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)

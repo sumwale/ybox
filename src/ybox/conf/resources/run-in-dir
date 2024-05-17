@@ -1,0 +1,10 @@
+#!/bin/sh -e
+
+dir="$1"
+shift
+
+if [ -d "$dir" ]; then
+  cd "$dir"
+fi
+
+exec "$@"

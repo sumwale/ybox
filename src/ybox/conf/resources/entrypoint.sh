@@ -156,6 +156,9 @@ if [ -n "$(ls $run_dir 2>/dev/null)" ]; then
   sudo chown $uid:$gid $run_dir/* 2>/dev/null || true
 fi
 
+# run actions requiring root access
+sudo bash "$SCRIPT_DIR/entrypoint-root.sh"
+
 # run the distribution specific initialization scripts
 if [ -r "$SCRIPT_DIR/init.sh" ]; then
   echo_color "$fg_orange" "Running distribution's system initialization script" >> $status_file

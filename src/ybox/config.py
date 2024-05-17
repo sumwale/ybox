@@ -139,11 +139,6 @@ class Consts:
         return "ybox-shared-local"
 
     @staticmethod
-    def entrypoint_common() -> str:
-        """common methods and actions for all the entrypoint scripts"""
-        return "entrypoint-common.sh"
-
-    @staticmethod
     def entrypoint_base() -> str:
         """entrypoint script name for the base container (which is booted to configure
            the final container)"""
@@ -158,6 +153,12 @@ class Consts:
     def entrypoint() -> str:
         """entrypoint script name for the final ybox container"""
         return "entrypoint.sh"
+
+    @staticmethod
+    def resource_scripts() -> list[str]:
+        """all the scripts in the resources directory"""
+        return [Consts.entrypoint_base(), Consts.entrypoint_cp(), Consts.entrypoint(),
+                "entrypoint-common.sh", "entrypoint-root.sh", "prime-run", "run-in-dir"]
 
     @staticmethod
     def shared_root_mount_dir() -> str:

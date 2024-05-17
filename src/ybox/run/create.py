@@ -708,8 +708,7 @@ def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
     os.makedirs(conf.scripts_dir, exist_ok=True)
     env = conf.env
     # copy the common scripts
-    for script in [Consts.entrypoint_common(), Consts.entrypoint_base(),
-                   Consts.entrypoint_cp(), Consts.entrypoint(), "prime-run"]:
+    for script in Consts.resource_scripts():
         path = env.search_config_path(f"resources/{script}")
         copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
     # also copy distribution specific scripts
