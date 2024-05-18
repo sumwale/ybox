@@ -5,14 +5,20 @@
 # Maximum number of arguments for function / method
 max-args = 15 # EDIT: increased from 9 to 15
 # Maximum number of locals for function / method body
-max-locals = 30 # EDIT: increased from 19 to 30
+max-locals = 40 # EDIT: increased from 19 to 40
 # Maximum number of return / yield for function / method body
 max-returns=11
 # Maximum number of branch for function / method body
 max-branches = 30 # EDIT: increased from 20 to 30
 # Maximum number of statements in function / method body
-max-statements = 50
+max-statements = 70 # EDIT: increased from 50 to 70
 # Maximum number of attributes for a class (see R0902).
 max-attributes=20 # EDIT: increased from 11 to 20
 # Maximum number of statements in a try-block
-max-try-statements = 7
+# max-try-statements = 7
+
+
+[MISCELLANEOUS]
+
+# List of note tags to take in consideration, separated by a comma.
+notes=FIXME,XXX

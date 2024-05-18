@@ -38,15 +38,15 @@ class EnvInterpolation(BasicInterpolation):
     ${NOW:...} substitution is still performed.
     """
 
-    __NOW_RE = re.compile(r"\${NOW:([^}]*)}")
+    _NOW_RE = re.compile(r"\${NOW:([^}]*)}")
 
     def __init__(self, env: Environ, skip_expansion: list[str]):
         super().__init__()
-        self.__skip_expansion = skip_expansion
+        self._skip_expansion = skip_expansion
         # for the NOW substitution
-        self.__now = env.now
+        self._now = env.now
 
-    # override before_read rather than before_get because we need expanded vars when writing
+    # override before_read rather than before_get because expanded vars are needed when writing
     # into the state.db database too
     def before_read(self, parser, section: str, option: str, value: str):
         """Override before_read to substitute environment variables and ${NOW...} pattern.
@@ -54,10 +54,10 @@ class EnvInterpolation(BasicInterpolation):
            also required when writing the configuration into the state.db database."""
         if not value:
             return value
-        if section not in self.__skip_expansion:
+        if section not in self._skip_expansion:
             value = os.path.expandvars(value)
         # replace ${NOW:...} pattern with appropriately formatted datetime string
-        return re.sub(self.__NOW_RE, lambda mt: self.__now.strftime(mt.group(1)), value)
+        return self._NOW_RE.sub(lambda mt: self._now.strftime(mt.group(1)), value)
 
 
 # read the ini file, recursing into the includes to build the final dictionary
@@ -67,7 +67,8 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
     Read the container configuration INI file, recursing into the includes to build the final
     dictionary having the sections with corresponding key-value pairs.
 
-    :param conf_file: the configuration file to be read
+    :param conf_file: the configuration file to be read as a `Path` or resource file from
+                      importlib (`Traversable`)
     :param interpolation: if provided then used for value interpolation
     :param top_level: the top-level configuration file; don't pass this when calling
                       externally (or set it the same as `conf_file` argument)

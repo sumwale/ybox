@@ -1,6 +1,6 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
-SCRIPT_DIR=$(cd "$(dirname "$0")"; pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
@@ -15,12 +15,9 @@ if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
   echo -e '[multilib]\nInclude = /etc/pacman.d/mirrorlist' >> /etc/pacman.conf
 fi
 
-echo_color "$fg_cyan" "Copying prime-run and configuring locale" >> $status_file
-cp -a "$SCRIPT_DIR/prime-run" /usr/local/bin/prime-run
-chmod 0755 /usr/local/bin/prime-run
-
 # generate the configured locale and assume it is UTF-8
-if [ -n "$LANG" ] && ! grep -q "^$LANG UTF-8" /etc/locale.gen; then
+if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/locale.gen; then
+  echo_color "$fg_cyan" "Configuring locale" >> $status_file
   echo "$LANG UTF-8" >> /etc/locale.gen
   # always add en_US.UTF-8 regardless since some apps seem to depend on it
   if [ "$LANG" != "en_US.UTF-8" ]; then
@@ -43,8 +40,8 @@ if [ -n "$LANG" ] && ! grep -q "^$LANG UTF-8" /etc/locale.gen; then
   fi
 fi
 
-# set fastest mirror and update the installation
-if ! pacman -Q reflector 2>/dev/null >/dev/null; then
+# setup fastest mirrors and update the installation
+if [ -n "$CONFIGURE_FASTEST_MIRRORS" ] && ! pacman -Qq reflector 2>/dev/null >/dev/null; then
   echo_color "$fg_cyan" "Installing reflector and searching for the fastest mirrors" >> $status_file
   $PAC -Syy
   $PAC -S --needed reflector
@@ -52,6 +49,8 @@ if ! pacman -Q reflector 2>/dev/null >/dev/null; then
   sed -i 's/^--sort.*/--sort rate/' /etc/xdg/reflector/reflector.conf
   reflector @/etc/xdg/reflector/reflector.conf 2>/dev/null
   $PAC -Syu
+else
+  $PAC -Sy
 fi
 
 # for some reason TERMINFO_DIRS does not work for root user, so explicitly installing terminfo
@@ -59,13 +58,8 @@ fi
 
 # install packages most users will need for working comfortably
 echo_color "$fg_cyan" "Installing base set of packages" >> $status_file
-$PAC -S --needed lesspipe bash-completion bc base-devel man-db man-pages \
-  pulseaudio-alsa neovim eza ncdu fd bat expac libva-utils mesa-utils vulkan-tools \
-  cantarell-fonts ttf-fira-code noto-fonts kitty-terminfo rxvt-unicode-terminfo \
-  wget aria2 btop realtime-privileges shared-mime-info tree starship \
-  python-ijson python-tabulate
-$PAC -S --needed --asdeps git ed unzip fastjar python-pynvim xsel intel-media-driver \
-  libva-mesa-driver vulkan-intel vulkan-mesa-layers python-pip
+$PAC -S --needed $REQUIRED_PKGS $RECOMMENDED_PKGS $SUGGESTED_PKGS
+$PAC -S --needed --asdeps $REQUIRED_DEPS $RECOMMENDED_DEPS $SUGGESTED_DEPS
 
 echo_color "$fg_cyan" "Configuring makepkg and system-wide bashrc" >> $status_file
 # use reasonable MAKEFLAGS and zstd compression level for AUR packages
@@ -75,13 +69,15 @@ sed -i 's/^COMPRESSZST=.*/COMPRESSZST=(zstd -c -T0 -8 -)/' /etc/makepkg.conf
 sed -i 's/^OPTIONS\(.*\b[^!]\)debug/OPTIONS\1!debug/' /etc/makepkg.conf
 
 # common environment variables
-if ! grep -q '^export LESSOPEN=' /etc/bash.bashrc; then
+if ! grep -q '^export EDITOR=' /etc/bash.bashrc && $PAC -Qq neovim 2>/dev/null >/dev/null; then
   echo -e '\nexport EDITOR=nvim\nexport VISUAL=nvim' >> /etc/bash.bashrc
-  echo -e 'export PAGER="less -RL"\nexport LESSOPEN="|/usr/bin/lesspipe.sh %s"' >> /etc/bash.bashrc
-  if [ -n "$LANG" ]; then
-    grep -v '^#' /etc/locale.conf | \
-      while read line; do
-        echo "export $line" >> /etc/bash.bashrc
-      done
+fi
+if ! grep -q '^export LESSOPEN=' /etc/bash.bashrc && $PAC -Qq lesspipe 2>/dev/null >/dev/null; then
+  echo -e '\nexport PAGER="less -RL"\nexport LESSOPEN="|/usr/bin/lesspipe.sh %s"' >> /etc/bash.bashrc
+fi
+if ! grep -q '^export LANG=' /etc/bash.bashrc && [ -n "$LANG" -a "$LANG" != "C.UTF-8" ]; then
+  echo -e "\nexport LANG=$LANG" >> /etc/bash.bashrc
+  if [ -n "$LANGUAGE" ]; then
+    echo "export LANGUAGE=\"$LANGUAGE\"" >> /etc/bash.bashrc
   fi
 fi

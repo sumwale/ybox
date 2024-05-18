@@ -123,8 +123,8 @@ The `$HOME` directory of the container can be found in `~/.local/share/ybox/<con
 e.g. `~/.local/share/ybox/ybox-arch_apps/home` for the above example.
 
 When shared root directory is enabled (which is the default in the shipped profiles), then
-it uses the common distribution path in `~/.local/share/ybox/ROOTS/<distribution>`
-i.e. `~/.local/share/ybox/ROOTS/arch` for the Arch Linux guests.
+it uses the common distribution path in `~/.local/share/ybox/SHARED_ROOTS/<distribution>`
+by default i.e. `~/.local/share/ybox/SHARED_ROOTS/arch` for the Arch Linux guests.
 
 For more advanced usage, you can copy from the available profiles in `src/ybox/conf/profiles`
 into `~/.config/ybox/profiles`, then edit as required. The `basic.ini` profile lists
@@ -293,3 +293,114 @@ containers as below:
 ```sh
 ybox-restart ybox-arch_apps
 ```
+
+
+## Development
+
+Virtual environment setups have been provided for consistent development, test and build
+with multiple python versions. The minimum python version required is 3.9 and tests are
+run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12 and others
+in future).
+
+As of now pyenv with venv is the actively maintained one which can be used for development
+with IDEA/PyCharm, running tests against all supported python versions using `tox` etc.
+While conda environment setup scripts are still provided, they are no longer maintained.
+
+### pyenv with venv
+
+Scripts to set up a pyenv with venv environment for a consistent development and build have
+been provided in the `pyenv` directory which creates a `venv` environment in `.venv` directory
+of the checkout.
+
+If you do not have `pyenv` installed and configured, then you can install it using:
+
+```sh
+pyenv/install.sh
+```
+
+**NOTE:** this script will delete any existing `pyenv` artifacts in `$HOME/.pyenv`, so use
+it only if you have never installed `pyenv` before.
+
+The script will try to handle installation of required packages on most modern Linux
+distributions (Ubuntu/Debian, Fedora, Arch Linux, OpenSUSE, macOS with homebrew), but if
+yours is a different one, then check [pyenv wiki](https://github.com/pyenv/pyenv/wiki) or
+your distribution docs/forums.
+
+Next you can install the required python versions and venv environment:
+
+```sh
+pyenv/setup-venv.sh
+```
+
+Finally, you can activate it in bash/zsh:
+
+```sh
+source pyenv/activate.sh
+source .venv/bin/activate
+```
+
+Or in fish shell:
+
+```
+source pyenv/activate.fish
+source .venv/bin/activate.fish
+```
+
+**NOTE:** while the pyenv installation and venv set up needs to be done only once, the last
+step of `source` of the two files will need to be done for every shell. Hence, you can consider
+placing those in your bashrc/zshrc or fish conf.d so that they get applied in every interactive
+shell automatically.
+
+You can open the checkout directory as an existing project in Intellij IDEA and then
+add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
+Choose an existing environment in Virtualenv environment and select the
+`<checkout dir>/.venv/bin/python3` for the interpreter.
+
+
+### Conda
+
+**NOTE:** this set up is no longer actively maintained.
+
+Scripts to set up a conda environment appropriate for the project have been provided
+in the 'conda' directory which creates an environment in 'conda/.conda' directory
+of the checkout. To set it up run:
+
+```sh
+conda/setup-conda.sh
+```
+
+Then you can activate it in bash:
+
+```sh
+source conda/activate-conda.bash
+```
+
+Or in fish shell:
+
+```
+source conda/activate-conda.fish
+```
+
+Script for zsh has also been provided:
+
+```
+source conda/activate-conda.zsh
+```
+
+You can open the checkout directory as an existing project in Intellij IDEA and then
+add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
+Choose an existing environment in Conda environment where the path to conda should already
+be selected correctly (`<checkout dir>/conda/.conda/bin/conda`) while for interpreter
+choose `<checkout dir>/conda/.conda/envs/ybox/bin/python3`.
+
+### Running the test suite
+
+Once pyenv+venv set up is working, you can run the entire test suite and other checks
+using `tox` in the checkout directory, or `tox -p` for parallel run. It will run with
+all supported python versions (i.e. from 3.9 onwards).
+
+There is also a simple script `run-tests.sh` in the top-level directory which can be used
+to run just the tests with the current python version. This will skip other stuff like
+`mypy`, for example, which is invoked by `tox`.
+
+See `tox` and `unittest` documentation for more details like running individual tests.

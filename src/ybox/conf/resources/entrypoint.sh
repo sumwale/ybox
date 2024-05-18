@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-SCRIPT=$(basename "$0")
-SCRIPT_DIR=$(cd "$(dirname "$0")"; pwd)
+SCRIPT=$(basename "${BASH_SOURCE[0]}")
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
@@ -156,10 +156,13 @@ if [ -n "$(ls $run_dir 2>/dev/null)" ]; then
   sudo chown $uid:$gid $run_dir/* 2>/dev/null || true
 fi
 
+# run actions requiring root access
+sudo bash "$SCRIPT_DIR/entrypoint-root.sh"
+
 # run the distribution specific initialization scripts
 if [ -r "$SCRIPT_DIR/init.sh" ]; then
   echo_color "$fg_orange" "Running distribution's system initialization script" >> $status_file
-  sudo bash "$SCRIPT_DIR/init.sh"
+  sudo -E bash "$SCRIPT_DIR/init.sh"
   if [ -r "$SCRIPT_DIR/init-user.sh" ]; then
     echo_color "$fg_orange" "Running distribution's user initialization script" >> $status_file
     bash "$SCRIPT_DIR/init-user.sh"
@@ -188,7 +191,22 @@ echo started >> $status_file
 tail -s10 -f /dev/null &
 childPID=$!
 
-# truncate status file and cleanly kill the infinite wait on hup/int/quit/pipe/term signals
-trap "echo -n > $status_file; kill -TERM $childPID" 1 2 3 13 15
+function cleanup() {
+  # clear status file first just in case other operations do not finish before SIGKILL comes
+  echo -n > $status_file
+  # first send SIGTERM to all "docker exec" processes that will have parent PID as 0
+  exec_pids=$(ps -e -o ppid=,pid= | awk '{ if ($1 == 0 && $2 != 1) print $2 }')
+  for pid in $exec_pids; do
+    echo "Sending SIGTERM to $pid"
+    kill -TERM $pid
+  done
+  # sleep a bit for $exec_pids to finish
+  [ -n "$exec_pids" ] && sleep 3
+  # lastly kill the infinite tail process
+  kill -TERM $childPID
+}
+
+# truncate status file and cleanly kill the processes on hup/int/quit/pipe/term signals
+trap "cleanup" 1 2 3 13 15
 
 wait $childPID

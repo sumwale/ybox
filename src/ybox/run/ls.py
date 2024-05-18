@@ -15,9 +15,9 @@ def main_argv(argv: list[str]) -> None:
     docker_args = [docker_cmd, "container", "ls"]
     if args.all:
         docker_args.append("--all")
-        docker_args.append(f"--filter=label={YboxLabel.CONTAINER_TYPE}")
+        docker_args.append(f"--filter=label={YboxLabel.CONTAINER_TYPE.value}")
     else:
-        docker_args.append(f"--filter=label={YboxLabel.CONTAINER_PRIMARY}")
+        docker_args.append(f"--filter=label={YboxLabel.CONTAINER_PRIMARY.value}")
     if args.filter:
         for flt in args.filter:
             docker_args.append(f"--filter={flt}")

@@ -24,13 +24,17 @@ def main() -> None:
 
 def main_argv(argv: list[str]) -> None:
     args = parse_args(argv)
+    # --quiet can be specified at most two times
+    if args.quiet > 2:
+        print_error("Argument -q/--quiet can be specified at most two times")
+        sys.exit(1)
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.ybox
 
     if not container_name:
         # check active containers
         containers = str(run_command([docker_cmd, "container", "ls", "--format={{ .Names }}",
-                                      f"--filter=label={YboxLabel.CONTAINER_PRIMARY}"],
+                                      f"--filter=label={YboxLabel.CONTAINER_PRIMARY.value}"],
                                      capture_output=True, error_msg="container ls")).splitlines()
         # use the active container if there is only one of them
         if len(containers) == 1:
@@ -40,7 +44,7 @@ def main_argv(argv: list[str]) -> None:
             sys.exit(1)
         elif args.quiet:
             print_error(
-                f"Expected one active ybox container but found {', '.join(containers)}")
+                f"Expected one active ybox container but found: {', '.join(containers)}")
             sys.exit(1)
         else:
             print_info("Please select the container to use:", file=sys.stderr)
@@ -54,12 +58,14 @@ def main_argv(argv: list[str]) -> None:
     env = Environ()
     with YboxStateManagement(env) as state:
         if (runtime_conf := state.get_container_configuration(container_name)) is None:
-            print_error(f"No state for ybox container '{container_name}' found!")
+            print_error(f"No entry for ybox container '{container_name}' found!")
             sys.exit(1)
         conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
+        distribution_config_file = args.distribution_config if args.distribution_config \
+            else conf.distribution_config(conf.distribution)
         env_interpolation = EnvInterpolation(env, [])
-        distro_config = config_reader(
-            env.search_config_path(f"distros/{conf.distribution}/distro.ini"), env_interpolation)
+        distro_config = config_reader(env.search_config_path(distribution_config_file),
+                                      env_interpolation)
         pkgmgr = distro_config["pkgmgr"]
         if (code := args.func(args, pkgmgr, docker_cmd, conf, runtime_conf, state)) != 0:
             sys.exit(code)
@@ -97,10 +103,16 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-z", "--ybox", type=str,
                            help="the ybox container to use for package operations else the user "
                                 "is prompted to select a container from among the active ones")
-    subparser.add_argument("-q", "--quiet", action="store_true",
-                           help="proceed without asking any questions; the container selection "
-                                "is also skipped and it is assumed that there is only one "
-                                "active container which is selected else the operation fails")
+    subparser.add_argument("-C", "--distribution-config", type=str,
+                           help="path to distribution configuration file to use instead of the "
+                                "`distro.ini` from user/system configuration paths")
+    subparser.add_argument("-q", "--quiet", action="count", default=0,
+                           help="proceed without asking any questions using default where "
+                                "possible; this should usually be used with explicit -z/--ybox "
+                                "argument for the container else it is assumed that there is only "
+                                "one active container which is selected else the operation fails; "
+                                "specifying this flag twice will make it real quiet (e.g. install "
+                                "will silently override system executables with local ones)")
 
 
 def add_install(subparser: argparse.ArgumentParser) -> None:
@@ -109,6 +121,9 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-w", "--with-opt-deps", type=str,
                            help="provide comma-separated optional dependencies to install "
                                 "(in which case user will not be prompted to select them)")
+    subparser.add_argument("-f", "--app-flags", type=str,
+                           help="comma separated key-value pairs for the flags to be used when "
+                                "invoking the container executables (e.g. 'chromium=...,...'")
     subparser.add_argument("-l", "--add-dep-wrappers", action="store_true",
                            help="create local wrapper desktop and executables for the newly "
                                 "installed package dependencies too (both required and optional)")
@@ -168,7 +183,7 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
 def add_search(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-w", "--word", action="store_true",
                            help="match given search terms as full words")
-    subparser.add_argument("-f", "--full", action="store_true",
+    subparser.add_argument("-a", "--all", action="store_true",
                            help="search in package descriptions in addition to the package names")
     subparser.add_argument("-o", "--official", action="store_true",
                            help="search only in the official repositories and not the extra ones "

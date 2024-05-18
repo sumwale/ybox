@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-SCRIPT=$(basename "$0")
-SCRIPT_DIR=$(cd "$(dirname "$0")"; pwd)
+SCRIPT=$(basename "${BASH_SOURCE[0]}")
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
@@ -25,5 +25,6 @@ shared_bind="$2"
 echo_color "$fg_purple" "Copying data from container to shared root mounted on '$shared_bind'"
 IFS="," read -ra shared_dirs_arr <<< "$shared_dirs"
 for dir in "${shared_dirs_arr[@]}"; do
+  echo_color "$fg_orange" "Copying $dir to $shared_bind$dir"
   cp -a "$dir" "$shared_bind$dir"
 done

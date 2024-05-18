@@ -12,6 +12,12 @@ from ybox.state import RuntimeConfiguration, YboxStateManagement
 from ybox.util import get_other_shared_containers
 
 
+# TODO: updating packages can lead to system libraries among others getting updated. At the very
+#       least, the container needs to be restarted thereafter. All other containers on the same
+#       shared root should also be restarted which can be an issue for the user. This is also
+#       a problem when creating a new container on the same shared root since that too does update.
+#       The biggest problem can be that even a new package install can end up updating shared libs.
+
 def update_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
                    conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
                    state: YboxStateManagement) -> int:

@@ -3,16 +3,18 @@ Utility `namedtuple`s and methods to print in color on terminal/console.
 """
 
 from collections import namedtuple
-from typing import Annotated, Optional
+from typing import Optional
 
 # define color names for printing in terminal
 TermColors = namedtuple("TermColors",
                         "black red green orange blue purple cyan lightgray reset bold disable")
 
-fgcolor: Annotated[TermColors, "foreground colors in terminal"] = TermColors(
+# foreground colors in the terminal
+fgcolor = TermColors(
     "\033[30m", "\033[31m", "\033[32m", "\033[33m", "\033[34m", "\033[35m", "\033[36m",
     "\033[37m", "\033[00m", "\033[01m", "\033[02m")
-bgcolor: Annotated[TermColors, "background colors in terminal"] = TermColors(
+# background colors in the terminal
+bgcolor = TermColors(
     "\033[40m", "\033[41m", "\033[42m", "\033[43m", "\033[44m", "\033[45m", "\033[46m",
     "\033[47m", "\033[00m", "\033[01m", "\033[02m")
 
@@ -42,7 +44,7 @@ def print_color(msg: str, fg: Optional[str] = None,
     else:
         full_msg = msg
     # force flush the output if it doesn't end in a newline
-    print(full_msg, end=end, file=file, flush=(end != "\n"))
+    print(full_msg, end=end, file=file, flush=end != "\n")
 
 
 def print_error(msg: str, end: str = "\n", file=None) -> None:

@@ -34,7 +34,7 @@ class PkgMgr(str, Enum):
     LIST_ALL_LONG = "list_all_long"
     LIST_FILES = "list_files"
     SEARCH = "search"
-    SEARCH_FULL = "search_full"
+    SEARCH_ALL = "search_all"
     SEARCH_QUIET_FLAG = "search_quiet_flag"
     SEARCH_OFFICIAL_FLAG = "search_official_flag"
     SEARCH_WORD_START_FLAG = "search_word_start_flag"
@@ -91,9 +91,9 @@ def verify_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str]
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
     check_result = subprocess.run(
-        [docker_cmd, "inspect", "--type=container",
-         '--format={{index .Config.Labels "' + YboxLabel.CONTAINER_TYPE + '"}} {{.State.Status}}',
-         box_name], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+        [docker_cmd, "inspect", "--type=container", '--format={{index .Config.Labels "' +
+         YboxLabel.CONTAINER_TYPE.value + '"}} {{.State.Status}}', box_name],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
     if check_result.returncode != 0:
         if exit_on_error:
             print_error(f"No{error_msg}ybox container named '{box_name}' found")
@@ -101,7 +101,7 @@ def verify_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str]
         else:
             return False
     else:
-        result = check_result.stdout.decode("utf-8").rstrip()
+        result = check_result.stdout.decode("utf-8").strip()
         primary_ybox = "primary "
         if result.startswith(primary_ybox):
             state = result[len(primary_ybox):]
@@ -112,6 +112,8 @@ def verify_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str]
                     return exists
             else:
                 return True
+    if exit_on_error:
+        sys.exit(1)
     return False
 
 
@@ -137,7 +139,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
     result = subprocess.run(args, capture_output=capture_output, check=False)
     if result.returncode != 0:
         if capture_output:
-            print_subprocess_output(result)
+            _print_subprocess_output(result)
         if not error_msg:
             error_msg = f"'{' '.join(cmd)}'"
         if error_msg != "SKIP":
@@ -151,8 +153,10 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
     return result.stdout.decode("utf-8") if capture_output else result.returncode
 
 
-def print_subprocess_output(result: subprocess.CompletedProcess) -> None:
+def _print_subprocess_output(result: subprocess.CompletedProcess) -> None:
     """print completed subprocess output in color (orange for standard output and purple
        for standard error)"""
-    print_notice(result.stdout.decode("utf-8"))
-    print_warn(result.stderr.decode("utf-8"))
+    if result.stdout:
+        print_notice(result.stdout.decode("utf-8"))
+    if result.stderr:
+        print_warn(result.stderr.decode("utf-8"))
