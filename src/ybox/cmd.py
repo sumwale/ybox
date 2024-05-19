@@ -141,7 +141,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
         if capture_output:
             _print_subprocess_output(result)
         if not error_msg:
-            error_msg = f"'{' '.join(cmd)}'"
+            error_msg = f"'{' '.join(args)}'"
         if error_msg != "SKIP":
             print_error(f"FAILURE in {error_msg} -- see the output above for details")
         if exit_on_error:

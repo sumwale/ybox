@@ -1,25 +1,28 @@
 """Tests for `ybox/cmd.py`"""
 
 import argparse
+import io
 import os
 import subprocess
 import time
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from typing import Tuple
 from uuid import uuid4
 
-from ybox.cmd import YboxLabel, get_docker_command, verify_ybox_state
-
-_TEST_IMAGE = "busybox"
+from ybox.cmd import YboxLabel, get_docker_command, run_command, verify_ybox_state
 
 
 def proc_run(cmd: list[str], capture_output=False, **kwargs) -> subprocess.CompletedProcess[bytes]:
+    """shortcut to invoke `subprocess.run`"""
     return subprocess.run(cmd, capture_output=capture_output, check=False, **kwargs)
 
 
 class TestCmd(unittest.TestCase):
     """unit tests for the `ybox.cmd` module"""
+
+    _TEST_IMAGE = "busybox"
 
     @staticmethod
     def _get_docker_cmd() -> Tuple[str, argparse.ArgumentParser]:
@@ -64,7 +67,7 @@ class TestCmd(unittest.TestCase):
         sh_cmd = 'tail -s10 -f /dev/null & childPID=$!; trap "kill -TERM $childPID" 1 2 3 15; wait'
         try:
             # check failure to match ybox without label
-            proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, _TEST_IMAGE,
+            proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, self._TEST_IMAGE,
                       "/bin/sh", "-c", sh_cmd])
             self.assertFalse(verify_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
                                                exit_on_error=False))
@@ -73,14 +76,15 @@ class TestCmd(unittest.TestCase):
             self._stop_container(docker_cmd, cnt_name, check_removed=True)
             # check success with primary label
             proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, "--label",
-                      YboxLabel.CONTAINER_PRIMARY.value, _TEST_IMAGE, "/bin/sh", "-c",
+                      YboxLabel.CONTAINER_PRIMARY.value, self._TEST_IMAGE, "/bin/sh", "-c",
                       sh_cmd])
             self.assertTrue(verify_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
                                               exit_on_error=False))
             self._stop_container(docker_cmd, cnt_name, check_removed=True)
             # check success with primary label and stopped state
             proc_run([docker_cmd, "run", "-itd", "--name", cnt_name, "--label",
-                      YboxLabel.CONTAINER_PRIMARY.value, _TEST_IMAGE, "/bin/sh", "-c", sh_cmd])
+                      YboxLabel.CONTAINER_PRIMARY.value, self._TEST_IMAGE, "/bin/sh", "-c",
+                      sh_cmd])
             self._stop_container(docker_cmd, cnt_name)
             self.assertFalse(verify_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
                                                exit_on_error=False))
@@ -94,7 +98,7 @@ class TestCmd(unittest.TestCase):
             proc_run([docker_cmd, "container", "rm", cnt_name])
             # check failure with non-primary label
             proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, "--label",
-                      YboxLabel.CONTAINER_BASE.value, _TEST_IMAGE, "/bin/sh", "-c", sh_cmd])
+                      YboxLabel.CONTAINER_BASE.value, self._TEST_IMAGE, "/bin/sh", "-c", sh_cmd])
             self.assertFalse(verify_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
                                                exit_on_error=False))
             self.assertRaises(SystemExit, verify_ybox_state, docker_cmd, cnt_name,
@@ -105,7 +109,55 @@ class TestCmd(unittest.TestCase):
 
     def test_run_command(self) -> None:
         """check various cases for `run_command` function"""
-        pass  # TODO: SW:
+        # check string and list arguments for run_command
+        expected = [f for f in os.listdir("/") if not f.startswith('.')]
+        expected.sort()
+        output = run_command("/bin/ls /", capture_output=True)
+        self.assertTrue(isinstance(output, str))
+        self.assertEqual(expected, str(output).splitlines())
+        output = run_command(["/bin/ls", "/"], capture_output=True)
+        self.assertTrue(isinstance(output, str))
+        self.assertEqual(expected, str(output).splitlines())
+
+        # check capture_output=True and default/False
+        pwd = os.getcwd()
+        self.assertEqual([pwd], str(run_command("/bin/pwd", capture_output=True)).splitlines())
+        self.assertEqual(0, run_command(["/bin/sh", "-c", f"[ \"`pwd`\" = \"{pwd}\" ]"]))
+        self.assertEqual(0, run_command(["/bin/sh", "-c", f"[ \"`pwd`\" = \"{pwd}\" ]"],
+                                        capture_output=False))
+        self.assertEqual("", str(run_command(["/bin/sh", "-c", f"[ \"`pwd`\" = \"{pwd}\" ]"],
+                                             capture_output=True)))
+        str_io = io.StringIO()
+        with redirect_stdout(str_io):
+            self.assertRaises(SystemExit, run_command, ["/bin/sh", "-c", "[ \"`pwd`\" = \"\" ]"])
+        self.assertTrue("FAILURE in '/bin/sh -c" in str_io.getvalue())
+
+        # check exit_on_error=False
+        str_io.truncate(0)
+        with redirect_stdout(str_io):
+            self.assertNotEqual(0, run_command(["/bin/sh", "-c", "[ \"`pwd`\" = \"\" ]"],
+                                               exit_on_error=False))
+        # check default error_msg
+        self.assertTrue("FAILURE in '/bin/sh -c" in str_io.getvalue())
+
+        # check with specified error_msg
+        str_io.truncate(0)
+        non_existent = f"/{uuid4()}"
+        with redirect_stdout(str_io):
+            self.assertRaises(SystemExit, run_command, f"/bin/ls {non_existent}",
+                              capture_output=True, error_msg="running /bin/ls")
+        out = str_io.getvalue()
+        self.assertTrue("No such file or directory" in out)
+        self.assertTrue("FAILURE in running /bin/ls" in out)
+
+        # check error_msg=SKIP
+        str_io.truncate(0)
+        with redirect_stdout(str_io):
+            self.assertRaises(SystemExit, run_command, f"/bin/ls {non_existent}",
+                              capture_output=True, error_msg="SKIP")
+        out = str_io.getvalue()
+        self.assertTrue("No such file or directory" in out)
+        self.assertFalse("FAILURE in" in out)
 
 
 if __name__ == '__main__':
