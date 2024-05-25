@@ -173,6 +173,12 @@ def main_argv(argv: list[str]) -> None:
                f"'ybox-logs -f {box_name}' for detailed progress)")
     sys.stdout.flush()
     wait_for_container(docker_cmd, conf)
+    # truncate the app.list and config.list files so that those actions are skipped if the
+    # container is restarted later
+    if os.access(conf.app_list, os.W_OK):
+        truncate_file(conf.app_list)
+    if os.access(conf.config_list, os.W_OK):
+        truncate_file(conf.config_list)
 
     # finally add the state and register the installed packages that were reassigned to this
     # container (because the previously destroyed one has the same configuration and shared root)

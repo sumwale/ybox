@@ -38,10 +38,10 @@ class StaticConfiguration:
         self._target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
         self._scripts_dir = f"{container_dir}/ybox-scripts"
         self._target_scripts_dir = "/usr/local/ybox"
-        os.environ["YBOX_TARGET_SCRIPTS_DIR"] = self.target_scripts_dir
+        os.environ["YBOX_TARGET_SCRIPTS_DIR"] = self._target_scripts_dir
         self._status_file = f"{container_dir}/status"
-        self._config_list = f"{self.scripts_dir}/config.list"
-        self._app_list = f"{self.scripts_dir}/app.list"
+        self._config_list = f"{self._scripts_dir}/config.list"
+        self._app_list = f"{self._scripts_dir}/app.list"
 
     @property
     def env(self) -> Environ:
