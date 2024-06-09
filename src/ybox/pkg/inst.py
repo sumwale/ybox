@@ -111,7 +111,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     code = -1
     if check_cmd and (code := check_installed_package(docker_cmd, check_cmd, package,
                                                       conf.box_name)) == 0 and not quiet:
-        print_notice(f"'{package}' is already installed in '{conf.box_name}")
+        print_notice(f"'{package}' is already installed in '{conf.box_name}'")
     if code != 0:
         if not quiet:
             print_info(f"Installing '{package}' in '{conf.box_name}'")
