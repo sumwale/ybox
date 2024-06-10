@@ -79,8 +79,9 @@ As of now the following is required:
   * for docker follow the instructions in the official [docs](https://docs.docker.com/engine/security/rootless/)
 - python version 3.9 or higher -- all fairly recent Linux distributions should satisfy this
   but still confirm with `python3 --version`
-- install [simple-term-menu](https://pypi.org/project/simple-term-menu/) either from your
-  distribution repository, if available, else: `pip install simple-term-menu` (obviously
+- install [simple-term-menu](https://pypi.org/project/simple-term-menu/) and
+  [packaging](https://pypi.org/project/packaging/) either from your distribution
+  repository, if available, else: `pip install simple-term-menu packaging` (obviously
       you will need `pip` itself to be installed which should be in your distribution
       repositories e.g. ubuntu/debian have it as `python3-pip`)
 - (optional) NVIDIA acceleration: if you intend to run games/video editors/... that need
@@ -155,29 +156,27 @@ Likewise, you can uninstall all the changes (including the optional packages cho
 ybox-pkg uninstall firefox
 ```
 
-List the installed packages:
+List the explicitly installed packages using `ybox-pkg`:
 
 ```sh
 ybox-pkg list
 ```
-This will list all the packages explicitly installed using `ybox-pkg`.
-
-```sh
-ybox-pkg list -s
-```
-This will show the dependent packages chosen in addition to the main packages.
+This will show the chosen dependent packages in addition to the explicitly installed ones.
 
 ```sh
 ybox-pkg list -a
 ```
-Will list all the distribution packages in the container including those not installed by
-`ybox-pkg` (either installed in the base image, or installed later using the distribution
-    package manager directly)
+This will list all the distribution packages in the container including those not installed
+by `ybox-pkg` (either installed in the base image, or installed later using the distribution
+    package manager directly) -- combine with `-a` to also list all dependent packages.
 
 ```sh
-ybox-pkg list -v
+ybox-pkg list -o
 ```
-Will show more details of the packages (combine with -a/-s as required)
+To show more details of the packages (combine with -a/-o as required):
+```sh
+ybox-pkg list -o
+```
 
 Search the repositories for packages with names matching search terms:
 
@@ -188,10 +187,10 @@ ybox-pkg search intellij
 Search the repositories for packages with names or descriptions matching search terms:
 
 ```sh
-ybox-pkg search intellij -f
+ybox-pkg search intellij -a
 ```
 
-You can also restrict the search to full word matches (can be combined with -f if required):
+You can also restrict the search to full word matches (can be combined with `-a`):
 
 ```sh
 ybox-pkg search intellij -w
@@ -244,8 +243,8 @@ The `ybox-cmd` runs `/bin/bash` in the container by default:
 ybox-cmd ybox-arch_apps
 ```
 
-You can run other commands instead of bash shell, but if those commands require options starting
-with a hyphen, then first end the options to `ybox-cmd` with a double hyphen:
+You can run other commands instead of bash shell, but if those commands require options
+starting with a hyphen, then first end the options to `ybox-cmd` with a double hyphen:
 
 ```sh
 ybox-cmd ybox-arch_apps -- ls -l
@@ -287,11 +286,35 @@ You can delete old log files there safely if they start taking a lot of disk spa
 ### Restart a container
 
 A container may get stopped after a reboot if systemd/... is not configured to auto-start
-the docker/podman containers. You can check using `ybox-ls -a` and restart any stopped
-containers as below:
+the docker/podman containers. Or you can explicitly stop a container using docker/podman.
+You can check using `ybox-ls -a` and restart any stopped containers as below:
 
 ```sh
 ybox-restart ybox-arch_apps
+```
+
+
+### Auto-starting containers
+
+Containers can be auto-started as per the usual way for rootless docker/podman services.
+This is triggered by systemd on user login which is exactly what we want for ybox
+containers so that the container applications are available on login and are stopped on
+session logout. For docker the following should suffice:
+
+```sh
+systemctl --user enable docker
+```
+
+See [docker docs](https://docs.docker.com/engine/security/rootless/#daemon) for details.
+
+For podman you will need to explicitly generate systemd service file for each container and
+copy to your systemd configuration directory since podman does not use a background daemon.
+For the `ybox-arch_apps` container in the examples before:
+
+```sh
+mkdir -p ~/.config/systemd/user/
+podman generate systemd --name ybox-arch_apps > ~/.config/systemd/user/container-ybox-arch_apps.service
+systemctl --user enable container-ybox-arch_apps.service
 ```
 
 
@@ -347,11 +370,11 @@ source .venv/bin/activate.fish
 ```
 
 **NOTE:** while the pyenv installation and venv set up needs to be done only once, the last
-step of `source` of the two files will need to be done for every shell. Hence, you can consider
+steps of `source` of the two files will need to be done for every shell. Hence, you can consider
 placing those in your bashrc/zshrc or fish conf.d so that they get applied in every interactive
 shell automatically.
 
-You can open the checkout directory as an existing project in Intellij IDEA and then
+You can open the checkout directory as an existing project in Intellij IDEA/PyCharm and then
 add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
 Choose an existing environment in Virtualenv environment and select the
 `<checkout dir>/.venv/bin/python3` for the interpreter.
@@ -360,6 +383,9 @@ Choose an existing environment in Virtualenv environment and select the
 ### Conda
 
 **NOTE:** this set up is no longer actively maintained.
+
+This set up does not support multiple python environments as required by `tox` but
+should be fine for development, IDE and running tests using `run-tests.sh`.
 
 Scripts to set up a conda environment appropriate for the project have been provided
 in the 'conda' directory which creates an environment in 'conda/.conda' directory
@@ -387,7 +413,7 @@ Script for zsh has also been provided:
 source conda/activate-conda.zsh
 ```
 
-You can open the checkout directory as an existing project in Intellij IDEA and then
+You can open the checkout directory as an existing project in Intellij IDEA/PyCharm and then
 add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
 Choose an existing environment in Conda environment where the path to conda should already
 be selected correctly (`<checkout dir>/conda/.conda/bin/conda`) while for interpreter

@@ -21,7 +21,9 @@ from ybox.state import CopyType, DependencyType, RuntimeConfiguration, YboxState
 from ybox.util import check_installed_package, ini_file_reader
 
 # match both "Exec=" and "TryExec=" lines
-_EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)(.*)$")
+_EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)\s*(.*)$")
+# match !p and !a to replace executable program (third group above) and arguments respectively
+_FLAGS_RE = re.compile("![ap]")
 _LOCAL_BIN_DIRS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
 
 
@@ -337,6 +339,26 @@ def _get_app_flags(box_conf: Union[str, ConfigParser]) -> Optional[SectionProxy]
     return box_config["app_flags"] if box_config.has_section("app_flags") else None
 
 
+def _replace_flags(match: re.Match, flags: str, program: str, args: str) -> str:
+    """
+    `_FLAGS_RE.sub` callback to replace `!p` in a value of `[app_flags]` section with given
+    `program` and `!a` with `args` while honoring `!!` escape for literal `!`.
+
+    :param match: an `re.Match` for `_FLAGS_RE` pattern defined in this module
+    :param flags: the value in `[app_flags]` section for `program` name as the key
+    :param program: the executable which can be its full path or the name
+    :param args: arguments to be passed to the `program`
+
+    :return: the substitution string for `_FLAGS_RE.sub` call
+    """
+    # check for !![ap]
+    if (start := match.start()) > 0 and flags[start - 1] == "!":
+        return match.group()[1]
+    if match.group()[1] == "p":
+        return program
+    return args
+
+
 def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
                        conf: StaticConfiguration, app_flags: dict[str, str],
                        wrapper_files: list[str]) -> None:
@@ -363,11 +385,15 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
         return
 
     def replace_executable(match: re.Match) -> str:
+        program = match.group(3)
+        args = match.group(4)
         # check for additional flags to be added
-        if flags := app_flags.get(os.path.basename(match.group(3)), ""):
-            flags = " " + flags
-        return (f"{match.group(1)}{docker_cmd} exec -it {conf.box_name} "
-                f"{match.group(3)}{flags}{match.group(4)}")
+        if flags := app_flags.get(os.path.basename(program), ""):
+            full_cmd = _FLAGS_RE.sub(
+                lambda f_match: _replace_flags(f_match, flags, program, args), flags)
+        else:
+            full_cmd = f"{program} {args}"
+        return f"{match.group(1)}{docker_cmd} exec -it {conf.box_name} {full_cmd}"
 
     try:
         # the destination will be $HOME/.local/share/applications
@@ -431,9 +457,13 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     wrapper_exec = _get_wrapper_executable(filename, conf)
     print_warn(f"Linking container executable {file} to {wrapper_exec}")
     # ensure to change working directory to same on as on host if possible using `run-in-dir`
-    exec_content = ("#!/bin/sh\n",
-                    f'exec {docker_cmd} exec -it {conf.box_name} /usr/local/bin/run-in-dir '
-                    f'"`pwd`" "{file}" {app_flags.get(filename, "")} "$@"')
+    # check for additional flags to be added
+    if flags := app_flags.get(filename, ""):
+        full_cmd = '/usr/local/bin/run-in-dir "`pwd`" ' + _FLAGS_RE.sub(
+            lambda f_match: _replace_flags(f_match, flags, f'"{file}"', '"$@"'), flags)
+    else:
+        full_cmd = f'/usr/local/bin/run-in-dir "`pwd`" "{file}" "$@"'
+    exec_content = ("#!/bin/sh\n", f"exec {docker_cmd} exec -it {conf.box_name} ", full_cmd)
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)
