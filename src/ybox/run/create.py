@@ -496,16 +496,21 @@ def enable_x11(args: list[str]) -> None:
     if os.access(xsock, os.R_OK):
         add_mount_option(args, xsock, xsock, "ro")
     if xauth := os.environ.get("XAUTHORITY"):
-        add_mount_option(args, xauth, xauth, "ro")
-        add_env_option(args, "XAUTHORITY", xauth)
+        # XAUTHORITY file may change after a restart or login (e.g. with Xwayland), so mount its
+        # parent directory which is adjusted by run-in-dir script if it has changed
+        parent_dir = os.path.dirname(xauth)
+        target_dir = parent_dir + "-host"
+        add_mount_option(args, parent_dir, target_dir, "ro")
+        add_env_option(args, "XAUTHORITY", f"{target_dir}/{os.path.basename(xauth)}")
 
 
 def enable_wayland(args: list[str], env: Environ) -> None:
     if wayland_display := os.environ.get("WAYLAND_DISPLAY"):
         add_env_option(args, "WAYLAND_DISPLAY", wayland_display)
-        wayland_sock = f"{env.xdg_rt_dir}/{wayland_display}"
-        if os.access(wayland_sock, os.W_OK):
-            add_mount_option(args, wayland_sock, wayland_sock)
+        if env.xdg_rt_dir:
+            wayland_sock = f"{env.xdg_rt_dir}/{wayland_display}"
+            if os.access(wayland_sock, os.W_OK):
+                add_mount_option(args, wayland_sock, wayland_sock)
 
 
 def enable_pulse(args: list[str], env: Environ) -> None:

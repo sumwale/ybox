@@ -4,6 +4,12 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
+current_user=$(id -un)
+user_home=$(eval echo "~$current_user")
+# set gpg keyserver to an available one
+mkdir -p "$user_home/.gnupg"
+echo "keyserver hkp://keyserver.ubuntu.com" >> "$user_home/.gnupg/dirmngr.conf"
+
 # install binaries for paru from paru-bin (paru takes too long to compile)
 PARU="paru --noconfirm"
 if ! pacman -Qq paru 2>/dev/null >/dev/null; then
@@ -25,7 +31,6 @@ sudo rm -rf /root/.cache
 
 # add current user to realtime group (if present)
 if getent group realtime 2>/dev/null >/dev/null; then
-  current_user=$(id -un)
   echo_color "$fg_cyan" "Adding '$current_user' to realtime group" >> $status_file
   sudo usermod -aG realtime $current_user
 fi

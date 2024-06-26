@@ -393,7 +393,8 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
                 lambda f_match: _replace_flags(f_match, flags, program, args), flags)
         else:
             full_cmd = f"{program} {args}"
-        return f"{match.group(1)}{docker_cmd} exec -it {conf.box_name} {full_cmd}"
+        return (f'{match.group(1)}{docker_cmd} exec -it {conf.box_name} '
+                f'/usr/local/bin/run-in-dir "" {full_cmd}')
 
     try:
         # the destination will be $HOME/.local/share/applications

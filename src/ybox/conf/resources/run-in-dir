@@ -3,8 +3,21 @@
 dir="$1"
 shift
 
-if [ -d "$dir" ]; then
+if [ -n "$dir" -a -d "$dir" ]; then
   cd "$dir"
+fi
+
+# XAUTHORITY file can change after a re-login or a restart, so search for the new one
+if [ -n "$XAUTHORITY" -a ! -r "$XAUTHORITY" ]; then
+  parent_dir="`dirname "$XAUTHORITY"`"
+  xauth="`echo "$parent_dir"/.*Xwaylandauth* | head -n 1`"
+  if [ ! -r "$xauth" ]; then
+    xauth="`echo "$parent_dir"/.*Xauthority* | head -n 1`"
+  fi
+  if [ -r "$xauth" ]; then
+    XAUTHORITY="$xauth"
+    export XAUTHORITY
+  fi
 fi
 
 exec "$@"
