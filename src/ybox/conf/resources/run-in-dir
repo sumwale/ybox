@@ -7,17 +7,16 @@ if [ -n "$dir" -a -d "$dir" ]; then
   cd "$dir"
 fi
 
-# XAUTHORITY file can change after a re-login or a restart, so search for the new one
-if [ -n "$XAUTHORITY" -a ! -r "$XAUTHORITY" ]; then
-  parent_dir="`dirname "$XAUTHORITY"`"
-  xauth="`echo "$parent_dir"/.*Xwaylandauth* | head -n 1`"
-  if [ ! -r "$xauth" ]; then
-    xauth="`echo "$parent_dir"/.*Xauthority* | head -n 1`"
+# XAUTHORITY file can change after a re-login or a restart, so search for the passed one
+# by docker/podman exec in the mount point of its parent directory
+if [ -n "$XAUTHORITY" -a -n "$XAUTHORITY_ORIG" -a ! -r "$XAUTHORITY" ]; then
+  xauth_dir="`dirname "$XAUTHORITY_ORIG"`"
+  xauth_file="`basename "$XAUTHORITY"`"
+  XAUTHORITY="$xauth_dir/$xauth_file"
+  if [ ! -r "$XAUTHORITY" ]; then
+    XAUTHORITY="$XAUTHORITY_ORIG"
   fi
-  if [ -r "$xauth" ]; then
-    XAUTHORITY="$xauth"
-    export XAUTHORITY
-  fi
+  export XAUTHORITY
 fi
 
 exec "$@"

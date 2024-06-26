@@ -10,7 +10,7 @@ uid=1000
 name=ybox
 group=ybox
 gid=1000
-secondary_groups=video,lp,mail
+secondary_groups=video,input,lp,mail
 localtime=
 timezone=
 

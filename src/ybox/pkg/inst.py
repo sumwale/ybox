@@ -393,7 +393,7 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
                 lambda f_match: _replace_flags(f_match, flags, program, args), flags)
         else:
             full_cmd = f"{program} {args}"
-        return (f'{match.group(1)}{docker_cmd} exec -it {conf.box_name} '
+        return (f'{match.group(1)}{docker_cmd} exec -it -e=XAUTHORITY {conf.box_name} '
                 f'/usr/local/bin/run-in-dir "" {full_cmd}')
 
     try:
@@ -464,7 +464,8 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
             lambda f_match: _replace_flags(f_match, flags, f'"{file}"', '"$@"'), flags)
     else:
         full_cmd = f'/usr/local/bin/run-in-dir "`pwd`" "{file}" "$@"'
-    exec_content = ("#!/bin/sh\n", f"exec {docker_cmd} exec -it {conf.box_name} ", full_cmd)
+    exec_content = ("#!/bin/sh\n", f"exec {docker_cmd} exec -it -e=XAUTHORITY {conf.box_name} ",
+                    full_cmd)
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)
