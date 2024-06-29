@@ -13,7 +13,6 @@ from simple_term_menu import TerminalMenu  # type: ignore
 
 from .env import Environ, PathName
 from .print import print_warn
-from .state import YboxStateManagement
 
 
 class NotSupportedError(Exception):
@@ -104,14 +103,14 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
     return config
 
 
-def ini_file_reader(file, interpolation: Optional[Interpolation],
+def ini_file_reader(fd, interpolation: Optional[Interpolation],
                     case_sensitive: bool = True) -> ConfigParser:
     """
     Read an INI file from a given file handle. It applies some basic rules that are used
     for all ybox configurations like allowing no values, only '=' as delimiters and
     case-sensitive keys.
 
-    :param file: file handle for the INI format data
+    :param fd: file handle for the INI format data
     :param interpolation: if provided then used for value interpolation
     :param case_sensitive: if true then keys are case-sensitive (default) else case-insensitive
     :return: instance of `configparser.ConfigParser` built after parsing the given file
@@ -119,26 +118,8 @@ def ini_file_reader(file, interpolation: Optional[Interpolation],
     config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
     if case_sensitive:
         config.optionxform = str  # type: ignore
-    config.read_file(file)
+    config.read_file(fd)
     return config
-
-
-def get_other_shared_containers(container_name: str, shared_root: str,
-                                state: YboxStateManagement) -> list[str]:
-    """
-    Get other containers sharing the same shared_root as the given container having a shared root.
-
-    :param container_name: name of the container
-    :param shared_root: the local shared root directory if `shared_root` flag is enabled
-                        for the container
-    :param state: instance of `YboxStateManagement`
-    :return: list of containers sharing the same shared root with the given container
-    """
-    if shared_root:
-        shared_containers = state.get_containers(shared_root=shared_root)
-        shared_containers.remove(container_name)
-        return shared_containers
-    return []
 
 
 def check_installed_package(docker_cmd: str, check_cmd: str, package: str,

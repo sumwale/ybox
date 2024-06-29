@@ -23,6 +23,7 @@ from packaging.version import parse as parse_version
 import ybox
 from .env import Environ, PathName
 from .print import print_warn
+from .util import ini_file_reader
 
 
 @dataclass
@@ -100,9 +101,11 @@ class YboxStateManagement:
 
     # when comparing two container configurations, delete the sections mentioned below and the
     # keys in the [base] section (specifically log-file in log-opts will change)
+    # (note that "includes" can be safely removed here since the provided configurations to state
+    #  have already processed all the inclusions)
     _CONFIG_NORMALIZE_DEL_SECTIONS = ["mounts", "configs", "env", "apps", "app_flags", "startup"]
     _CONFIG_NORMALIZE_DEL_BASE_KEYS = ["name", "includes", "home", "config_hardlinks",
-                                       "log_driver", "log_opts"]
+                                       "shm_size", "pids_limit", "log_driver", "log_opts"]
 
     def __init__(self, env: Environ):
         """
@@ -143,16 +146,12 @@ class YboxStateManagement:
         of running the apps. Specifically the `log_opts` key from the `base` section has to
         be removed because the log-file name, when set based on time, will change in every run.
         """
-        config1 = ConfigParser(allow_no_value=True, interpolation=None, delimiters="=")
-        config1.optionxform = str  # type: ignore
         with StringIO(conf_str1) as conf_io1:
-            config1.read_file(conf_io1)
+            config1 = ini_file_reader(conf_io1, interpolation=None, case_sensitive=True)
         YboxStateManagement.normalize_configuration(config1)
 
-        config2 = ConfigParser(allow_no_value=True, interpolation=None, delimiters="=")
-        config2.optionxform = str  # type: ignore
         with StringIO(conf_str2) as conf_io2:
-            config2.read_file(conf_io2)
+            config2 = ini_file_reader(conf_io2, interpolation=None, case_sensitive=True)
         YboxStateManagement.normalize_configuration(config2)
 
         return int(config1 == config2)
@@ -432,6 +431,21 @@ class YboxStateManagement:
                 f"SELECT name FROM containers WHERE {predicate} ORDER BY name ASC", args)):
             rows = cursor.fetchall()
             return [str(row[0]) for row in rows]
+
+    def get_other_shared_containers(self, container_name: str, shared_root: str) -> list[str]:
+        """
+        Get other containers sharing the same shared_root as the given container.
+
+        :param container_name: name of the container
+        :param shared_root: the local shared root directory if `shared_root` flag is enabled
+                            for the container
+        :return: list of containers sharing the same shared root with the given container
+        """
+        if shared_root:
+            shared_containers = self.get_containers(shared_root=shared_root)
+            shared_containers.remove(container_name)
+            return shared_containers
+        return []
 
     def register_package(self, container_name: str, package: str, local_copies: list[str],
                          copy_type: CopyType, app_flags: dict[str, str], shared_root: str,

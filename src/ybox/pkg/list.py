@@ -10,7 +10,6 @@ from ybox.cmd import PkgMgr, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_warn
 from ybox.state import RuntimeConfiguration, YboxStateManagement
-from ybox.util import get_other_shared_containers
 
 
 def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
@@ -42,8 +41,8 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
         else:
             list_cmd = pkgmgr[PkgMgr.LIST_ALL.value] if args.all else pkgmgr[PkgMgr.LIST.value]
         list_cmd = list_cmd.format(packages="", plain_separator=plain_sep)
-        if shared_containers := get_other_shared_containers(conf.box_name,
-                                                            runtime_conf.shared_root, state):
+        if shared_containers := state.get_other_shared_containers(conf.box_name,
+                                                                  runtime_conf.shared_root):
             print_warn("Package listing will include packages from other containers sharing the "
                        f"same root directory: {', '.join(shared_containers)}", file=sys.stderr)
     else:

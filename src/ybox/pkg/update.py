@@ -9,7 +9,6 @@ from ybox.cmd import PkgMgr, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_warn
 from ybox.state import RuntimeConfiguration, YboxStateManagement
-from ybox.util import get_other_shared_containers
 
 
 # TODO: updating packages can lead to system libraries among others getting updated. At the very
@@ -48,8 +47,8 @@ def update_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: s
         update_cmd = f"{{ {update_meta_cmd}; }} && {{ {update_pkgs_cmd} {' '.join(packages)}; }}"
     else:
         update_cmd = pkgmgr[PkgMgr.UPDATE_ALL.value].format(quiet=quiet_flag)
-    if shared_containers := get_other_shared_containers(conf.box_name, runtime_conf.shared_root,
-                                                        state):
+    if shared_containers := state.get_other_shared_containers(conf.box_name,
+                                                              runtime_conf.shared_root):
         # show all the containers sharing the same shared root
         print_warn("The operation will also update packages in other containers having the same "
                    f"shared root directory: {', '.join(shared_containers)}")
