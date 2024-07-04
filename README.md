@@ -71,7 +71,7 @@ As of now the following is required:
 
 - clone the repo: `git clone https://github.com/sumwale/ybox.git`
 - rootless podman or docker
-  * for podman this only needs installation of `podman`, `slirp4netns` and `buildah` packages,
+  * for podman this needs installation of `podman` and `slirp4netns` packages (`buildah` optional),
     then setup /etc/subuid and /etc/subgid as noted here:
     [/etc/subuid and /etc/subgid configuration](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md#etcsubuid-and-etcsubgid-configuration)
     (ubuntu, for example will also set up subuid/subgid for current user automatically;
@@ -84,10 +84,6 @@ As of now the following is required:
   repository, if available, else: `pip install simple-term-menu packaging` (obviously
       you will need `pip` itself to be installed which should be in your distribution
       repositories e.g. ubuntu/debian have it as `python3-pip`)
-- (optional) NVIDIA acceleration: if you intend to run games/video editors/... that need
-  access to NVIDIA GPU acceleration, then you need to install
-  [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html); for example on ubuntu with podman configure the apt repository
-  and install the package as noted in the link, then run `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` (this will need to be repeated if nvidia driver version is upgraded)
 
 In the future, installer will take care of setting all of these up.
 

@@ -176,11 +176,24 @@ class Consts:
         return ["init-base.sh", "init.sh", "init-user.sh"]
 
     @staticmethod
-    def container_desktop_dirs() -> set[str]:
+    def container_desktop_dirs() -> list[str]:
         """directories on the container that has desktop files that may need to be wrapped"""
-        return {"/usr/share/applications"}
+        return ["/usr/share/applications"]
 
     @staticmethod
-    def container_executable_dirs() -> set[str]:
+    def container_executable_dirs() -> list[str]:
         """directories on the container that has executables that may need to be wrapped"""
-        return {"/usr/bin", "/usr/sbin", "/bin", "/sbin"}
+        return ["/usr/bin", "/usr/sbin", "/bin", "/sbin"]
+
+    @staticmethod
+    def nvidia_target_base_dir() -> str:
+        """base directory path where NVIDIA libs/data are linked in the container"""
+        return "/usr/local/nvidia"
+
+    @staticmethod
+    def nvidia_setup_script() -> str:
+        """
+        name of the NVIDIA setup script in the container
+        (location is `StaticConfiguration.target_scripts_dir`)
+        """
+        return "nvidia-setup.sh"

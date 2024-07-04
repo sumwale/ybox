@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
 dir="$1"
 shift
@@ -17,6 +17,34 @@ if [ -n "$XAUTHORITY" -a -n "$XAUTHORITY_ORIG" -a ! -r "$XAUTHORITY" ]; then
     XAUTHORITY="$XAUTHORITY_ORIG"
   fi
   export XAUTHORITY
+fi
+
+# In case NVIDIA driver has been updated, the updated libraries and other files may need to be
+# linked again, so check for a missing library file and invoke the setup script if present
+nvidia_setup="$YBOX_TARGET_SCRIPTS_DIR/nvidia-setup.sh"
+if [ -r "$nvidia_setup" ]; then
+  function is_nvidia_valid() {
+    nvidia_glx_libs="$(echo /usr/local/nvidia/lib*/libGLX_nvidia.so.*)"
+    for lib in $nvidia_glx_libs; do
+      if [ ! -r "$lib" ]; then
+        return 1
+      fi
+    done
+    return 0
+  }
+  if ! is_nvidia_valid; then
+    lock_file="/tmp/nvidia-setup.lock"
+    (
+      # ensure no other instance is trying the same (wait for reasonable time before continuing)
+      lock_fd=100
+      flock -x -w 60 $lock_fd || /bin/true
+      trap "flock -u $lock_fd || /bin/true" 0 1 2 3 4 5 6 7 8 10 11 12 13 14 15
+      if ! is_nvidia_valid; then
+        sudo /bin/bash "$nvidia_setup" || /bin/true
+      fi
+    ) 100>"$lock_file"
+    break
+  fi
 fi
 
 exec "$@"

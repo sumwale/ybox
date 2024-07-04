@@ -2,20 +2,20 @@
 
 set -e
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   os_code=Linux
 elif [[ "$OSTYPE" == "darwin"* ]]; then
   os_code=MacOSX
 fi
-installer=Miniforge3-$os_code-$(uname -m).sh
-url=https://github.com/conda-forge/miniforge/releases/latest/download/$installer
+installer="Miniforge3-$os_code-$(uname -m).sh"
+url="https://github.com/conda-forge/miniforge/releases/latest/download/$installer"
 
 if type aria2c >/dev/null 2>/dev/null; then
-  aria2c -x8 -j8 -s8 -k1M $url
+  aria2c -x8 -j8 -s8 -k1M "$url"
 else
-  curl -L $url -o $installer
+  curl -L "$url" -o "$installer"
 fi
 
 conda_env="$SCRIPT_DIR/.conda"

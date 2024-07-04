@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-SCRIPT=$(basename "${BASH_SOURCE[0]}")
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+SCRIPT="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 

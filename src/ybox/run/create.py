@@ -20,6 +20,8 @@ from ybox.cmd import PkgMgr, YboxLabel, get_docker_command, run_command, verify_
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
+from ybox.graphics import add_env_option, add_mount_option, enable_nvidia, \
+    enable_wayland, enable_x11
 from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import bgcolor, fgcolor, print_color, print_error, print_info, print_warn
 from ybox.run.pkg import parse_args as pkg_parse_args
@@ -373,7 +375,7 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
     for section in config.sections():
         if section == "base":
             shared_root, config_hardlinks = process_base_section(
-                config["base"], profile, conf.env, docker_args)
+                config["base"], profile, conf, docker_args)
         elif section == "security":
             process_security_section(config["security"], profile, docker_args)
         elif section == "mounts":
@@ -405,13 +407,19 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
 
 
 def process_base_section(base_section: SectionProxy, profile: PathName,
-                         env: Environ, args: list[str]) -> Tuple[str, Optional[bool]]:
+                         conf: StaticConfiguration, args: list[str]) -> Tuple[str, Optional[bool]]:
+    env = conf.env
     # shared root is disabled by default
     shared_root = ""
     # hard links are false by default (value of None means skip the [configs] section entirely)
     config_hardlinks: Optional[bool] = False
     # configure locale by default
     config_locale = True
+    # DRI will be force enabled if NVIDIA support is enabled
+    dri = False
+    # NVIDIA is disabled by default
+    nvidia = False
+    nvidia_ctk = False
     for key, val in base_section.items():
         if key == "home":
             # create the source directory if it does not exist
@@ -439,11 +447,11 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
             if _get_boolean(val):
                 enable_dbus(args, base_section.getboolean("dbus_sys", fallback=False))
         elif key == "dri":
-            if _get_boolean(val):
-                args.append("--device=/dev/dri")
+            dri = _get_boolean(val)
         elif key == "nvidia":
-            if _get_boolean(val):
-                args.append("--device=nvidia.com/gpu=all")
+            nvidia = _get_boolean(val)
+        elif key == "nvidia_ctk":
+            nvidia_ctk = _get_boolean(val)
         elif key == "shm_size":
             if val:
                 args.append(f"--shm-size={val}")
@@ -466,6 +474,13 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
     if config_locale:
         for lang_var in ("LANG", "LANGUAGE"):
             add_env_option(args, lang_var)
+    if dri or nvidia or nvidia_ctk:
+        args.append("--device=/dev/dri")
+        add_mount_option(args, "/dev/dri/by-path", "/dev/dri/by-path")
+    if nvidia_ctk:  # takes precedence over "nvidia" option
+        args.append("--device=nvidia.com/gpu=all")
+    elif nvidia:
+        enable_nvidia(args, conf)
     return shared_root, config_hardlinks
 
 
@@ -474,44 +489,6 @@ def _get_boolean(value: str) -> bool:
     if (result := ConfigParser.BOOLEAN_STATES.get(value.lower())) is not None:
         return result
     raise ValueError(f"Not a boolean: {value}")
-
-
-def add_env_option(args: list[str], env_var: str, env_val: Optional[str] = None) -> None:
-    if env_val is None:
-        args.append(f"-e={env_var}")
-    else:
-        args.append(f"-e={env_var}={env_val}")
-
-
-def add_mount_option(args: list[str], src: str, dest: str, flags: str = "") -> None:
-    if flags:
-        args.append(f"-v={src}:{dest}:{flags}")
-    else:
-        args.append(f"-v={src}:{dest}")
-
-
-def enable_x11(args: list[str]) -> None:
-    add_env_option(args, "DISPLAY")
-    xsock = "/tmp/.X11-unix"
-    if os.access(xsock, os.R_OK):
-        add_mount_option(args, xsock, xsock, "ro")
-    if xauth := os.environ.get("XAUTHORITY"):
-        # XAUTHORITY file may change after a restart or login (e.g. with Xwayland), so mount its
-        # parent directory which is adjusted by run-in-dir script if it has changed
-        parent_dir = os.path.dirname(xauth)
-        target_dir = f"{parent_dir}-host"
-        target_xauth = f"{target_dir}/{os.path.basename(xauth)}"
-        add_mount_option(args, parent_dir, target_dir, "ro")
-        add_env_option(args, "XAUTHORITY", target_xauth)
-        add_env_option(args, "XAUTHORITY_ORIG", target_xauth)
-
-
-def enable_wayland(args: list[str], env: Environ) -> None:
-    if env.xdg_rt_dir and (wayland_display := os.environ.get("WAYLAND_DISPLAY")):
-        add_env_option(args, "WAYLAND_DISPLAY", wayland_display)
-        wayland_sock = f"{env.xdg_rt_dir}/{wayland_display}"
-        if os.access(wayland_sock, os.W_OK):
-            add_mount_option(args, wayland_sock, wayland_sock)
 
 
 def enable_pulse(args: list[str], env: Environ) -> None:
@@ -604,9 +581,9 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
         shutil.rmtree(conf.configs_dir)
     os.makedirs(conf.configs_dir, exist_ok=True)
     if config_hardlinks:
-        print_info("Creating hard links to paths specified in [configs]", end="  ...  ")
+        print_info("Creating hard links to paths specified in [configs]  ...")
     else:
-        print_info("Creating a copy of paths specified in [configs]", end="  ...  ")
+        print_info("Creating a copy of paths specified in [configs]  ...")
     # write the links to be created in a file that will be passed to container
     # entrypoint to create symlinks from container user's home to the mounted config files
     with open(conf.config_list, "w", encoding="utf-8") as config_list_fd:
@@ -632,7 +609,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                 config_list_fd.write("\n")
             else:
                 print_warn(f"Skipping inaccessible configuration path '{src_path}'")
-    print_info("DONE")
+    print_info("DONE.")
     # finally mount the configs directory to corresponding directory in the target container
     add_mount_option(args, conf.configs_dir, conf.target_configs_dir, "ro")
 
@@ -845,6 +822,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
         for shared_dir in shared_root_dirs.split(","):
             add_mount_option(docker_full_cmd, f"{shared_root}{shared_dir}", shared_dir)
     docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
+    docker_full_cmd.append("-e=YBOX_TARGET_SCRIPTS_DIR")  # pass this along for container scripts
     docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_PRIMARY.value}")
     docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_DISTRIBUTION.value}={conf.distribution}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint()}")

@@ -105,7 +105,8 @@ class YboxStateManagement:
     #  have already processed all the inclusions)
     _CONFIG_NORMALIZE_DEL_SECTIONS = ["mounts", "configs", "env", "apps", "app_flags", "startup"]
     _CONFIG_NORMALIZE_DEL_BASE_KEYS = ["name", "includes", "home", "config_hardlinks",
-                                       "shm_size", "pids_limit", "log_driver", "log_opts"]
+                                       "nvidia", "nvidia_ctk", "shm_size", "pids_limit",
+                                       "log_driver", "log_opts"]
 
     def __init__(self, env: Environ):
         """

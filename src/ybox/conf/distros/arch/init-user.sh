@@ -1,11 +1,11 @@
 #!/bin/bash -e
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
-current_user=$(id -un)
-user_home=$(eval echo "~$current_user")
+current_user="$(id -un)"
+user_home="$(eval echo "~$current_user")"
 # set gpg keyserver to an available one
 mkdir -p "$user_home/.gnupg"
 echo "keyserver hkp://keyserver.ubuntu.com" >> "$user_home/.gnupg/dirmngr.conf"

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PYLINT=
 if [ "$1" = "-l" ]; then
@@ -27,7 +27,7 @@ for f in tests/**/*.py src/ybox/conf/distros/*/*.py; do
   echo -------------------------------------------
   echo Output of mypy on $f
   echo -------------------------------------------
-  ( cd $(dirname "$f") && mypy --check-untyped-defs $(basename "$f") )
+  ( cd "$(dirname "$f")" && mypy --check-untyped-defs "$(basename "$f")" )
   exit_code=$?
   if [ $exit_code -ne 0 ]; then
     MYPY_FAILED=1

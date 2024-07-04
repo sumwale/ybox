@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-SCRIPT=$(basename "${BASH_SOURCE[0]}")
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+SCRIPT="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
@@ -48,7 +48,7 @@ function link_config_files() {
         if [ -L "$home_file" ]; then
           rm -f "$home_file"
         fi
-        home_filedir=$(dirname "$home_file")
+        home_filedir="$(dirname "$home_file")"
         if [ ! -e "$home_filedir" ]; then
           mkdir -p "$home_filedir"
         fi
@@ -131,7 +131,7 @@ if [ -n "$config_list" -a -z "$config_dir" ]; then
 fi
 
 # handle positional arguments
-if [ $(($# - $OPTIND)) -ne 0 ]; then
+if [ $(("$#" - "$OPTIND")) -ne 0 ]; then
   echo "$0: incorrect number of required arguments"
   show_usage
   exit 1
@@ -141,8 +141,8 @@ box_name="${@:$OPTIND:1}"
 # create/update some common directories that are mounted and may have root permissions
 dir_init=".cache .cache/fontconfig .config .config/pulse .local .local/share"
 dir_init+=" .local/share/ybox .local/share/ybox/$box_name Downloads"
-uid=$(id -u)
-gid=$(id -g)
+uid="$(id -u)"
+gid="$(id -g)"
 echo_color "$fg_orange" "Ensuring proper permissions for user directories" >> $status_file
 for d in $dir_init; do
   dir=$HOME/$d
@@ -195,7 +195,7 @@ function cleanup() {
   # clear status file first just in case other operations do not finish before SIGKILL comes
   echo -n > $status_file
   # first send SIGTERM to all "docker exec" processes that will have parent PID as 0
-  exec_pids=$(ps -e -o ppid=,pid= | awk '{ if ($1 == 0 && $2 != 1) print $2 }')
+  exec_pids="$(ps -e -o ppid=,pid= | awk '{ if ($1 == 0 && $2 != 1) print $2 }')"
   for pid in $exec_pids; do
     echo "Sending SIGTERM to $pid"
     kill -TERM $pid
