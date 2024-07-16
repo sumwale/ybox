@@ -17,8 +17,8 @@ _STD_LIB32_DIRS = ["/usr/lib/i386-linux-gnu", "/lib/i386-linux-gnu",
                    "/usr/lib/i686-linux-gnu", "/lib/i686-linux-gnu", "/usr/lib32", "/lib32"]
 _STD_BIN_DIRS = ["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"]
 _STD_LD_LIB_PATH_VARS = ["LD_LIBRARY_PATH", "LD_LIBRARY_PATH_64", "LD_LIBRARY_PATH_32"]
-_NVIDIA_LIB_PATTERNS = ["*nvidia*.so*", "*NVIDIA*.so*", "libcuda*.so*",
-                        "libnvcuvid*.so*", "libnvoptix*.so*"]
+_NVIDIA_LIB_PATTERNS = ["*nvidia*.so*", "*NVIDIA*.so*", "libcuda*.so*", "libnvcuvid*.so*",
+                        "libnvoptix*.so*", "gbm/*nvidia*.so*", "vdpau/*nvidia*.so*"]
 _NVIDIA_BIN_PATTERNS = ["nvidia-smi", "nvidia-cuda*", "nvidia-debug*", "nvidia-bug*"]
 # note that the code below assumes that file name pattern below is always of the form *nvidia*
 # (while others are directories), so if that changes then update _process_nvidia_data_files
@@ -75,11 +75,11 @@ def enable_nvidia(args: list[str], conf: StaticConfiguration) -> None:
     # find the list of nvidia library directories to be mounted in the target container
     nvidia_lib_dirs = _filter_nvidia_dirs(lib_dirs, _NVIDIA_LIB_PATTERNS)
     # add the directories to tbe mounted to docker/podman arguments
-    mount_nvidia_subdir = Consts.nvidia_target_base_dir()
+    mount_nvidia_subdir = conf.target_scripts_dir
     mount_lib_dirs = _prepare_mount_dirs(nvidia_lib_dirs, args, f"{mount_nvidia_subdir}/mnt_lib")
     # create the script to be run in the container which will create the target
-    # directories that will be added to ldconfig path having symlinks to the mounted libraries
-    nvidia_setup = _create_nvidia_setup(mount_lib_dirs)
+    # directories that will be added to LD_LIBRARY_PATH having symlinks to the mounted libraries
+    nvidia_setup = _create_nvidia_setup(args, mount_lib_dirs)
 
     # mount nvidia binary directories and add code to script to link to them in container
     nvidia_bin_dirs = _filter_nvidia_dirs({realpath(d) for d in _STD_BIN_DIRS},
@@ -147,24 +147,29 @@ def _prepare_mount_dirs(dirs: list[str], args: list[str], mount_dir_prefix: str)
     return mount_dirs
 
 
-def _create_nvidia_setup(mount_lib_dirs: list[str]) -> list[str]:
-    setup_script = ["# this script should be run as root using sh/bash", "", "# setup libraries"]
+def _create_nvidia_setup(args: list[str], mount_lib_dirs: list[str]) -> list[str]:
+    target_dir = Consts.nvidia_target_base_dir()
+    setup_script = ["# this script should be run using bash", "", "# setup libraries", "",
+                    f"mkdir -p {target_dir} && chmod 0755 {target_dir}"]
+    ld_lib_path = []
     for idx, mount_lib_dir in enumerate(mount_lib_dirs):
-        target_lib_dir = f"{os.path.dirname(mount_lib_dir)}/lib{idx}"
+        target_lib_dir = f"{target_dir}/lib{idx}"
         setup_script.append(f"rm -rf {target_lib_dir}")
-        setup_script.append(f"mkdir -p {target_lib_dir}")
+        setup_script.append(f"mkdir -p {target_lib_dir} && chmod 0755 {target_lib_dir}")
         for pat in _NVIDIA_LIB_PATTERNS:
             setup_script.append(f'libs="$(compgen -G "{mount_lib_dir}/{pat}")"')
             setup_script.append(
                 f'if [ "$?" -eq 0 ]; then ln -s $libs {target_lib_dir}/. 2>/dev/null; fi')
-        setup_script.append(f"grep -q '^{target_lib_dir}$' {_LD_SO_CONF} || "
-                            f"echo '{target_lib_dir}' >> {_LD_SO_CONF}")
-    setup_script.append("ldconfig")
+        ld_lib_path.append(target_lib_dir)
+    # add libraries to LD_LIBRARY_PATH rather than adding to system /etc/ld.so.conf otherwise
+    # the system ldconfig cache may go out of sync from another shared root container that does
+    # not have nvidia enabled
+    if ld_lib_path:
+        add_env_option(args, "LD_LIBRARY_PATH", os.pathsep.join(ld_lib_path))
     return setup_script
 
 
 def _add_nvidia_bin_links(mount_bin_dirs: list[str], script: list[str]) -> None:
-    # expect only one instance of a binary (subsequent ones will fail in the "ln")
     script.append("# setup binaries")
     for mount_bin_dir in mount_bin_dirs:
         for pat in _NVIDIA_BIN_PATTERNS:
@@ -197,5 +202,5 @@ def _process_nvidia_data_files(args: list[str], script: list[str],
                 # so the code avoids hard-coding fully resolved patterns to deal with
                 # a case when the data file name changes after driver upgrade
                 path_dir = os.path.dirname(path)
-                script.append(f"mkdir -p {path_dir} && "
-                              f"ln -sf {mount_data_dir}/*nvidia* {path_dir}/. 2>/dev/null")
+                script.append(f"mkdir -p {path_dir} && chmod 0755 {path_dir} && \\")
+                script.append(f"  ln -sf {mount_data_dir}/*nvidia* {path_dir}/. 2>/dev/null")
