@@ -3,6 +3,7 @@ Configuration locations, distribution and box name of ybox container.
 """
 
 import os
+import re
 from typing import Optional
 
 from .env import Environ
@@ -66,9 +67,9 @@ class StaticConfiguration:
     def box_image(self, has_shared_root: bool) -> str:
         """
         Container image created with basic required user configuration from base image.
-        This can either be container specific, or if 'base.shared_root' is enabled, then
+        This can either be container specific, or if `base.shared_root` is provided, then
         it will be common for all such images for the same distribution.
-        :param has_shared_root: whether 'base.shared_root' is enabled in configuration file
+        :param has_shared_root: whether `base.shared_root` is provided in configuration file
         :return: the docker/podman image to be created and used for the ybox
         """
         return self._shared_box_image if has_shared_root else self._box_image
@@ -128,6 +129,8 @@ class Consts:
     Defines fixed file/path and other names used by ybox that are not configurable.
     """
 
+    _MAN_DIRS_PATTERN = re.compile(r"/usr(/local)?(/share)?/man(/[^/]*)?/man[0-9][a-zA-Z_]*")
+
     @staticmethod
     def image_prefix() -> str:
         """prefix used for the non-shared root images"""
@@ -183,7 +186,12 @@ class Consts:
     @staticmethod
     def container_executable_dirs() -> list[str]:
         """directories on the container that has executables that may need to be wrapped"""
-        return ["/usr/bin", "/usr/sbin", "/bin", "/sbin"]
+        return ["/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
+
+    @staticmethod
+    def container_man_dir_pattern() -> re.Pattern[str]:
+        """directory regex pattern on the container having man-pages that may need to be linked"""
+        return Consts._MAN_DIRS_PATTERN
 
     @staticmethod
     def nvidia_target_base_dir() -> str:

@@ -34,8 +34,8 @@ class RuntimeConfiguration:
     Attributes:
         name: name of the container
         distribution: the Linux distribution used when creating the container
-        shared_root: the local shared root directory if `shared_root` flag is enabled for
-                     the container (see `shared_root` key in ybox/conf/profiles/basic.ini)
+        shared_root: the local shared root directory for the container (see `shared_root` key
+                       in ybox/conf/profiles/basic.ini)
         ini_config: the resolved configuration of the container in INI format as a string or
                     a `ConfigParser` object
     """
@@ -69,7 +69,7 @@ class YboxStateManagement:
 
     1. The full configuration used for the creation of a container.
     2. The packages installed explicitly on each of the containers (though all
-         packages may be visible on all containers having `shared_root` enabled)
+         packages may be visible on all containers having the same `shared_root`)
     3. Cleanup state of containers removed explicitly or those that got stopped/removed.
 
     Expected usage is using a `with` statement to ensure proper cleanup other the database
@@ -273,7 +273,7 @@ class YboxStateManagement:
 
         :param container_name: name of the container
         :param distribution: the Linux distribution used when creating the container
-        :param shared_root: the local shared root directory if `shared_root` flag is enabled
+        :param shared_root: the local shared root directory if `shared_root` is provided
                             for the container
         :param parser: parser object for the configuration file used for creating the container
         :param force_own_orphans: if true, then force the ownership of orphan packages on the
@@ -327,7 +327,7 @@ class YboxStateManagement:
         for the container if 'shared_root' is false for the container. However, if 'shared_root'
         is true for the container, its packages are marked as "orphan" (i.e. owner was destroyed)
         if no other container refers to them. This is because the packages will still be visible
-        in all other containers having 'shared_root' as enabled.
+        in all other containers having the same `shared_root`.
 
         :param container_name: name of the container
         :return: true if container was found in the database and removed
@@ -438,7 +438,7 @@ class YboxStateManagement:
         Get other containers sharing the same shared_root as the given container.
 
         :param container_name: name of the container
-        :param shared_root: the local shared root directory if `shared_root` flag is enabled
+        :param shared_root: the local shared root directory if `shared_root` is provided
                             for the container
         :return: list of containers sharing the same shared root with the given container
         """
@@ -461,7 +461,7 @@ class YboxStateManagement:
         :param copy_type: the type of files (one of `CopyType`s or CopyType(0)) in `local_copies`
         :param app_flags: the flags from [app_flags] section and --app-flags option to add to
                           executable invocation in the local wrappers (`local_copies`)
-        :param shared_root: the local shared root directory if `shared_root` flag is enabled
+        :param shared_root: the local shared root directory if `shared_root` is provided
                             for the container
         :param dep_type: the `DependencyType` for the package, or None if not a dependency
         :param dep_of: if `dep_type` is not None, then this is the package that has this one
@@ -529,7 +529,7 @@ class YboxStateManagement:
 
         :param container_name: name of the container
         :param package: the package to be unregistered
-        :param shared_root: the local shared root directory if `shared_root` flag is enabled
+        :param shared_root: the local shared root directory if `shared_root` is provided
                             for the container
         :return: dictionary of orphaned dependencies having name mapped to `DependencyType`
         """
@@ -620,7 +620,7 @@ class YboxStateManagement:
     def _remove_local_copies(local_copies: list[str]) -> None:
         """remove the files created locally to run container executables"""
         for file in local_copies:
-            print_warn(f"Removing local wrapper {file}")
+            print_warn(f"Removing local wrapper/link {file}")
             Path(file).unlink(missing_ok=True)
 
     def get_packages(self, container_name: str, regex: str = ".*",

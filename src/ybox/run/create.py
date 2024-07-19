@@ -75,7 +75,7 @@ def main_argv(argv: list[str]) -> None:
 
     # The sequence for container creation and run is thus:
     # 1) First start a basic container with the smallest upstream distro image (important to save
-    #    space when 'base.shared_root' is enabled) with "entrypoint-base.sh" as the entrypoint
+    #    space when `base.shared_root` is provided) with "entrypoint-base.sh" as the entrypoint
     #    script giving user/group arguments to be same as the user as on the host machine.
     # 2) Next do a docker/podman commit and save the stopped container as local image which
     #    will be used henceforth. The main point of doing #1 is to ensure that a sudo enabled
@@ -97,7 +97,7 @@ def main_argv(argv: list[str]) -> None:
     # 5) Mounts and environment variables are set up for step 3 which are automatically also
     #    available in step 4, and hence no special setup is required in step 4.
     #
-    # If 'base.shared_root' is enabled, the above sequence has the following changes:
+    # If `base.shared_root` is provided, the above sequence has the following changes:
     # 1) First acquire a file/process lock so that no other container creation can interfere.
     # 2) Once the lock has been acquired, check if the shared container image already exists.
     #    If it does exist, then skip to step 7.
@@ -199,7 +199,8 @@ def main_argv(argv: list[str]) -> None:
                 quiet = 2 if args.quiet else 0
                 # box_conf can be skipped in new state.db but not for pre 0.9.3 having empty flags
                 if local_copies := wrap_container_files(package, copy_type, app_flags, list_cmd,
-                                                        docker_cmd, conf, box_conf, quiet):
+                                                        docker_cmd, conf, box_conf, shared_root,
+                                                        quiet):
                     # register the package again with the local_copies (no change to package_deps)
                     state.register_package(box_name, package, local_copies, copy_type, app_flags,
                                            shared_root, dep_type=None, dep_of="")
@@ -366,17 +367,15 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
     #   $HOME variable can be different inside the container).
     env_interpolation = EnvInterpolation(conf.env, ["configs"])
     config = config_reader(profile, env_interpolation)
-    # shared_root is disabled by default
-    shared_root = ""
-    # hard links are false by default (value of None means skip the [configs] section entirely)
-    config_hardlinks: Optional[bool] = False
+    # [base] section should always be present
+    if not config.has_section("base"):
+        raise NotSupportedError(f"Missing [base] section in profile '{profile}'")
+    shared_root, config_hardlinks = process_base_section(config["base"], profile, conf,
+                                                         docker_args)
     apps_with_deps: dict[str, list[str]] = {}
     # finally process all the sections and the keys forming the docker/podman command-line
     for section in config.sections():
-        if section == "base":
-            shared_root, config_hardlinks = process_base_section(
-                config["base"], profile, conf, docker_args)
-        elif section == "security":
+        if section == "security":
             process_security_section(config["security"], profile, docker_args)
         elif section == "mounts":
             process_mounts_section(config["mounts"], docker_args)
@@ -387,7 +386,7 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
                 process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
         elif section == "apps":
             apps_with_deps = process_apps_section(config["apps"], conf, distro_config)
-        elif section not in ("app_flags", "startup"):
+        elif section not in ("base", "app_flags", "startup"):
             raise NotSupportedError(f"Unknown section [{section}] in '{profile}' "
                                     "or one of its includes")
     return shared_root, config, apps_with_deps
@@ -422,9 +421,10 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
     nvidia_ctk = False
     for key, val in base_section.items():
         if key == "home":
-            # create the source directory if it does not exist
-            os.makedirs(val, exist_ok=True)
-            add_mount_option(args, val, env.target_home)
+            if val:
+                # create the source directory if it does not exist
+                os.makedirs(val, exist_ok=True)
+                add_mount_option(args, val, env.target_home)
         elif key == "shared_root":
             shared_root = "" if val is None else val
         elif key == "config_hardlinks":

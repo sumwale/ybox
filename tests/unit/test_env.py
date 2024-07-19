@@ -61,6 +61,7 @@ class TestEnv(unittest.TestCase):
         self.assertEqual(rt_dir, self._env.xdg_rt_dir)
         self.assertEqual(f"{user_base}/share/applications", self._env.user_applications_dir)
         self.assertEqual(f"{user_base}/bin", self._env.user_executables_dir)
+        self.assertEqual(f"{user_base}/share/man", self._env.user_man_dir)
 
     def test_now(self) -> None:
         """check the `Environ.now` property and $NOW environment variable"""

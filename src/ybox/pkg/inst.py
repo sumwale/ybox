@@ -138,7 +138,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                 if (split_idx := flag.find("=")) != -1:
                     app_flags[flag[:split_idx]] = flag[split_idx + 1:]
         local_copies = wrap_container_files(package, copy_type, app_flags, list_cmd,
-                                            docker_cmd, conf, rt_conf.ini_config, quiet)
+                                            docker_cmd, conf, rt_conf.ini_config,
+                                            rt_conf.shared_root, quiet)
         dep_type, dep_of = (DependencyType.OPTIONAL, args.package) if opt_dep_install else (
             None, "")
         state.register_package(conf.box_name, package, local_copies, copy_type, app_flags,
@@ -258,7 +259,8 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
 
 def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str, str],
                          list_cmd: str, docker_cmd: str, conf: StaticConfiguration,
-                         box_conf: Union[str, ConfigParser], quiet: int) -> list[str]:
+                         box_conf: Union[str, ConfigParser], shared_root: str,
+                         quiet: int) -> list[str]:
     """
     Create wrappers in host environment to invoke container's desktop files and executables.
 
@@ -271,6 +273,8 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     :param conf: the `StaticConfiguration` of the container
     :param box_conf: the resolved INI format configuration of the container as a string or
                      a `ConfigParser` object
+    :param shared_root: the local shared root directory if `shared_root` is provided
+                        for the container
     :param quiet: perform operations quietly
 
     :return: the list of paths of the wrapper files
@@ -286,8 +290,12 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     wrapper_files: list[str] = []
     desktop_dirs = Consts.container_desktop_dirs()
     executable_dirs = Consts.container_executable_dirs()
+    man_dir_pattern = Consts.container_man_dir_pattern()
+    # get the parsed container configuration
+    parsed_box_conf = _get_parsed_box_conf(box_conf)
     # read the container configuration for [app_flags] section
-    app_flags_section = _get_app_flags(box_conf)
+    app_flags_section = parsed_box_conf["app_flags"] \
+        if parsed_box_conf and parsed_box_conf.has_section("app_flags") else None
     file_paths = [(os.path.dirname(file), filename, file) for file in package_files.splitlines()
                   if (filename := os.path.basename(file).strip())]  # empty name means directory
 
@@ -313,30 +321,31 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
             _wrap_desktop_file(filename, file, package, docker_cmd, conf, app_flags,
                                wrapper_files)
             continue  # if it is a .desktop file, then it cannot be an executable too
-        if (copy_type & CopyType.EXECUTABLE) and file_dir in executable_dirs:
-            _wrap_executable(filename, file, docker_cmd, conf, app_flags, wrapper_files)
+        if copy_type & CopyType.EXECUTABLE:
+            if file_dir in executable_dirs:
+                _wrap_executable(filename, file, docker_cmd, conf, app_flags, wrapper_files)
+            elif shared_root and man_dir_pattern.match(file_dir):
+                _link_man_page(file, shared_root, conf, wrapper_files)
 
     return wrapper_files
 
 
-def _get_app_flags(box_conf: Union[str, ConfigParser]) -> Optional[SectionProxy]:
+def _get_parsed_box_conf(box_conf: Union[str, ConfigParser]) -> Optional[ConfigParser]:
     """
-    Get the [app_flags] section from the container configuration.
+    Get the parsed `ConfigParser` for the container configuration.
 
     :param box_conf: the resolved INI format configuration of the container as a string or
                      a `ConfigParser` object
 
-    :return: the [app_flags] section as a `SectionProxy` object
+    :return: the `ConfigParser` object for the container configuration
     """
     if isinstance(box_conf, ConfigParser):
-        box_config = box_conf
+        return box_conf
     else:
         if not box_conf:
             return None
         with io.StringIO(box_conf) as box_conf_fd:
-            box_config = ini_file_reader(box_conf_fd, interpolation=None,
-                                         case_sensitive=False)  # case-insensitive
-    return box_config["app_flags"] if box_config.has_section("app_flags") else None
+            return ini_file_reader(box_conf_fd, interpolation=None, case_sensitive=False)
 
 
 def _replace_flags(match: re.Match, flags: str, program: str, args: str) -> str:
@@ -475,3 +484,23 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
 def _get_wrapper_executable(filename: str, conf: StaticConfiguration) -> str:
     """get the file path for local wrapper executable"""
     return f"{conf.env.user_executables_dir}/{filename}"
+
+
+def _link_man_page(file: str, shared_root: str, conf: StaticConfiguration,
+                   wrapper_files: list[str]) -> None:
+    """
+    For an executable, create a wrapper executable that invokes "docker/podman exec".
+
+    :param file: full path of the executable file being wrapped
+    :param shared_root: the local shared root directory if `shared_root` is provided
+                        for the container
+    :param conf: the `StaticConfiguration` of the container
+    :param wrapper_files: the accumulated list of all wrapper files so far
+    """
+    man_dir_base = file.index("/man/")  # expect /man/ to exist in the file path
+    linked_man_page = Path(conf.env.user_man_dir).joinpath(file[man_dir_base + 5:])
+    print_warn(f"Linking man page {file} to {linked_man_page}")
+    linked_man_page.parent.mkdir(parents=True, exist_ok=True)
+    linked_man_page.unlink(missing_ok=True)
+    linked_man_page.symlink_to(f"{shared_root}{file}")
+    wrapper_files.append(str(linked_man_page))

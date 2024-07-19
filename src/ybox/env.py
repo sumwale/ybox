@@ -47,6 +47,7 @@ class Environ:
                                         pkg_dir.joinpath("conf")]
         self._user_applications_dir = f"{user_base}/share/applications"
         self._user_executables_dir = f"{user_base}/bin"
+        self._user_man_dir = f"{user_base}/share/man"
 
     def search_config_path(self, conf_path: str, quiet: bool = False) -> PathName:
         """
@@ -114,3 +115,8 @@ class Environ:
     def user_executables_dir(self) -> str:
         """User's local executables directory which should be in the $PATH"""
         return self._user_executables_dir
+
+    @property
+    def user_man_dir(self) -> str:
+        """User's local man pages directory which should be in the path returned by `manpath`"""
+        return self._user_man_dir

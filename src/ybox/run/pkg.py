@@ -132,7 +132,8 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-s", "--skip-executables", action="store_true",
                            help="skip creating wrappers for invoking executables installed by "
                                 "the package; default is to create wrapper executables in user's "
-                                "$HOME/.local/bin directory (or using $PYTHONUSERBASE)")
+                                "$HOME/.local/bin directory and link man pages to "
+                                "$HOME/.local/share/man (or using $PYTHONUSERBASE)")
     subparser.add_argument("-S", "--skip-desktop-files", action="store_true",
                            help="skip creating wrapper desktop files for those installed by the "
                                 "package and its optional dependencies; default is to create "

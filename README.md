@@ -143,8 +143,9 @@ the optional dependencies of the installed package (only till second level) and 
 to choose from among them which may add additional features to the package.
 
 The installation will also create wrapper desktop files in `~/.local/share/applications`
-and executables in `~/.local/bin` so you can execute the newly install application binaries
-from your desktop environment's application menu and/or from command-line.
+and executables in `~/.local/bin` with man pages linked in `~/.local/share/man` so you can execute
+the newly install application binaries from your desktop environment's application menu and/or
+from command-line having corresponding man pages.
 
 Likewise, you can uninstall all the changes (including the optional packages chosen before):
 
