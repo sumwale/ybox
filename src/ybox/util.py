@@ -7,7 +7,7 @@ import re
 import subprocess
 from configparser import BasicInterpolation, ConfigParser, Interpolation
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
@@ -123,7 +123,7 @@ def ini_file_reader(fd, interpolation: Optional[Interpolation],
 
 
 def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
-                            container_name: str) -> int:
+                            container_name: str) -> Tuple[int, str]:
     """
     Check if a given package is installed in a container.
 
@@ -133,9 +133,10 @@ def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
     :param container_name: name of the container
     :return: exit code of the `check_cmd` which should be 0 if the package exists
     """
-    return subprocess.run(
-        [docker_cmd, "exec", container_name, "/bin/bash", "-c", f"{check_cmd} {package}"],
-        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+    check_result = subprocess.run(
+        [docker_cmd, "exec", container_name, "/bin/bash", "-c", check_cmd.format(package=package)],
+        check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return check_result.returncode, check_result.stdout.decode("utf-8").strip()
 
 
 def select_item_from_menu(items: list[str]) -> Optional[str]:

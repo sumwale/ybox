@@ -37,7 +37,7 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
     remove_deps_flag = "" if args.skip_deps else pkgmgr[PkgMgr.REMOVE_DEPS_FLAG.value]
     uninstall_cmd = pkgmgr[PkgMgr.UNINSTALL.value].format(quiet=quiet_flag, purge=purge_flag,
                                                           remove_deps=remove_deps_flag)
-    check_cmd = pkgmgr[PkgMgr.INFO.value]
+    check_cmd = pkgmgr[PkgMgr.CHECK_INSTALL.value]
     return _uninstall_package(package, args.skip_deps, uninstall_cmd, check_cmd, docker_cmd, conf,
                               runtime_conf, state)
 
@@ -47,9 +47,10 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
                        runtime_conf: RuntimeConfiguration, state: YboxStateManagement,
                        dep_msg: str = "") -> int:
     installed = False
-    code = check_installed_package(docker_cmd, check_cmd, package, conf.box_name)
+    code, inst_package = check_installed_package(docker_cmd, check_cmd, package, conf.box_name)
     if code == 0:
         installed = True
+        package = inst_package
         print_info(f"Uninstalling {dep_msg}'{package}' from '{conf.box_name}'")
         code = int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
                                 f"{uninstall_cmd} {package}"], exit_on_error=False,

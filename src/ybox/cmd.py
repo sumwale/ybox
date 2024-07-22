@@ -17,6 +17,7 @@ class PkgMgr(str, Enum):
     Package manager actions that are defined for each Linux distribution in its distro.ini file.
     """
     INSTALL = "install"
+    CHECK_INSTALL = "check_install"
     QUIET_FLAG = "quiet_flag"
     OPT_DEPS = "opt_deps"
     OPT_DEP_FLAG = "opt_dep_flag"
@@ -93,7 +94,7 @@ def verify_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str]
     check_result = subprocess.run(
         [docker_cmd, "inspect", "--type=container", '--format={{index .Config.Labels "' +
          YboxLabel.CONTAINER_TYPE.value + '"}} {{.State.Status}}', box_name],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+        check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     if check_result.returncode != 0:
         if exit_on_error:
             print_error(f"No{error_msg}ybox container named '{box_name}' found")

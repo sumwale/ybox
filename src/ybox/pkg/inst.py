@@ -62,17 +62,17 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS.value]
     # TODO: use this flag for -w option only if get_optional_deps returned the package/provides
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
-    check_cmd = pkgmgr[PkgMgr.INFO.value] if args.check_package else ""
+    check_cmd = pkgmgr[PkgMgr.CHECK_INSTALL.value]
     return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,
-                            runtime_conf, state, opt_deps_cmd, opt_dep_flag, False, check_cmd,
-                            selected_deps, args.quiet)
+                            runtime_conf, state, opt_deps_cmd, opt_dep_flag, False,
+                            args.check_package, check_cmd, selected_deps, args.quiet)
 
 
 def _install_package(package: str, args: argparse.Namespace, install_cmd: str, list_cmd: str,
                      docker_cmd: str, conf: StaticConfiguration, rt_conf: RuntimeConfiguration,
                      state: YboxStateManagement, opt_deps_cmd: str, opt_dep_flag: str,
-                     opt_dep_install: bool, check_cmd: str, selected_deps: Optional[list[str]],
-                     quiet: int) -> int:
+                     opt_dep_install: bool, check_pkg: bool, check_cmd: str,
+                     selected_deps: Optional[list[str]], quiet: int) -> int:
     """
     Real workhorse for :func:`install_package` that is invoked recursively for
     optional dependencies if required.
@@ -91,6 +91,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     :param opt_dep_flag: flag to be added during installation of an optional dependency to mark
                          it as a dependency (as read from `distro.ini`)
     :param opt_dep_install: `True` if installation is for an optional dependency
+    :param check_pkg: if `True` then skip installation if package already exists
     :param check_cmd: command to check if package exists before installation
     :param selected_deps: list of dependencies to install if user has already provided them
     :param quiet: perform operations quietly
@@ -111,15 +112,23 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                                                                    conf.box_name, opt_deps_cmd)
     # don't exit on error here because the caller may have further actions to perform before exit
     code = -1
-    if check_cmd and (code := check_installed_package(docker_cmd, check_cmd, package,
-                                                      conf.box_name)) == 0 and not quiet:
-        print_notice(f"'{package}' is already installed in '{conf.box_name}'")
+    if check_pkg:
+        code, inst_package = check_installed_package(docker_cmd, check_cmd, package, conf.box_name)
+        if code == 0:
+            if not quiet:
+                suffix = "" if package == inst_package else f" (as '{inst_package}')"
+                print_notice(f"'{package}'{suffix} is already installed in '{conf.box_name}'")
+            package = inst_package
     if code != 0:
         if not quiet:
             print_info(f"Installing '{package}' in '{conf.box_name}'")
         code = int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
                                 f"{resolved_install_cmd} {package}"], exit_on_error=False,
                                error_msg=f"installing '{package}'"))
+        # actual installed package name can be different due to package being virtual and/or
+        # having multiple choices
+        if code == 0:
+            code, package = check_installed_package(docker_cmd, check_cmd, package, conf.box_name)
     if code == 0:
         skip_desktop_files = args.skip_desktop_files
         skip_executables = args.skip_executables
@@ -153,7 +162,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         if selected_deps:
             for dep in selected_deps:
                 _install_package(dep, args, install_cmd, list_cmd, docker_cmd, conf, rt_conf,
-                                 state, "", opt_dep_flag, True, check_cmd, None, quiet)
+                                 state, "", opt_dep_flag, True, check_pkg, check_cmd, None, quiet)
 
     return code
 
