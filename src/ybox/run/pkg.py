@@ -33,7 +33,9 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.ybox
 
-    if not container_name:
+    if container_name:
+        verify_ybox_state(docker_cmd, container_name, ["running"], cnt_state_msg=" active")
+    else:
         # check active containers
         containers = str(run_command([docker_cmd, "container", "ls", "--format={{ .Names }}",
                                       f"--filter=label={YboxLabel.CONTAINER_PRIMARY.value}"],
@@ -55,7 +57,6 @@ def main_argv(argv: list[str]) -> None:
 
     if not args.quiet:
         print_info(f"Running the operation on '{container_name}'", file=sys.stderr)
-    verify_ybox_state(docker_cmd, container_name, ["running"], error_msg=" active ")
 
     env = Environ()
     with YboxStateManagement(env) as state:

@@ -350,11 +350,10 @@ def _get_parsed_box_conf(box_conf: Union[str, ConfigParser]) -> Optional[ConfigP
     """
     if isinstance(box_conf, ConfigParser):
         return box_conf
-    else:
-        if not box_conf:
-            return None
-        with io.StringIO(box_conf) as box_conf_fd:
-            return ini_file_reader(box_conf_fd, interpolation=None, case_sensitive=False)
+    if not box_conf:
+        return None
+    with io.StringIO(box_conf) as box_conf_fd:
+        return ini_file_reader(box_conf_fd, interpolation=None, case_sensitive=False)
 
 
 def _replace_flags(match: re.Match, flags: str, program: str, args: str) -> str:

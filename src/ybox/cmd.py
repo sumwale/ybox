@@ -79,7 +79,7 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
 
 
 def verify_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str],
-                      exit_on_error: bool = True, error_msg: str = " ") -> bool:
+                      exit_on_error: bool = True, cnt_state_msg: str = "") -> bool:
     """
     Verify that a given ybox container exists and is in one of the given states.
 
@@ -88,9 +88,9 @@ def verify_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str]
     :param expected_states: list of one or more expected states like 'running', 'exited';
                             empty value means any state is permissible
     :param exit_on_error: whether to exit using `sys.exit` if verification fails
-    :param error_msg: string to be inserted in the error message "No...ybox container ...",
-                      so this should be a user-friendly name for the `expected_states` e.g.
-                      ' active ', ' stopped '
+    :param cnt_state_msg: string to be inserted in the error message "No...ybox container ...",
+                          so this should be a user-friendly name for the `expected_states` with
+                          a space at the start e.g. ' active', ' stopped'
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
     check_result = subprocess.run(
@@ -99,7 +99,7 @@ def verify_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str]
         check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     if check_result.returncode != 0:
         if exit_on_error:
-            print_error(f"No{error_msg}ybox container named '{box_name}' found")
+            print_error(f"No{cnt_state_msg} ybox container named '{box_name}' found")
             sys.exit(check_result.returncode)
         else:
             return False

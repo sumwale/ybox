@@ -71,6 +71,8 @@ class TestCmd(unittest.TestCase):
                       "/bin/sh", "-c", sh_cmd])
             self.assertFalse(verify_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
                                                exit_on_error=False))
+            self.assertFalse(verify_ybox_state(docker_cmd, cnt_name, expected_states=[],
+                                               exit_on_error=False))
             self.assertRaises(SystemExit, verify_ybox_state, docker_cmd, cnt_name,
                               expected_states=["running"])
             self._stop_container(docker_cmd, cnt_name, check_removed=True)
@@ -96,13 +98,30 @@ class TestCmd(unittest.TestCase):
             self.assertTrue(verify_ybox_state(docker_cmd, cnt_name, expected_states=[],
                                               exit_on_error=False))
             proc_run([docker_cmd, "container", "rm", cnt_name])
+            self.assertFalse(verify_ybox_state(docker_cmd, cnt_name, expected_states=[],
+                                               exit_on_error=False))
+            # check error and the messages on stdout
+            str_io = io.StringIO()
+            with redirect_stdout(str_io):
+                self.assertRaises(SystemExit, verify_ybox_state, docker_cmd, cnt_name,
+                                  expected_states=[])
+            self.assertTrue(f"No ybox container named '{cnt_name}' found" in str_io.getvalue())
+            str_io.truncate(0)
+            with redirect_stdout(str_io):
+                self.assertRaises(SystemExit, verify_ybox_state, docker_cmd, cnt_name,
+                                  expected_states=[], cnt_state_msg=" running or stopped")
+            self.assertTrue(f"No running or stopped ybox container named '{cnt_name}' found" in
+                            str_io.getvalue())
+
             # check failure with non-primary label
             proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, "--label",
                       YboxLabel.CONTAINER_BASE.value, self._TEST_IMAGE, "/bin/sh", "-c", sh_cmd])
             self.assertFalse(verify_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
                                                exit_on_error=False))
+            self.assertFalse(verify_ybox_state(docker_cmd, cnt_name, expected_states=[],
+                                               exit_on_error=False))
             self.assertRaises(SystemExit, verify_ybox_state, docker_cmd, cnt_name,
-                              expected_states=["running"])
+                              expected_states=[])
         finally:
             proc_run([docker_cmd, "container", "stop", cnt_name])
             proc_run([docker_cmd, "container", "rm", cnt_name], stderr=subprocess.DEVNULL)

@@ -14,7 +14,7 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    verify_ybox_state(docker_cmd, container_name, ["exited", "stopped"], error_msg=" stopped ")
+    verify_ybox_state(docker_cmd, container_name, ["exited", "stopped"], cnt_state_msg=" stopped")
 
     print_color(f"Restarting ybox container '{container_name}'", fg=fgcolor.cyan)
     run_command([docker_cmd, "container", "start", container_name], error_msg="container start")
