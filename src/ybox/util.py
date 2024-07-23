@@ -136,7 +136,9 @@ def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
     check_result = subprocess.run(
         [docker_cmd, "exec", container_name, "/bin/bash", "-c", check_cmd.format(package=package)],
         check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    return check_result.returncode, check_result.stdout.decode("utf-8").strip()
+    output = check_result.stdout.decode("utf-8").splitlines()
+    first_line = output[0] if len(output) > 0 else ""
+    return check_result.returncode, first_line
 
 
 def select_item_from_menu(items: list[str]) -> Optional[str]:

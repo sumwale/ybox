@@ -292,7 +292,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
         return []
     # skip on errors below and do not fail the installation
     package_files = run_command(
-        [docker_cmd, "exec", conf.box_name, "/bin/bash", "-c", f"{list_cmd} {package}"],
+        [docker_cmd, "exec", conf.box_name, "/bin/bash", "-c", list_cmd.format(package=package)],
         capture_output=True, exit_on_error=False, error_msg=f"listing files of '{package}'")
     if isinstance(package_files, int):
         return []

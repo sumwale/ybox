@@ -81,10 +81,9 @@ def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
     """
     package = str(args.package)
     list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
-    pager = pkgmgr[PkgMgr.PAGER.value]
     docker_args = [docker_cmd, "exec"]
     if sys.stdout.isatty():  # don't act as a terminal if it is being redirected
         docker_args.append("-it")
-    docker_args.extend([conf.box_name, "/bin/bash", "-c", f"{list_cmd} {package} | {pager}"])
+    docker_args.extend([conf.box_name, "/bin/bash", "-c", list_cmd.format(package=package)])
     return int(run_command(docker_args, exit_on_error=False,
                            error_msg=f"listing files of '{package}'"))
