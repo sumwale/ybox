@@ -60,3 +60,31 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
         docker_args.append("-it")
     docker_args.extend([conf.box_name, "/bin/bash", "-c", list_cmd])
     return int(run_command(docker_args, exit_on_error=False, error_msg="listing packages"))
+
+
+# noinspection PyUnusedLocal
+def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
+               conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
+               state: YboxStateManagement) -> int:
+    # pylint: disable=unused-argument
+    """
+    List the files of a package installed in a container including those not managed by `ybox-pkg`.
+
+    :param args: arguments having `package` and all other attributes passed by the user
+    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
+    :param docker_cmd: the docker/podman executable to use
+    :param conf: the `StaticConfiguration` of the container
+    :param runtime_conf: the `RuntimeConfiguration` of the container
+    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+
+    :return: integer exit status of install command where 0 represents success
+    """
+    package = str(args.package)
+    list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
+    pager = pkgmgr[PkgMgr.PAGER.value]
+    docker_args = [docker_cmd, "exec"]
+    if sys.stdout.isatty():  # don't act as a terminal if it is being redirected
+        docker_args.append("-it")
+    docker_args.extend([conf.box_name, "/bin/bash", "-c", f"{list_cmd} {package} | {pager}"])
+    return int(run_command(docker_args, exit_on_error=False,
+                           error_msg=f"listing files of '{package}'"))

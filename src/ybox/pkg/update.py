@@ -12,7 +12,7 @@ from ybox.state import RuntimeConfiguration, YboxStateManagement
 
 
 # TODO: updating packages can lead to system libraries among others getting updated. At the very
-#       least, the container needs to be restarted thereafter. All other containers on the same
+#       least, the container may need to be restarted thereafter. All other containers on the same
 #       shared root should also be restarted which can be an issue for the user. This is also
 #       a problem when creating a new container on the same shared root since that too does update.
 #       The biggest problem can be that even a new package install can end up updating shared libs.

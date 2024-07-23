@@ -32,7 +32,7 @@ def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
 
     :return: integer exit status of uninstall command where 0 represents success
     """
-    quiet_flag = pkgmgr[PkgMgr.SEARCH_QUIET_FLAG.value] if args.quiet else ""
+    quiet_flag = pkgmgr[PkgMgr.QUIET_DETAILS_FLAG.value] if args.quiet else ""
     official = pkgmgr[PkgMgr.SEARCH_OFFICIAL_FLAG.value] if args.official else ""
     word_start = word_end = ""
     if args.word:

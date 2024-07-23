@@ -8,8 +8,10 @@ import sys
 from ybox.cmd import YboxLabel, get_docker_command, run_command, verify_ybox_state
 from ybox.config import StaticConfiguration
 from ybox.env import Environ
+from ybox.pkg.clean import clean_cache
+from ybox.pkg.info import info_packages
 from ybox.pkg.inst import install_package
-from ybox.pkg.list import list_packages
+from ybox.pkg.list import list_files, list_packages
 from ybox.pkg.search import search_packages
 from ybox.pkg.uninst import uninstall_package
 from ybox.pkg.update import update_package
@@ -80,8 +82,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                                                          "optionally its dependencies"))
     add_update(add_subparser(operations, "update", "update some or all packages"))
     add_list(add_subparser(operations, "list", "list installed packages"))
+    add_list_files(add_subparser(operations, "list-files", "list files of an installed package"))
     add_search(add_subparser(operations, "search",
                              "search repository for packages with matching string"))
+    add_info(add_subparser(operations, "info", "show detailed information about given package(s)"))
+    add_clean(add_subparser(operations, "clean", "clean package cache and intermediate files"))
     # parser.add_argument("operation", type=str,
     #                    choices=("install", "uninstall", "update", "list", "info", "search",
     #                             "mark", "clean", "repair"),
@@ -181,6 +186,11 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
     subparser.set_defaults(func=list_packages)
 
 
+def add_list_files(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("package", type=str, help="list files of this package")
+    subparser.set_defaults(func=list_files)
+
+
 def add_search(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-w", "--word", action="store_true",
                            help="match given search terms as full words")
@@ -191,3 +201,15 @@ def add_search(subparser: argparse.ArgumentParser) -> None:
                                 "(e.g. skip AUR repository on Arch Linux)")
     subparser.add_argument("search", nargs="+", help="one or more search terms")
     subparser.set_defaults(func=search_packages)
+
+
+def add_info(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-a", "--all", action="store_true",
+                           help="search for package information in the repositories, "
+                                "otherwise search only among the installed packages")
+    subparser.add_argument("packages", nargs="+", help="one or more packages")
+    subparser.set_defaults(func=info_packages)
+
+
+def add_clean(subparser: argparse.ArgumentParser) -> None:
+    subparser.set_defaults(func=clean_cache)

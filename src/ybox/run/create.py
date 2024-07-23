@@ -627,7 +627,7 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
     install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="")
-    cleanup_cmd = pkgmgr[PkgMgr.CLEANUP.value]
+    clean_cmd = pkgmgr[PkgMgr.CLEAN_QUIET.value]
     if not install_cmd:
         print_color("Skipping app installation since no 'pkgmgr.install' has "
                     "been defined in distro.ini or is empty",
@@ -636,7 +636,7 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
     # write pkgmgr.conf for entrypoint.sh
     with open(f"{conf.scripts_dir}/pkgmgr.conf", "w", encoding="utf-8") as pkg_fd:
         pkg_fd.write(f"PKGMGR_INSTALL='{install_cmd}'\n")
-        pkg_fd.write(f"PKGMGR_CLEANUP='{cleanup_cmd}'\n")
+        pkg_fd.write(f"PKGMGR_CLEAN='{clean_cmd}'\n")
     apps_with_deps = defaultdict[str, list[str]](list[str])
 
     def capture_dep(match: re.Match) -> str:

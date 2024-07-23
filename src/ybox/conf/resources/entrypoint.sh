@@ -66,8 +66,8 @@ function link_config_files() {
 function install_apps() {
   # source PKGMGR_* variables from the configuration file created by 'ybox-create'
   source "$pkgmgr_conf"
-  if [ -z "$PKGMGR_INSTALL" -o -z "$PKGMGR_CLEANUP" ]; then
-    echo_color "$fg_red" "$pkgmgr_conf should define PKGMGR_INSTALL and PKGMGR_CLEANUP" >> $status_file
+  if [ -z "$PKGMGR_INSTALL" -o -z "$PKGMGR_CLEAN" ]; then
+    echo_color "$fg_red" "$pkgmgr_conf should define PKGMGR_INSTALL and PKGMGR_CLEAN" >> $status_file
     exit 1
   fi
   # install packages line by line
@@ -77,7 +77,7 @@ function install_apps() {
     echo_color "$fg_green" "Done." >> $status_file
   done < "$app_list"
   echo_color "$fg_green" "Cleaning up." >> $status_file
-  eval $PKGMGR_CLEANUP
+  eval $PKGMGR_CLEAN
 }
 
 # invoke the startup apps as listed in the container configuration file

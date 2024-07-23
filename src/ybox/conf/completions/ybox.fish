@@ -57,10 +57,13 @@ complete -c ybox-cmd -s d -l docker-path -d "path of docker/podman if not in /us
 complete -f -c ybox-cmd -n "not __fish_seen_subcommand_from (__fish_ybox_complete_containers)" -a "(__fish_ybox_complete_containers)"
 
 
-set -l pkg_commands install uninstall update list info search mark clean repair
+set -l pkg_commands install uninstall update list list-files info search mark clean repair
 
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a install -d "install a package with dependencies"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a uninstall -d "uninstall a package and optionally its dependencies"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a update -d "update some or all packages"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a list -d "list installed packages"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a list-files -d "list files of an installed package"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a search -d "search repositories"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a info -d "show detailed information of package(s)"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a clean -d "clean package cache"
