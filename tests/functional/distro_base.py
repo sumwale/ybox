@@ -93,7 +93,8 @@ class DistributionBase(unittest.TestCase):
                       ignore_errors=True)
 
     def for_all_distros(self, test_func: Callable[[], None]) -> None:
-        for self._helper in self._helpers:
+        for helper in self._helpers:
+            self._helper = helper
             try:
                 test_func()
             finally:

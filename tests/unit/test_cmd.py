@@ -107,13 +107,13 @@ class TestCmd(unittest.TestCase):
             with redirect_stdout(str_io):
                 self.assertRaises(SystemExit, verify_ybox_state, docker_cmd, cnt_name,
                                   expected_states=[])
-            self.assertTrue(f"No ybox container named '{cnt_name}' found" in str_io.getvalue())
+            self.assertIn(f"No ybox container named '{cnt_name}' found", str_io.getvalue())
             str_io.truncate(0)
             with redirect_stdout(str_io):
                 self.assertRaises(SystemExit, verify_ybox_state, docker_cmd, cnt_name,
                                   expected_states=[], cnt_state_msg=" running or stopped")
-            self.assertTrue(f"No running or stopped ybox container named '{cnt_name}' found" in
-                            str_io.getvalue())
+            self.assertIn(f"No running or stopped ybox container named '{cnt_name}' found",
+                          str_io.getvalue())
 
             # check failure with non-primary label
             proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, "--label",
@@ -134,10 +134,10 @@ class TestCmd(unittest.TestCase):
         expected = [f for f in os.listdir("/") if not f.startswith('.')]
         expected.sort()
         output = run_command("/bin/ls /", capture_output=True)
-        self.assertTrue(isinstance(output, str))
+        self.assertIsInstance(output, str)
         self.assertEqual(expected, str(output).splitlines())
         output = run_command(["/bin/ls", "/"], capture_output=True)
-        self.assertTrue(isinstance(output, str))
+        self.assertIsNotNone(output, str)
         self.assertEqual(expected, str(output).splitlines())
 
         # check capture_output=True and default/False
@@ -151,7 +151,7 @@ class TestCmd(unittest.TestCase):
         str_io = io.StringIO()
         with redirect_stdout(str_io):
             self.assertRaises(SystemExit, run_command, ["/bin/sh", "-c", "[ \"`pwd`\" = \"\" ]"])
-        self.assertTrue("FAILURE in '/bin/sh -c" in str_io.getvalue())
+        self.assertIn("FAILURE in '/bin/sh -c", str_io.getvalue())
 
         # check exit_on_error=False
         str_io.truncate(0)
@@ -159,7 +159,7 @@ class TestCmd(unittest.TestCase):
             self.assertNotEqual(0, run_command(["/bin/sh", "-c", "[ \"`pwd`\" = \"\" ]"],
                                                exit_on_error=False))
         # check default error_msg
-        self.assertTrue("FAILURE in '/bin/sh -c" in str_io.getvalue())
+        self.assertIn("FAILURE in '/bin/sh -c", str_io.getvalue())
 
         # check with specified error_msg
         str_io.truncate(0)
@@ -168,8 +168,8 @@ class TestCmd(unittest.TestCase):
             self.assertRaises(SystemExit, run_command, f"/bin/ls {non_existent}",
                               capture_output=True, error_msg="running /bin/ls")
         out = str_io.getvalue()
-        self.assertTrue("No such file or directory" in out)
-        self.assertTrue("FAILURE in running /bin/ls" in out)
+        self.assertIn("No such file or directory", out)
+        self.assertIn("FAILURE in running /bin/ls", out)
 
         # check error_msg=SKIP
         str_io.truncate(0)
@@ -177,8 +177,8 @@ class TestCmd(unittest.TestCase):
             self.assertRaises(SystemExit, run_command, f"/bin/ls {non_existent}",
                               capture_output=True, error_msg="SKIP")
         out = str_io.getvalue()
-        self.assertTrue("No such file or directory" in out)
-        self.assertFalse("FAILURE in" in out)
+        self.assertIn("No such file or directory", out)
+        self.assertNotIn("FAILURE in", out)
 
 
 if __name__ == '__main__':

@@ -5,5 +5,9 @@ types-tabulate
 ijson
 pyright
 flake8
+flake8-assertive
+flake8-bugbear
+flake8-builtins
+flake8-comprehensions
 pylint
 tox
