@@ -1,0 +1,4 @@
+[flake8]
+exclude = __pycache__,src/ybox/conf,src/ybox/schema
+max_line_length = 100
+ignore = W504

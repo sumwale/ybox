@@ -10,6 +10,7 @@ if [ "$1" = "-l" ]; then
 fi
 
 PYRIGHT_FAILED=
+FLAKE8_FAILED=
 PYLINT_FAILED=
 
 echo -------------------------------------------
@@ -19,6 +20,15 @@ pyright
 exit_code=$?
 if [ $exit_code -ne 0 ]; then
   PYRIGHT_FAILED=1
+fi
+
+echo -------------------------------------------
+echo Output of flake8
+echo -------------------------------------------
+flake8 src tests
+exit_code=$?
+if [ $exit_code -ne 0 ]; then
+  FLAKE8_FAILED=1
 fi
 
 if [ -n "$PYLINT" ]; then
@@ -57,6 +67,11 @@ exit_code=0
 if [ -n "$PYRIGHT_FAILED" ]; then
   echo
   echo -e '\033[31mFailure(s) in pyright run -- see the output above.'
+  exit_code=1
+fi
+if [ -n "$FLAKE8_FAILED" ]; then
+  echo
+  echo -e '\033[31mFailure(s) in flake8 run -- see the output above.'
   exit_code=1
 fi
 if [ -n "$PYLINT_FAILED" ]; then
