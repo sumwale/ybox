@@ -120,3 +120,8 @@ class Environ:
     def user_man_dir(self) -> str:
         """User's local man pages directory which should be in the path returned by `manpath`"""
         return self._user_man_dir
+
+
+def resolve_inc_path(inc: str, src: PathName) -> PathName:
+    """resolve `include` path specified relative to a given source, or as an absolute string"""
+    return Path(inc) if os.path.isabs(inc) else src.parent.joinpath(inc)  # type: ignore

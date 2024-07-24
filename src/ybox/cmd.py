@@ -156,7 +156,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
     return result.stdout.decode("utf-8") if capture_output else result.returncode
 
 
-def _print_subprocess_output(result: subprocess.CompletedProcess) -> None:
+def _print_subprocess_output(result: subprocess.CompletedProcess[bytes]) -> None:
     """print completed subprocess output in color (orange for standard output and purple
        for standard error)"""
     if result.stdout:

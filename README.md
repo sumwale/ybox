@@ -424,6 +424,6 @@ all supported python versions (i.e. from 3.9 onwards).
 
 There is also a simple script `run-tests.sh` in the top-level directory which can be used
 to run just the tests with the current python version. This will skip other stuff like
-`mypy`, for example, which is invoked by `tox`.
+`pyright`, for example, which is invoked by `tox`.
 
 See `tox` and `unittest` documentation for more details like running individual tests.

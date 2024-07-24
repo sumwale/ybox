@@ -9,17 +9,31 @@ if [ "$1" = "-l" ]; then
   PYLINT=1
 fi
 
-PYRIGHT_FAILED=
+MYPY_FAILED=
 PYLINT_FAILED=
 
-echo -------------------------------------------
-echo Output of pyright
-echo -------------------------------------------
-pyright
-exit_code=$?
-if [ $exit_code -ne 0 ]; then
-  PYRIGHT_FAILED=1
-fi
+export MYPYPATH="$SCRIPT_DIR/src"
+for f in src/ybox/*.py src/ybox/pkg/*.py src/ybox/run/*.py; do
+  echo -------------------------------------------
+  echo Output of mypy on $f
+  echo -------------------------------------------
+  mypy --check-untyped-defs $f
+  exit_code=$?
+  if [ $exit_code -ne 0 ]; then
+    MYPY_FAILED=1
+  fi
+done
+for f in tests/**/*.py src/ybox/conf/distros/*/*.py; do
+  echo -------------------------------------------
+  echo Output of mypy on $f
+  echo -------------------------------------------
+  ( cd "$(dirname "$f")" && mypy --check-untyped-defs "$(basename "$f")" )
+  exit_code=$?
+  if [ $exit_code -ne 0 ]; then
+    MYPY_FAILED=1
+  fi
+done
+
 
 if [ -n "$PYLINT" ]; then
   export PYTHONPATH=./src
@@ -54,9 +68,9 @@ if [ -n "$PYLINT" ]; then
 fi
 
 exit_code=0
-if [ -n "$PYRIGHT_FAILED" ]; then
+if [ -n "$MYPY_FAILED" ]; then
   echo
-  echo -e '\033[31mFailure(s) in pyright run -- see the output above.'
+  echo -e '\033[31mFailure(s) in mypy run -- see the output above.'
   exit_code=1
 fi
 if [ -n "$PYLINT_FAILED" ]; then

@@ -426,7 +426,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
                 os.makedirs(val, exist_ok=True)
                 add_mount_option(args, val, env.target_home)
         elif key == "shared_root":
-            shared_root = "" if val is None else val
+            shared_root = val if val else ""
         elif key == "config_hardlinks":
             if val:
                 config_hardlinks = _get_boolean(val)
@@ -639,7 +639,7 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
         pkg_fd.write(f"PKGMGR_CLEAN='{clean_cmd}'\n")
     apps_with_deps = defaultdict[str, list[str]](list[str])
 
-    def capture_dep(match: re.Match) -> str:
+    def capture_dep(match: re.Match[str]) -> str:
         dep = match.group(1)
         apps_with_deps[match.group(2)].append(dep)
         return dep
@@ -684,9 +684,10 @@ def copy_file(src: PathName, dest: str, permissions: Optional[int] = None) -> No
     if permissions is not None:
         os.chmod(dest, permissions)
     elif hasattr(src, "stat"):  # copy the permissions
+        # pyright does not check hasattr, hence the "type: ignore" instead of artificial TypeGuards
         if hasattr(src, "resolve"):
-            src = src.resolve()
-        perms = stat.S_IMODE(src.stat().st_mode)
+            src = src.resolve()  # type: ignore
+        perms = stat.S_IMODE(src.stat().st_mode)  # type: ignore
         os.chmod(dest, perms)
 
 

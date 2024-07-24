@@ -4,6 +4,7 @@ Package management utility for ybox containers.
 
 import argparse
 import sys
+from typing import cast
 
 from ybox.cmd import YboxLabel, get_docker_command, run_command, verify_ybox_state
 from ybox.config import StaticConfiguration
@@ -95,10 +96,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-# noinspection PyProtectedMember
-def add_subparser(operations: argparse._SubParsersAction, name: str,
-                  hlp: str) -> argparse.ArgumentParser:
-    subparser = operations.add_parser(name, help=hlp)
+def add_subparser(operations, name: str, hlp: str) -> argparse.ArgumentParser:  # type: ignore
+    subparser = cast(argparse.ArgumentParser,
+                     operations.add_parser(name, help=hlp))  # type: ignore
     add_common_args(subparser)
     return subparser
 

@@ -6,12 +6,11 @@ import os
 import re
 import subprocess
 from configparser import BasicInterpolation, ConfigParser, Interpolation
-from pathlib import Path
-from typing import Optional, Tuple
+from typing import Iterable, Optional, Tuple
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from .env import Environ, PathName
+from .env import Environ, PathName, resolve_inc_path
 from .print import print_warn
 
 
@@ -47,7 +46,7 @@ class EnvInterpolation(BasicInterpolation):
 
     # override before_read rather than before_get because expanded vars are needed when writing
     # into the state.db database too
-    def before_read(self, parser, section: str, option: str, value: str):
+    def before_read(self, parser, section: str, option: str, value: str):  # type: ignore
         """Override before_read to substitute environment variables and ${NOW...} pattern.
            This method is overridden rather than before_get because expanded variables are
            also required when writing the configuration into the state.db database."""
@@ -88,8 +87,7 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
     for include in includes.split(","):
         if not (include := include.strip()):
             continue
-        inc_file = Path(include) if os.path.isabs(include) \
-            else conf_file.parent.joinpath(include)  # type: ignore
+        inc_file = resolve_inc_path(include, conf_file)
         inc_conf = config_reader(inc_file, interpolation, top_level)
         for section in inc_conf.sections():
             if not config.has_section(section):
@@ -103,7 +101,7 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
     return config
 
 
-def ini_file_reader(fd, interpolation: Optional[Interpolation],
+def ini_file_reader(fd: Iterable[str], interpolation: Optional[Interpolation],
                     case_sensitive: bool = True) -> ConfigParser:
     """
     Read an INI file from a given file handle. It applies some basic rules that are used
@@ -152,7 +150,7 @@ def select_item_from_menu(items: list[str]) -> Optional[str]:
     terminal_menu = TerminalMenu(items,
                                  status_bar="Press <Enter> to select, <Esc> to exit")
     selection = terminal_menu.show()
-    if selection is not None:
+    if isinstance(selection, int):
         return items[int(selection)]
     print_warn("Aborted selection")
     return None

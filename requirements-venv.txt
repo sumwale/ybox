@@ -3,6 +3,6 @@ simple-term-menu
 tabulate
 types-tabulate
 ijson
-mypy
-pylint
+pyright
+flake8
 tox

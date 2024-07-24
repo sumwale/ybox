@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import unittest
 from importlib.resources import files
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 from uuid import uuid4
 
 from ybox.cmd import get_docker_command
@@ -92,7 +92,7 @@ class DistributionBase(unittest.TestCase):
         shutil.rmtree(f"{self._home}/.local/share/ybox/{self.box_name}",
                       ignore_errors=True)
 
-    def for_all_distros(self, test_func) -> None:
+    def for_all_distros(self, test_func: Callable[[], None]) -> None:
         for self._helper in self._helpers:
             try:
                 test_func()

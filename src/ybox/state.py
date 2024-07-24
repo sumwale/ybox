@@ -4,10 +4,8 @@ installed on each container explicitly.
 """
 
 import json
-import os
 import re
 import sqlite3
-import typing
 from configparser import ConfigParser
 from contextlib import closing
 from dataclasses import dataclass
@@ -15,13 +13,13 @@ from enum import Enum, IntFlag, auto
 from importlib.resources import files
 from io import StringIO
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Iterable, Optional, Tuple, Union
 from uuid import uuid4
 
 from packaging.version import parse as parse_version
 
 import ybox
-from .env import Environ, PathName
+from .env import Environ, PathName, resolve_inc_path
 from .print import print_warn
 from .util import ini_file_reader
 
@@ -246,9 +244,7 @@ class YboxStateManagement:
             with file.open("r", encoding="utf-8") as sql_fd:
                 while sql := sql_fd.readline():
                     if match := YboxStateManagement._SOURCE_SQLCMD_RE.fullmatch(sql):
-                        inc = match.group(1)
-                        inc_file = Path(inc) if os.path.isabs(inc) \
-                            else file.parent.joinpath(inc)  # type: ignore
+                        inc_file = resolve_inc_path(match.group(1), file)
                         process_source(inc_file, output_lines)
                     else:
                         output_lines.append(sql)
@@ -605,7 +601,7 @@ class YboxStateManagement:
             )""")
 
     @staticmethod
-    def _extract_local_copies(rows: list, lc_idx: int = 0) -> list[str]:
+    def _extract_local_copies(rows: list[str], lc_idx: int = 0) -> list[str]:
         """
         Get a flattened list of local wrapper files from multiple rows having `local_copies`.
 
@@ -657,7 +653,7 @@ class YboxStateManagement:
                 f"SELECT name FROM packages WHERE {predicate} ORDER BY name ASC", args)
             return [str(row[0]) for row in cursor.fetchall()]
 
-    def check_packages(self, container_name: str, packages: typing.Iterable[str]) -> list[str]:
+    def check_packages(self, container_name: str, packages: Iterable[str]) -> list[str]:
         """
         Check if given set of packages are in the state database, and return the list of
         the existing ones.
@@ -685,7 +681,7 @@ class YboxStateManagement:
     def __enter__(self):
         return self
 
-    def __exit__(self, ex_type, ex_value, ex_traceback):
+    def __exit__(self, ex_type, ex_value, ex_traceback):  # type: ignore
         try:
             if ex_type:
                 self._conn.rollback()

@@ -27,7 +27,7 @@ class TestEnv(unittest.TestCase):
             os.environ["HOME"] = new_home
             return new_home
 
-        def __exit__(self, ex_type, ex_val, ex_tb) -> None:
+        def __exit__(self, ex_type, ex_val, ex_tb) -> None:  # type: ignore
             os.environ["HOME"] = self._old_home
 
     def test_home_dirs(self) -> None:

@@ -71,7 +71,7 @@ class FileLock:
             if not success:
                 self._lock_fd.close()
 
-    def __exit__(self, ex_type, ex_value, ex_traceback):
+    def __exit__(self, ex_type, ex_value, ex_traceback):  # type: ignore
         if self._lock_fd:
             fcntl.lockf(self._lock_fd, fcntl.LOCK_UN)
             self._lock_fd.close()

@@ -139,7 +139,7 @@ def _filter_nvidia_dirs(dirs: set[str], patterns: list[str]) -> list[str]:
 
 
 def _prepare_mount_dirs(dirs: list[str], args: list[str], mount_dir_prefix: str) -> list[str]:
-    mount_dirs = []
+    mount_dirs: list[str] = []
     for idx, d in enumerate(dirs):
         mount_dir = f"{mount_dir_prefix}{idx}"
         add_mount_option(args, d, mount_dir, "ro")
@@ -151,7 +151,7 @@ def _create_nvidia_setup(args: list[str], mount_lib_dirs: list[str]) -> list[str
     target_dir = Consts.nvidia_target_base_dir()
     setup_script = ["# this script should be run using bash", "", "# setup libraries", "",
                     f"mkdir -p {target_dir} && chmod 0755 {target_dir}"]
-    ld_lib_path = []
+    ld_lib_path: list[str] = []
     for idx, mount_lib_dir in enumerate(mount_lib_dirs):
         target_lib_dir = f"{target_dir}/lib{idx}"
         setup_script.append(f"rm -rf {target_lib_dir}")

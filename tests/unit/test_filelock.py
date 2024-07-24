@@ -18,7 +18,7 @@ class TestFileLock(unittest.TestCase):
     # keep unique so that parallel runs in tox/nox will work
     _lock_file = f"test_locking-{uuid4()}.lck"
 
-    def _run_in_process(self, func, args=(), expected_exitcode: int = 0) -> None:
+    def _run_in_process(self, func, args=(), expected_exitcode: int = 0) -> None:  # type: ignore
         """
         Run a given function with arguments in a separate process.
 
@@ -26,7 +26,7 @@ class TestFileLock(unittest.TestCase):
         :param args: arguments to the function as an `Iterable` (default is empty tuple)
         :param expected_exitcode: the expected exit code of the process (default is 0)
         """
-        proc = Process(target=func, args=args)
+        proc = Process(target=func, args=args)  # type: ignore
         proc.start()
         proc.join()
         self.assertEqual(expected_exitcode, proc.exitcode)

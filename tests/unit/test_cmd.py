@@ -8,15 +8,17 @@ import time
 import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta
-from typing import Tuple
+from typing import Any, Tuple, cast
 from uuid import uuid4
 
 from ybox.cmd import YboxLabel, get_docker_command, run_command, verify_ybox_state
 
 
-def proc_run(cmd: list[str], capture_output=False, **kwargs) -> subprocess.CompletedProcess[bytes]:
+def proc_run(cmd: list[str], capture_output: bool = False,
+             **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
     """shortcut to invoke `subprocess.run`"""
-    return subprocess.run(cmd, capture_output=capture_output, check=False, **kwargs)
+    return cast(subprocess.CompletedProcess[bytes],
+                subprocess.run(cmd, capture_output=capture_output, check=False, **kwargs))
 
 
 class TestCmd(unittest.TestCase):

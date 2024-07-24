@@ -263,7 +263,7 @@ def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list
     terminal_menu = TerminalMenu(menu_options, multi_select=True, show_multi_select_hint=True,
                                  multi_select_select_on_accept=False, multi_select_empty_ok=True)
     selection = terminal_menu.show()
-    return [deps[index][0] for index in selection] if selection else []
+    return [deps[index][0] for index in selection] if isinstance(selection, tuple) else []
 
 
 def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str, str],
@@ -356,7 +356,7 @@ def _get_parsed_box_conf(box_conf: Union[str, ConfigParser]) -> Optional[ConfigP
         return ini_file_reader(box_conf_fd, interpolation=None, case_sensitive=False)
 
 
-def _replace_flags(match: re.Match, flags: str, program: str, args: str) -> str:
+def _replace_flags(match: re.Match[str], flags: str, program: str, args: str) -> str:
     """
     `_FLAGS_RE.sub` callback to replace `!p` in a value of `[app_flags]` section with given
     `program` and `!a` with `args` while honoring `!!` escape for literal `!`.
@@ -401,7 +401,7 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
                    exit_on_error=False, error_msg=f"copying of file from '{package}'") != 0:
         return
 
-    def replace_executable(match: re.Match) -> str:
+    def replace_executable(match: re.Match[str]) -> str:
         program = match.group(3)
         args = match.group(4)
         # check for additional flags to be added
