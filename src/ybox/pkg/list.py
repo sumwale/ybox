@@ -1,5 +1,5 @@
 """
-List packages on an active ybox container.
+List packages or package files on an active ybox container.
 """
 
 import argparse
@@ -30,7 +30,7 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of the `YboxStateManagement` class having the state of all yboxes
 
-    :return: integer exit status of install command where 0 represents success
+    :return: integer exit status of list packages command where 0 represents success
     """
     plain_sep = f"'{args.plain_separator}'" if args.plain_separator else "''"
     if args.os_pkgs:
@@ -52,6 +52,9 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
         packages = " ".join(state.get_packages(conf.box_name, dependency_type=dependency_type))
         if not packages:
             return 0
+        # TODO: optional dependencies from state database should also be shown since those
+        # can be different from the package manager; the main formatting code of list_fmt*.py
+        # modules should be moved to the common portion rather than being distribution specific
         list_cmd = pkgmgr[PkgMgr.LIST_ALL_LONG.value] if args.verbose else pkgmgr[
             PkgMgr.LIST_ALL.value]
         list_cmd = list_cmd.format(packages=packages, plain_separator=plain_sep)
@@ -77,7 +80,7 @@ def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of the `YboxStateManagement` class having the state of all yboxes
 
-    :return: integer exit status of install command where 0 represents success
+    :return: integer exit status of list package files command where 0 represents success
     """
     package = str(args.package)
     list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]

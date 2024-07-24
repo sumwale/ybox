@@ -18,7 +18,8 @@ from uuid import uuid4
 
 from packaging.version import parse as parse_version
 
-import ybox
+from ybox import __version__
+
 from .env import Environ, PathName, resolve_inc_path
 from .print import print_warn
 from .util import ini_file_reader
@@ -183,7 +184,7 @@ class YboxStateManagement:
         """
         schema_pkg = files("ybox").joinpath("schema")
         ver_sep = ":"
-        new_version = parse_version(ybox.__version__)
+        new_version = parse_version(__version__)
         # full initialization if empty database, else migrate and update the version if required
         # ('containers' table exists in all versions)
         if self._table_exists("containers", cursor):
@@ -446,7 +447,8 @@ class YboxStateManagement:
 
     def register_package(self, container_name: str, package: str, local_copies: list[str],
                          copy_type: CopyType, app_flags: dict[str, str], shared_root: str,
-                         dep_type: Optional[DependencyType], dep_of: str) -> None:
+                         dep_type: Optional[DependencyType], dep_of: str,
+                         skip_if_exists: bool = False) -> None:
         """
         Register a package as being owned by a container.
 
@@ -462,6 +464,8 @@ class YboxStateManagement:
         :param dep_type: the `DependencyType` for the package, or None if not a dependency
         :param dep_of: if `dep_type` is not None, then this is the package that has this one
                        as a dependency of that type
+        :param skip_if_exists: if true them skip if package is already registered else replace
+                               with the given information
         """
         with closing(cursor := self._conn.cursor()):
             self._begin_transaction(cursor)
@@ -481,7 +485,8 @@ class YboxStateManagement:
                     cursor.execute("DELETE from package_deps WHERE name = ? AND "
                                    f"container IN ({in_str})", args)
                     self._clean_destroyed_containers(cursor)
-            cursor.execute("INSERT OR REPLACE INTO packages VALUES (?, ?, ?, ?, ?)",
+            insert_clause = "INSERT OR IGNORE INTO" if skip_if_exists else "INSERT OR REPLACE INTO"
+            cursor.execute(f"{insert_clause} packages VALUES (?, ?, ?, ?, ?)",
                            (package, container_name, json.dumps(local_copies), copy_type.value,
                             json.dumps(app_flags)))
             if dep_type:
@@ -591,6 +596,24 @@ class YboxStateManagement:
         # delete all the files created locally for the container
         self._remove_local_copies(local_copies)
         return orphans
+
+    def unregister_dependency(self, container_name: str, package: str, dependency: str) -> bool:
+        """
+        Unregister a dependency of a package (or those matching a pattern) for a given container.
+
+        :param container_name: name of the container
+        :param package: the package or LIKE pattern whose dependency is to be unregistered
+        :param dependency: the dependency to be unregistered
+        :return: true if the dependency was found and removed and false otherwise
+        """
+        with closing(cursor := self._conn.cursor()):
+            self._begin_transaction(cursor)
+            cursor.execute(
+                "DELETE FROM package_deps WHERE dependency = ? AND container = ? AND name LIKE ?",
+                (dependency, container_name, package))
+            result = True if cursor.rowcount and cursor.rowcount > 0 else False
+            self._conn.commit()
+            return result
 
     @staticmethod
     def _clean_destroyed_containers(cursor: sqlite3.Cursor) -> None:

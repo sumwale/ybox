@@ -6,13 +6,15 @@ import argparse
 import sys
 from typing import cast
 
-from ybox.cmd import YboxLabel, get_docker_command, run_command, verify_ybox_state
+from ybox.cmd import (YboxLabel, get_docker_command, run_command,
+                      verify_ybox_state)
 from ybox.config import StaticConfiguration
 from ybox.env import Environ
 from ybox.pkg.clean import clean_cache
 from ybox.pkg.info import info_packages
 from ybox.pkg.inst import install_package
 from ybox.pkg.list import list_files, list_packages
+from ybox.pkg.mark import mark_package
 from ybox.pkg.search import search_packages
 from ybox.pkg.uninst import uninstall_package
 from ybox.pkg.update import update_package
@@ -89,10 +91,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "search repository for packages with matching string"))
     add_info(add_subparser(operations, "info", "show detailed information about given package(s)"))
     add_clean(add_subparser(operations, "clean", "clean package cache and intermediate files"))
-    # parser.add_argument("operation", type=str,
-    #                    choices=("install", "uninstall", "update", "list", "info", "search",
-    #                             "mark", "clean", "repair"),
-    #                    help="the package operation to perform")
+    add_mark(add_subparser(operations, "mark",
+                           "mark a package as a dependency or an explicitly installed package"))
+    # add_repair(add_subparser(operations, "repair",
+    #                         "try to repair state after a failed operation or an interrupt/kill"))
     return parser.parse_args(argv)
 
 
@@ -214,3 +216,24 @@ def add_info(subparser: argparse.ArgumentParser) -> None:
 
 def add_clean(subparser: argparse.ArgumentParser) -> None:
     subparser.set_defaults(func=clean_cache)
+
+
+def add_mark(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-e", "--explicit", action="store_true",
+                           help="mark the package as explicitly installed; the package will "
+                                "henceforth be managed by `ybox-pkg` if not already; "
+                                "exactly one of -e or -D option must be specified")
+    subparser.add_argument("-D", "--dependency-of", type=str,
+                           help="mark the package as a dependency of given package; both the "
+                                "packages will henceforth be managed by `ybox-pkg` if not "
+                                "already; exactly one of -e or -D option must be specified")
+    subparser.add_argument("package", type=str, help="the package to be marked")
+    subparser.set_defaults(func=mark_package)
+
+
+def add_repair(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-a", "--all", action="store_true",
+                           help="repair thoroughly by searching for active package operations "
+                                "and terminating them (after user confirmation if no -q option), "
+                                "removing any related dangling locks etc")
+    # subparser.set_defaults(func=repair_package_state)

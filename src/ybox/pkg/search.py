@@ -30,7 +30,7 @@ def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of the `YboxStateManagement` class having the state of all yboxes
 
-    :return: integer exit status of uninstall command where 0 represents success
+    :return: integer exit status of search command where 0 represents success
     """
     quiet_flag = pkgmgr[PkgMgr.QUIET_DETAILS_FLAG.value] if args.quiet else ""
     official = pkgmgr[PkgMgr.SEARCH_OFFICIAL_FLAG.value] if args.official else ""

@@ -25,7 +25,7 @@ def clean_cache(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of the `YboxStateManagement` class having the state of all yboxes
 
-    :return: integer exit status of uninstall command where 0 represents success
+    :return: integer exit status of clean command where 0 represents success
     """
     clean_cmd = pkgmgr[PkgMgr.CLEAN_QUIET.value] if args.quiet else pkgmgr[PkgMgr.CLEAN.value]
     return int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",

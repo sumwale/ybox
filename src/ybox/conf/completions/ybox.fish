@@ -67,3 +67,5 @@ complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a li
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a search -d "search repositories"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a info -d "show detailed information of package(s)"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a clean -d "clean package cache"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a mark -d "mark package as dependency or explicitly installed"
+# complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a repair -d "try to repair package state"

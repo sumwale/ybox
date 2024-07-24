@@ -30,6 +30,7 @@ class PkgMgr(str, Enum):
     UPDATE_ALL = "update_all"
     CLEAN = "clean"
     CLEAN_QUIET = "clean_quiet"
+    MARK_EXPLICIT = "mark_explicit"
     INFO = "info"
     INFO_ALL = "info_all"
     LIST = "list"

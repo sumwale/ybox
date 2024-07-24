@@ -17,7 +17,8 @@ from simple_term_menu import TerminalMenu  # type: ignore
 from ybox.cmd import PkgMgr, run_command
 from ybox.config import Consts, StaticConfiguration
 from ybox.print import print_info, print_notice, print_warn
-from ybox.state import CopyType, DependencyType, RuntimeConfiguration, YboxStateManagement
+from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
+                        YboxStateManagement)
 from ybox.util import check_installed_package, ini_file_reader
 
 # match both "Exec=" and "TryExec=" lines
