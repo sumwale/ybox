@@ -1,0 +1,22 @@
+{
+    "editor.rulers": [
+        100
+    ],
+    "editor.wordWrapColumn": 100,
+    "python.analysis.typeCheckingMode": "strict",
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "always",
+        "source.unusedImports": "always"
+    },
+    "autoDocstring.docstringFormat": "sphinx-notypes",
+    "python.testing.unittestArgs": [
+        "-v",
+        "-s",
+        "../tests",
+        "-p",
+        "test_*.py"
+    ],
+    "python.testing.cwd": "${workspaceFolder}/src",
+    "python.testing.pytestEnabled": false,
+    "python.testing.unittestEnabled": true
+}

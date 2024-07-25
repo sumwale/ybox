@@ -611,7 +611,7 @@ class YboxStateManagement:
             cursor.execute(
                 "DELETE FROM package_deps WHERE dependency = ? AND container = ? AND name LIKE ?",
                 (dependency, container_name, package))
-            result = True if cursor.rowcount and cursor.rowcount > 0 else False
+            result = bool(cursor.rowcount and cursor.rowcount > 0)
             self._conn.commit()
             return result
 

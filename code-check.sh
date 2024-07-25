@@ -32,7 +32,7 @@ if [ $exit_code -ne 0 ]; then
 fi
 
 if [ -n "$PYLINT" ]; then
-  export PYTHONPATH=./src
+  export PYTHONPATH=./src:./tests
   for f in src/ybox/*.py src/ybox/pkg/*.py tests/**/*.py; do
     echo -------------------------------------------
     echo -------------------------------------------

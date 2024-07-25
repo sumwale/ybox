@@ -30,7 +30,7 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
     """
     mark_explicit = bool(args.explicit)
     mark_dependency_of = str(args.dependency_of) if args.dependency_of else ""
-    if not (mark_explicit ^ bool(mark_dependency_of)):
+    if not mark_explicit ^ bool(mark_dependency_of):
         print_error("ybox-pkg mark: exactly one of -e or -D option must be specified "
                     f"(explicit={mark_explicit}, dependency-of={mark_dependency_of})")
         return 1
@@ -57,7 +57,6 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
                                dep_of=package, skip_if_exists=True)
         # the package may or may not be a dependency in the underlying packaging, so don't mark
         # at the package manager level which may cause the package to be orphaned and auto-removed
-        return 0
     else:
         # remove any dependency entries for this package to mark it as explicitly installed
         state.unregister_dependency(conf.box_name, "%", package)
@@ -66,3 +65,4 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
         return int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
                                 mark_cmd.format(package=package)], exit_on_error=False,
                                error_msg=f"marking '{package}' as explicitly installed"))
+    return 0

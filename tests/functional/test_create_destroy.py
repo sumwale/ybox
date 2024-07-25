@@ -5,9 +5,10 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from distro_base import DistributionBase
+from functional.distro_base import DistributionBase
+
 from ybox.cmd import PkgMgr
-from ybox.print import print_info, print_error
+from ybox.print import print_error, print_info
 from ybox.run.create import main_argv as ybox_create
 from ybox.run.destroy import main_argv as ybox_destroy
 
