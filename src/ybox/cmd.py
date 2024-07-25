@@ -43,6 +43,10 @@ class PkgMgr(str, Enum):
     SEARCH_OFFICIAL_FLAG = "search_official_flag"
     SEARCH_WORD_START_FLAG = "search_word_start_flag"
     SEARCH_WORD_END_FLAG = "search_word_end_flag"
+    PROCESSES_PATTERN = "processes_pattern"
+    LOCKS_PATTERN = "locks_pattern"
+    REPAIR = "repair"
+    REPAIR_ALL = "repair_all"
 
 
 class YboxLabel(str, Enum):

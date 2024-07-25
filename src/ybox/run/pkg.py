@@ -15,6 +15,7 @@ from ybox.pkg.info import info_packages
 from ybox.pkg.inst import install_package
 from ybox.pkg.list import list_files, list_packages
 from ybox.pkg.mark import mark_package
+from ybox.pkg.repair import repair_package_state
 from ybox.pkg.search import search_packages
 from ybox.pkg.uninst import uninstall_package
 from ybox.pkg.update import update_package
@@ -93,8 +94,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_clean(add_subparser(operations, "clean", "clean package cache and intermediate files"))
     add_mark(add_subparser(operations, "mark",
                            "mark a package as a dependency or an explicitly installed package"))
-    # add_repair(add_subparser(operations, "repair",
-    #                         "try to repair state after a failed operation or an interrupt/kill"))
+    add_repair(add_subparser(operations, "repair",
+                             "try to repair state after a failed operation or an interrupt/kill"))
+    # TODO: repo-add/remove
     return parser.parse_args(argv)
 
 
@@ -232,8 +234,6 @@ def add_mark(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_repair(subparser: argparse.ArgumentParser) -> None:
-    subparser.add_argument("-a", "--all", action="store_true",
-                           help="repair thoroughly by searching for active package operations "
-                                "and terminating them (after user confirmation if no -q option), "
-                                "removing any related dangling locks etc")
-    # subparser.set_defaults(func=repair_package_state)
+    subparser.add_argument("--extensive", action="store_true",
+                           help="repair thoroughly by reinstalling all packages")
+    subparser.set_defaults(func=repair_package_state)

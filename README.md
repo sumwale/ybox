@@ -129,7 +129,7 @@ all the available options with detailed comments. There are a few more detailed 
 in the `src/ybox/conf/profiles/examples` directory.
 
 
-### Install/uninstall/list/search packages
+### Package management: install/uninstall/list/search/...
 
 Install a new package with `ybox-pkg` like firefox below:
 
@@ -175,6 +175,11 @@ To show more details of the packages (combine with -a/-o as required):
 ybox-pkg list -o
 ```
 
+List all the files installed by the package:
+```sh
+ybox-pkg list-files firefox
+```
+
 Search the repositories for packages with names matching search terms:
 
 ```sh
@@ -192,6 +197,44 @@ You can also restrict the search to full word matches (can be combined with `-a`
 ```sh
 ybox-pkg search intellij -w
 ```
+
+Show detailed information for an installed package:
+```sh
+ybox-pkg info firefox
+```
+
+Show detailed information for any package in the available repositories:
+```sh
+ybox-pkg info firefox -a
+```
+
+Clean package cache, temporary downloads etc:
+```sh
+ybox-pkg clean
+```
+
+Mark a package as explicitly installed (also registers with `ybox-pkg` if not present):
+```sh
+ybox-pkg mark firefox -e
+```
+
+Mark a package as a dependency of another (also registers with `ybox-pkg` if not present):
+```sh
+ybox-pkg mark qt5ct -D zoom  # mark qt5ct as an optional dependency of zoom
+```
+
+Repair package installation after a failure or interrupt:
+```sh
+ybox-pkg repair
+```
+
+More extensive repair of package installation including reinstallation of all packages:
+```sh
+ybox-pkg repair --extensive
+```
+
+All the `ybox-pkg` subcommands will show detailed help with `-h/--help` option e.g.
+`ybox-pkg list --help`.
 
 
 ### List the available containers
@@ -284,7 +327,7 @@ You can delete old log files there safely if they start taking a lot of disk spa
 
 A container may get stopped after a reboot if systemd/... is not configured to auto-start
 the docker/podman containers. Or you can explicitly stop a container using docker/podman.
-You can check using `ybox-ls -a` and restart any stopped containers as below:
+You can check using `ybox-ls -a` and restart a stopped or running container as below:
 
 ```sh
 ybox-restart ybox-arch_apps
@@ -323,7 +366,7 @@ run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12 an
 in future).
 
 As of now pyenv with venv is the actively maintained one which can be used for development
-with IDEA/PyCharm, running tests against all supported python versions using `tox` etc.
+with IDEA/PyCharm/VSCode, running tests against all supported python versions using `tox` etc.
 While conda environment setup scripts are still provided, they are no longer maintained.
 
 ### pyenv with venv
@@ -375,6 +418,10 @@ You can open the checkout directory as an existing project in Intellij IDEA/PyCh
 add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
 Choose an existing environment in Virtualenv environment and select the
 `<checkout dir>/.venv/bin/python3` for the interpreter.
+
+For using VSCode, ensure that the python extension from Microsoft and preferably the following
+additional extensions are installed: autopep8, Flake8, isort, audoDocstring and
+Python Environment Manager. The open the checkout directory and you should be good to go.
 
 
 ### Conda

@@ -16,18 +16,20 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
 
-from ybox.cmd import PkgMgr, YboxLabel, get_docker_command, run_command, verify_ybox_state
+from ybox.cmd import (PkgMgr, YboxLabel, get_docker_command, run_command,
+                      verify_ybox_state)
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
-from ybox.graphics import add_env_option, add_mount_option, enable_nvidia, \
-    enable_wayland, enable_x11
+from ybox.graphics import (add_env_option, add_mount_option, enable_nvidia,
+                           enable_wayland, enable_x11)
 from ybox.pkg.inst import install_package, wrap_container_files
-from ybox.print import bgcolor, fgcolor, print_color, print_error, print_info, print_warn
+from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
+                        print_warn)
 from ybox.run.pkg import parse_args as pkg_parse_args
 from ybox.state import RuntimeConfiguration, YboxStateManagement
-from ybox.util import EnvInterpolation, NotSupportedError, config_reader, ini_file_reader, \
-    select_item_from_menu
+from ybox.util import (EnvInterpolation, NotSupportedError, config_reader,
+                       ini_file_reader, select_item_from_menu)
 
 _EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 _DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")

@@ -1,8 +1,8 @@
 {
     "editor.rulers": [
-        100
+        99
     ],
-    "editor.wordWrapColumn": 100,
+    "editor.wordWrapColumn": 99,
     "python.analysis.typeCheckingMode": "strict",
     "editor.codeActionsOnSave": {
         "source.organizeImports": "always",

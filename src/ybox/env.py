@@ -69,7 +69,7 @@ class Environ:
         search_dirs = ', '.join([str(file) for file in self._configuration_dirs])
         if not quiet:
             print_error(f"Configuration file '{conf_path}' not found in [{search_dirs}]")
-        raise FileNotFoundError
+        raise FileNotFoundError(f"Missing configuration file '{conf_path}'")
 
     @property
     def home(self) -> str:
