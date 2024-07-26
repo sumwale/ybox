@@ -16,8 +16,8 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
 
-from ybox.cmd import (PkgMgr, YboxLabel, get_docker_command, run_command,
-                      verify_ybox_state)
+from ybox.cmd import (PkgMgr, YboxLabel, check_active_ybox, check_ybox_exists,
+                      get_docker_command, run_command)
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
@@ -57,7 +57,7 @@ def main_argv(argv: list[str]) -> None:
 
     box_name, docker_cmd = process_args(args, distro, profile)
     print_color(f"Creating ybox container named '{box_name}'", fg=fgcolor.green)
-    if verify_ybox_state(docker_cmd, box_name, [], exit_on_error=False):
+    if check_ybox_exists(docker_cmd, box_name):
         print_error(f"ybox container '{box_name}' already exists.")
         sys.exit(1)
 
@@ -868,7 +868,7 @@ def wait_for_container(docker_cmd: str, conf: StaticConfiguration) -> None:
 
         for _ in range(max_wait_secs):
             # check the container status first
-            if verify_ybox_state(docker_cmd, box_name, ["running"], exit_on_error=False):
+            if check_active_ybox(docker_cmd, box_name):
                 if read_lines():
                     return
             else:

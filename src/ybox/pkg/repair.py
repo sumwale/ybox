@@ -7,7 +7,7 @@ import subprocess
 import time
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, run_command, verify_ybox_state
+from ybox.cmd import PkgMgr, check_active_ybox, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import (fgcolor, print_color, print_error, print_info,
                         print_warn)
@@ -34,8 +34,8 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value] if quiet else ""
     # find all the containers sharing the same shared root
     if runtime_conf.shared_root:
-        containers = [cnt for cnt in state.get_containers(shared_root=runtime_conf.shared_root)
-                      if verify_ybox_state(docker_cmd, cnt, ["running"], exit_on_error=False)]
+        containers = [c for c in state.get_containers(shared_root=runtime_conf.shared_root)
+                      if check_active_ybox(docker_cmd, c)]
     else:
         containers = [conf.box_name]
     # first check for active package operations across all containers on the same shared root

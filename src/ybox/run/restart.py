@@ -2,7 +2,8 @@ import argparse
 import sys
 import time
 
-from ybox.cmd import get_docker_command, run_command, verify_ybox_state
+from ybox.cmd import (check_active_ybox, check_ybox_state, get_docker_command,
+                      run_command)
 from ybox.print import fgcolor, print_color
 
 
@@ -15,12 +16,13 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    if verify_ybox_state(docker_cmd, container_name, ["running"], exit_on_error=False):
+    if check_active_ybox(docker_cmd, container_name):
         print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
         run_command([docker_cmd, "container", "stop", container_name], error_msg="container stop")
         time.sleep(2)
 
-    verify_ybox_state(docker_cmd, container_name, ["exited", "stopped"], cnt_state_msg=" stopped")
+    check_ybox_state(docker_cmd, container_name, ["exited", "stopped"], exit_on_error=True,
+                     cnt_state_msg=" stopped")
 
     print_color(f"Starting ybox container '{container_name}'", fg=fgcolor.cyan)
     run_command([docker_cmd, "container", "start", container_name], error_msg="container start")

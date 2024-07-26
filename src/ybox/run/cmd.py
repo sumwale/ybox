@@ -13,8 +13,6 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    # verify_ybox_state(docker_cmd, container_name, ["running"], cnt_state_msg=" active")
-
     docker_args = [docker_cmd, "exec", "-it", container_name]
     if isinstance(args.command, str):
         docker_args.append(args.command)

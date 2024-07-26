@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from ybox.cmd import get_docker_command, run_command, verify_ybox_state
+from ybox.cmd import check_ybox_exists, get_docker_command, run_command
 from ybox.env import Environ
 from ybox.print import fgcolor, print_color, print_error, print_warn
 from ybox.state import YboxStateManagement
@@ -16,7 +16,7 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    verify_ybox_state(docker_cmd, container_name, expected_states=[])
+    check_ybox_exists(docker_cmd, container_name, exit_on_error=True)
     print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
     # continue even if this fails since the container may already be in stopped state
     run_command([docker_cmd, "container", "stop", container_name],

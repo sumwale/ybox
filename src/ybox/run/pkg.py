@@ -6,8 +6,8 @@ import argparse
 import sys
 from typing import cast
 
-from ybox.cmd import (YboxLabel, get_docker_command, run_command,
-                      verify_ybox_state)
+from ybox.cmd import (YboxLabel, check_active_ybox, get_docker_command,
+                      run_command)
 from ybox.config import StaticConfiguration
 from ybox.env import Environ
 from ybox.pkg.clean import clean_cache
@@ -38,7 +38,7 @@ def main_argv(argv: list[str]) -> None:
     container_name = args.ybox
 
     if container_name:
-        verify_ybox_state(docker_cmd, container_name, ["running"], cnt_state_msg=" active")
+        check_active_ybox(docker_cmd, container_name, exit_on_error=True)
     else:
         # check active containers
         containers = str(run_command([docker_cmd, "container", "ls", "--format={{ .Names }}",

@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from ybox.cmd import get_docker_command, run_command, verify_ybox_state
+from ybox.cmd import check_ybox_exists, get_docker_command, run_command
 from ybox.print import print_info
 
 
@@ -14,7 +14,7 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    verify_ybox_state(docker_cmd, container_name, expected_states=[])
+    check_ybox_exists(docker_cmd, container_name, exit_on_error=True)
 
     docker_args = [docker_cmd, "container", "logs"]
     if args.follow:
