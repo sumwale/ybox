@@ -25,6 +25,7 @@ class PkgMgr(str, Enum):
     UNINSTALL = "uninstall"
     PURGE_FLAG = "purge_flag"
     REMOVE_DEPS_FLAG = "remove_deps_flag"
+    ORPHANS = "orphans"
     UPDATE_META = "update_meta"
     UPDATE = "update"
     UPDATE_ALL = "update_all"
@@ -47,6 +48,18 @@ class PkgMgr(str, Enum):
     LOCKS_PATTERN = "locks_pattern"
     REPAIR = "repair"
     REPAIR_ALL = "repair_all"
+
+
+class RepoCmd(str, Enum):
+    """
+    Repository management actions defined for each Linux distribution in its distro.ini file.
+    """
+    EXISTS = "exists"
+    DEFAULT_GPG_KEY_SERVER = "default_gpg_key_server"
+    ADD_KEY = "add_key"
+    ADD = "add"
+    REMOVE_KEY = "remove_key"
+    REMOVE = "remove"
 
 
 class YboxLabel(str, Enum):

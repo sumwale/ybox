@@ -373,10 +373,23 @@ class YboxStateManagement:
                            (container_name,))
             local_copies = YboxStateManagement._extract_local_copies(cursor.fetchall())
             # update container name to the new one for destroyed container and clear local_copies
+            # but if a package is already registered with another valid container then delete it
+            cursor.execute("DELETE FROM packages AS pkgs WHERE container = ? AND EXISTS "
+                           "(SELECT 1 FROM packages AS p WHERE p.name = pkgs.name GROUP BY p.name"
+                           " HAVING COUNT(*) > 1) RETURNING name", (container_name,))
+            if rows := cursor.fetchall():
+                cursor.executemany("DELETE FROM package_deps WHERE name = ? AND container = ?",
+                                   [(row[0], container_name) for row in rows])
+            # if no package is "orphaned" with updated container name, then entry for the
+            # destroyed container should be removed from containers table
             cursor.execute("UPDATE packages SET container = ?, local_copies = '[]' "
                            "WHERE container = ?", (new_name, container_name))
-            cursor.execute("UPDATE package_deps SET container = ? WHERE container = ?",
-                           (new_name, container_name))
+            if cursor.rowcount and cursor.rowcount > 0:
+                cursor.execute("UPDATE package_deps SET container = ? WHERE container = ?",
+                               (new_name, container_name))
+            else:
+                # remove the destroyed container entry since there is no entry in packages table
+                cursor.execute("DELETE FROM containers WHERE name = ?", (new_name,))
         else:
             cursor.execute("DELETE FROM packages WHERE container = ? RETURNING local_copies",
                            (container_name,))
@@ -471,19 +484,15 @@ class YboxStateManagement:
             self._begin_transaction(cursor)
             # if there is an entry for an orphaned package in the same shared root, then remove it
             if shared_root:
-                # EXISTS query seems to be always faster than IN query in sqlite
+                # EXISTS query is always faster than IN query in sqlite
                 cursor.execute("""
                     DELETE from packages WHERE name = ? AND EXISTS (
                         SELECT 1 FROM containers dc WHERE dc.destroyed = true AND
                         dc.shared_root = ? AND packages.container = dc.name
                     ) RETURNING container""", (package, shared_root))
                 if rows := cursor.fetchall():
-                    in_str = ", ".join(["?" for _ in rows])
-                    args = [package]
-                    for row in rows:
-                        args.append(row[0])
-                    cursor.execute("DELETE from package_deps WHERE name = ? AND "
-                                   f"container IN ({in_str})", args)
+                    cursor.executemany("DELETE from package_deps WHERE name = ? AND container = ?",
+                                       [(package, row[0]) for row in rows])
                     self._clean_destroyed_containers(cursor)
             insert_clause = "INSERT OR IGNORE INTO" if skip_if_exists else "INSERT OR REPLACE INTO"
             cursor.execute(f"{insert_clause} packages VALUES (?, ?, ?, ?, ?)",

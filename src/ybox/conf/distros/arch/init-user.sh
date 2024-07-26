@@ -8,7 +8,7 @@ current_user="$(id -un)"
 user_home="$(eval echo "~$current_user")"
 # set gpg keyserver to an available one
 mkdir -p "$user_home/.gnupg"
-echo "keyserver hkp://keyserver.ubuntu.com" > "$user_home/.gnupg/dirmngr.conf"
+echo "keyserver $DEFAULT_GPG_KEY_SERVER" > "$user_home/.gnupg/dirmngr.conf"
 rm -f "$user_home"/.gnupg/*/*.lock
 
 # install binaries for paru from paru-bin (paru takes too long to compile)

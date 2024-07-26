@@ -16,8 +16,8 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
 
-from ybox.cmd import (PkgMgr, YboxLabel, check_active_ybox, check_ybox_exists,
-                      get_docker_command, run_command)
+from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_active_ybox,
+                      check_ybox_exists, get_docker_command, run_command)
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
@@ -70,7 +70,8 @@ def main_argv(argv: list[str]) -> None:
 
     docker_full_args = [docker_cmd, "run", "-itd", f"--name={box_name}"]
     # process the profile before any actions to ensure it is in proper shape
-    shared_root, box_conf, apps_with_deps = process_sections(profile, conf, distro_config,
+    pkgmgr = distro_config["pkgmgr"]
+    shared_root, box_conf, apps_with_deps = process_sections(profile, conf, pkgmgr,
                                                              docker_full_args)
     process_distribution_config(distro_config, docker_full_args)
     current_user = getpass.getuser()
@@ -190,7 +191,6 @@ def main_argv(argv: list[str]) -> None:
         owned_packages = state.register_container(box_name, distro, shared_root, box_conf,
                                                   args.force_own_orphans)
         # create wrappers for owned_packages
-        pkgmgr = distro_config["pkgmgr"]
         if owned_packages:
             list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
             for package, (copy_type, app_flags) in owned_packages.items():
@@ -360,7 +360,7 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> Tu
     return box_name, docker_cmd
 
 
-def process_sections(profile: PathName, conf: StaticConfiguration, distro_config: ConfigParser,
+def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: SectionProxy,
                      docker_args: list[str]) -> Tuple[str, ConfigParser, dict[str, list[str]]]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
@@ -387,7 +387,7 @@ def process_sections(profile: PathName, conf: StaticConfiguration, distro_config
             if config_hardlinks is not None:
                 process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
         elif section == "apps":
-            apps_with_deps = process_apps_section(config["apps"], conf, distro_config)
+            apps_with_deps = process_apps_section(config["apps"], conf, pkgmgr)
         elif section not in ("base", "app_flags", "startup"):
             raise NotSupportedError(f"Unknown section [{section}] in '{profile}' "
                                     "or one of its includes")
@@ -405,6 +405,8 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
                              ("suggested_deps", "SUGGESTED_DEPS"), ("extra", "EXTRA_PKGS")):
             if value := packages_section.get(key):
                 add_env_option(docker_args, env_var, _WS_RE.sub(" ", value))
+    if key_server := distro_config.get("repo", RepoCmd.DEFAULT_GPG_KEY_SERVER.value, fallback=""):
+        add_env_option(docker_args, "DEFAULT_GPG_KEY_SERVER", key_server)
 
 
 def process_base_section(base_section: SectionProxy, profile: PathName,
@@ -622,10 +624,9 @@ def process_env_section(env_section: SectionProxy, args: list[str]) -> None:
 
 
 def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
-                         distro_config: ConfigParser) -> dict[str, list[str]]:
+                         pkgmgr: SectionProxy) -> dict[str, list[str]]:
     if len(apps_section) == 0:
         return {}
-    pkgmgr = distro_config["pkgmgr"]
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
     install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="")
