@@ -360,20 +360,15 @@ systemctl --user enable container-ybox-arch_apps.service
 
 ## Development
 
-Virtual environment setups have been provided for consistent development, test and build
+Virtual environment setup have been provided for consistent development, test and build
 with multiple python versions. The minimum python version required is 3.9 and tests are
 run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12 and others
 in future).
 
-As of now pyenv with venv is the actively maintained one which can be used for development
-with IDEA/PyCharm/VSCode, running tests against all supported python versions using `tox` etc.
-While conda environment setup scripts are still provided, they are no longer maintained.
-
-### pyenv with venv
-
-Scripts to set up a pyenv with venv environment for a consistent development and build have
-been provided in the `pyenv` directory which creates a `venv` environment in `.venv` directory
-of the checkout.
+The setup uses pyenv with venv which can be used for development with IDEA/PyCharm/VSCode
+or in terminal, running tests against all supported python versions using `tox` etc.
+Scripts to set up a pyenv with venv environment have been provided in the `pyenv` directory
+which creates a `venv` environment in `.venv` directory of the checkout.
 
 If you do not have `pyenv` installed and configured, then you can install it using:
 
@@ -424,45 +419,6 @@ additional extensions are installed: autopep8, Flake8, isort, audoDocstring and
 Python Environment Manager. The open the checkout directory and you should be good to go.
 
 
-### Conda
-
-**NOTE:** this set up is no longer actively maintained.
-
-This set up does not support multiple python environments as required by `tox` but
-should be fine for development, IDE and running tests using `run-tests.sh`.
-
-Scripts to set up a conda environment appropriate for the project have been provided
-in the 'conda' directory which creates an environment in 'conda/.conda' directory
-of the checkout. To set it up run:
-
-```sh
-conda/setup-conda.sh
-```
-
-Then you can activate it in bash:
-
-```sh
-source conda/activate-conda.bash
-```
-
-Or in fish shell:
-
-```
-source conda/activate-conda.fish
-```
-
-Script for zsh has also been provided:
-
-```
-source conda/activate-conda.zsh
-```
-
-You can open the checkout directory as an existing project in Intellij IDEA/PyCharm and then
-add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
-Choose an existing environment in Conda environment where the path to conda should already
-be selected correctly (`<checkout dir>/conda/.conda/bin/conda`) while for interpreter
-choose `<checkout dir>/conda/.conda/envs/ybox/bin/python3`.
-
 ### Running the test suite
 
 Once pyenv+venv set up is working, you can run the entire test suite and other checks
@@ -471,6 +427,7 @@ all supported python versions (i.e. from 3.9 onwards).
 
 There is also a simple script `run-tests.sh` in the top-level directory which can be used
 to run just the tests with the current python version. This will skip other stuff like
-`pyright`, for example, which is invoked by `tox`.
+`pyright`, for example, which is invoked by `tox`. The lint and other related tools can
+be run explicitly using the `code-check.sh` script in the top-level directory.
 
 See `tox` and `unittest` documentation for more details like running individual tests.

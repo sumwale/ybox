@@ -6,7 +6,6 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/build" />
-      <excludeFolder url="file://$MODULE_DIR$/conda/.conda" />
       <excludeFolder url="file://$MODULE_DIR$/.tox" />
     </content>
     <orderEntry type="inheritedJdk" />

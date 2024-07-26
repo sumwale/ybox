@@ -11,14 +11,11 @@ end
 function __fish_ybox_complete_distributions
   set user_supported ~/.config/ybox/distros/supported.list
   set sys_supported ~/.local/lib/python3*/site-packages/ybox/conf/distros/supported.list
-  set conda_supported conda/.conda/envs/ybox/lib/python3*/site-packages/ybox/conf/distros/supported.list
   set local_supported src/ybox/conf/distros/supported.list
   if test -r "$user_supported"
     /usr/bin/cat $user_supported
   else if test -r "$sys_supported" 2>/dev/null
     /usr/bin/cat $sys_supported
-  else if test -r "$conda_supported" 2>/dev/null
-    /usr/bin/cat $conda_supported
   else if test -r "$local_supported" 2>/dev/null
     /usr/bin/cat $local_supported
   end
