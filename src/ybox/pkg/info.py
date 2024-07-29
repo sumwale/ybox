@@ -19,7 +19,7 @@ def info_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     """
     Show detailed information of an installed or repository package(s).
 
-    :param args: arguments having `package` and all other attributes passed by the user
+    :param args: arguments having `packages` and all other attributes passed by the user
     :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container

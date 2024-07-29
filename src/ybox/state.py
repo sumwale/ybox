@@ -13,15 +13,17 @@ from enum import Enum, IntFlag, auto
 from importlib.resources import files
 from io import StringIO
 from pathlib import Path
-from typing import Iterable, Optional, Tuple, Union
+from typing import Iterable, Iterator, Optional, Tuple, Union
 from uuid import uuid4
 
+from packaging.version import Version
 from packaging.version import parse as parse_version
 
-from ybox import __version__
+from ybox import __version__ as PRODUCT_VERSION
 
+from .config import StaticConfiguration
 from .env import Environ, PathName, resolve_inc_path
-from .print import print_warn
+from .print import print_color, print_warn
 from .util import ini_file_reader
 
 
@@ -62,7 +64,7 @@ class DependencyType(str, Enum):
     SUGGESTION = "suggestion"
 
 
-class YboxStateManagement:
+class YboxStateManagement:  # pylint: disable=too-many-public-methods
     """
     Maintain the state of all ybox containers. This includes:
 
@@ -73,6 +75,9 @@ class YboxStateManagement:
 
     Expected usage is using a `with` statement to ensure proper cleanup other the database
     may be left in a locked state.
+
+    NOTE: This class is not thread-safe and concurrent operations on the same object by multiple
+    threads can lead to an indeterminate state.
 
     The latest schema is now maintained as a SQL file `init.sql` in `ybox.schema` package.
     This is executed using `executescript` method of `sqlite3.Cursor`, so it supports normal
@@ -95,8 +100,12 @@ class YboxStateManagement:
 
     # last version when versioning and schema migration did not exist
     _PRE_SCHEMA_VERSION = parse_version("0.9.0")
+    # last version when container versioning did not exist
+    _PRE_CONTAINER_VERSION = parse_version("0.9.5")
     # pattern to match "source '<file>'" in SQL script -- doesn't allow a quote in file name
     _SOURCE_SQLCMD_RE = re.compile(r"^\s*source\s*'([^']+)'\s*;\s*", re.IGNORECASE)
+    # SQL to start an EXCLUSIVE transaction
+    _BEGIN_EX_TXN_SQL = "BEGIN EXCLUSIVE TRANSACTION"
 
     # when comparing two container configurations, delete the sections mentioned below and the
     # keys in the [base] section (specifically log-file in log-opts will change)
@@ -117,6 +126,7 @@ class YboxStateManagement:
         # level is required while sqlite3 module will not start transactions before reads
         self._conn = sqlite3.connect(f"{env.data_dir}/state.db", timeout=60,
                                      isolation_level=None)
+        self._explicit_transaction = False
         # create the initial tables
         with closing(cursor := self._conn.cursor()):
             self._begin_transaction(cursor)
@@ -124,8 +134,9 @@ class YboxStateManagement:
             self._conn.create_function("JSON_FROM_CSV", 1, self.json_from_csv, deterministic=True)
             self._conn.create_function("EQUIV_CONFIG", 2, self.equivalent_configuration,
                                        deterministic=True)
+            self._version = parse_version(PRODUCT_VERSION)
             self._init_schema(cursor)
-            self._conn.commit()
+            self._internal_commit()
 
     @staticmethod
     def regexp(pattern: str, val: str) -> int:
@@ -167,15 +178,6 @@ class YboxStateManagement:
         for del_key in YboxStateManagement._CONFIG_NORMALIZE_DEL_BASE_KEYS:
             config.remove_option("base", del_key)
 
-    @staticmethod
-    def _begin_transaction(cursor: sqlite3.Cursor) -> None:
-        """
-        Begin an EXCLUSIVE transaction to ensure atomicity of a group of reads and writes
-
-        :param cursor: the `Cursor` object to use for execution
-        """
-        cursor.execute("BEGIN EXCLUSIVE TRANSACTION")
-
     def _init_schema(self, cursor: sqlite3.Cursor) -> None:
         """
         Initialize the required database objects or migrate from previous version.
@@ -183,8 +185,7 @@ class YboxStateManagement:
         :param cursor: the `Cursor` object to use for execution
         """
         schema_pkg = files("ybox").joinpath("schema")
-        ver_sep = ":"
-        new_version = parse_version(__version__)
+        version = self._version
         # full initialization if empty database, else migrate and update the version if required
         # ('containers' table exists in all versions)
         if self._table_exists("containers", cursor):
@@ -194,26 +195,45 @@ class YboxStateManagement:
                 old_version = parse_version(cursor.fetchone()[0])
             else:  # version = 0.9.0
                 old_version = self._PRE_SCHEMA_VERSION
-            if new_version != old_version:
-                # determine the migration scripts that need to be run
-                def check_version(file: str) -> bool:
-                    """check if the versions in the given migration script (<ver1>:<ver2>.sql)
-                       are within the stored schema version and current schema version"""
-                    return all((version := parse_version(ver)) and old_version <= version <=
-                               new_version for ver in file.removesuffix(".sql").split(ver_sep))
-
-                scripts = [file for file in schema_pkg.joinpath("migrate").iterdir()
-                           if file.is_file() and check_version(file.name)]
-                if scripts:
-                    if len(scripts) > 1:
-                        scripts.sort(key=lambda f: parse_version(f.name[:f.name.find(ver_sep)]))
-                    for script in scripts:
-                        self._execute_script(script, cursor)
-                # finally update the version
-                cursor.execute("UPDATE schema SET version = ?", (str(new_version),))
+            if version != old_version:
+                # run appropriate SQL migration scripts for product version change
+                for script in self._filter_and_sort_files_by_version(
+                        schema_pkg.joinpath("migrate").iterdir(), old_version, version, ".sql"):
+                    self._execute_sql_script(script, cursor)
+                # finally update the version in the database
+                cursor.execute("UPDATE schema SET version = ?", (str(version),))
         else:
-            self._execute_script(schema_pkg.joinpath("init.sql"), cursor)
-            cursor.execute("INSERT INTO schema VALUES (?)", (str(new_version),))
+            self._execute_sql_script(schema_pkg.joinpath("init.sql"), cursor)
+            cursor.execute("INSERT INTO schema VALUES (?)", (str(version),))
+
+    @staticmethod
+    def _filter_and_sort_files_by_version(file_iter: Iterator[PathName], old_version: Version,
+                                          new_version: Version, suffix: str) -> list[PathName]:
+        """
+        Given the previous and new version of the product, and files having names of the form
+        `<version1>:<version2><suffix>` filter out the files having `<version1>` and `<version2>`
+        between the two versions (and thus should be executed for product migration) and then
+        sort on `<version1>`.
+
+        :param file_iter: list of files to be filtered and sorted
+        :param old_version: previous version of the product to compare against
+        :param new_version: current version of the product
+        :param suffix: suffix of the files
+        :return: filtered and sorted list of files that need to be run for product migration
+        """
+        sep = ":"
+
+        # determine the migration scripts that need to be run by comparing versions
+        def check_version(file: str) -> bool:
+            """check if the versions in the given migration script (<ver1>:<ver2>.<suffix>)
+                are within the stored schema version and current schema version"""
+            return all((version := parse_version(ver)) and old_version <= version <= new_version
+                       for ver in file.removesuffix(suffix).split(sep) if file.endswith(suffix))
+
+        version_files = [file for file in file_iter if file.is_file() and check_version(file.name)]
+        if len(version_files) > 1:
+            version_files.sort(key=lambda f: parse_version(f.name[:f.name.find(sep)]))
+        return version_files
 
     @staticmethod
     def _table_exists(name: str, cursor: sqlite3.Cursor) -> bool:
@@ -229,7 +249,7 @@ class YboxStateManagement:
         return cursor.fetchone() is not None
 
     @staticmethod
-    def _execute_script(sql_file: PathName, cursor: sqlite3.Cursor) -> None:
+    def _execute_sql_script(sql_file: PathName, cursor: sqlite3.Cursor) -> None:
         """
         Execute a SQL script having one or more SQL commands. It also supports `source <file>`
         command (like MariaDB/MySQL) to include other SQL script files which can be a path
@@ -259,6 +279,67 @@ class YboxStateManagement:
         process_source(sql_file, sql_lines)
         cursor.executescript("".join(sql_lines))
 
+    def _begin_transaction(self, cursor: sqlite3.Cursor) -> None:
+        """
+        Begin an EXCLUSIVE transaction used internally by the methods of this class to ensure
+        atomicity of a group of reads and writes. This will be skipped if an explicit transaction
+        was started by invoking :meth:`begin_transaction`.
+
+        :param cursor: the `Cursor` object to use for execution
+        """
+        if not self._explicit_transaction:
+            cursor.execute(self._BEGIN_EX_TXN_SQL)
+
+    def _internal_commit(self) -> None:
+        """
+        COMMIT the current transaction if it is not an explicit user transaction (using
+        :meth:`begin_transaction`). All methods of this class should use this to commit
+        any changes made in the method.
+        """
+        if not self._explicit_transaction:
+            self._conn.commit()
+
+    def begin_transaction(self) -> None:
+        """
+        Begin an EXCLUSIVE transaction explicitly to ensure atomicity of a group of methods of
+        this class. Note that each public method of this class already runs all the required
+        database reads and writes within an EXCLUSIVE transaction, so use this only if you need
+        to run a transaction across multiple methods, or need to keep an open transaction for
+        longer.
+
+        The transaction will be automatically committed (or rolled back in case of exceptions)
+        when the class object is cleaned up at the end of the associated `with` statement.
+        Callers can also invoke :meth:`commit` and :meth:`rollback` for explicit cleanup.
+        """
+        if not self._explicit_transaction:
+            self._conn.execute(self._BEGIN_EX_TXN_SQL).close()
+            self._explicit_transaction = True
+
+    def migrate_container(self, container_version: str, conf: StaticConfiguration,
+                          distro_config: ConfigParser) -> None:
+        """
+        Run migration scripts for an existing container, if required, so that current product code
+        will continue to work on it with expected semantics.
+
+        :param container_version: version string as recorded in the container
+        :param conf: the `StaticConfiguration` of the container
+        :param distro_config: the parsed configuration (`ConfigParser`) of the Linux distribution
+        """
+        # pylint: disable=exec-used
+        old_version = parse_version(container_version) if container_version \
+            else self._PRE_CONTAINER_VERSION
+        if self._version == old_version:
+            return
+        # run appropriate SQL migration scripts for product version change
+        if not (scripts := self._filter_and_sort_files_by_version(
+                files("ybox").joinpath("migrate").iterdir(), old_version, self._version, ".py")):
+            return
+        print_color("Running migration scripts for container version upgrade from "
+                    f"{old_version} to {self._version}")
+        for script in scripts:
+            with script.open("r", encoding="utf-8") as py_fd:
+                exec(py_fd.read(), {}, {"conf": conf, "distro_config": distro_config})
+
     def register_container(self, container_name: str, distribution: str, shared_root: str,
                            parser: ConfigParser,
                            force_own_orphans: bool) -> dict[str, Tuple[CopyType, dict[str, str]]]:
@@ -266,7 +347,7 @@ class YboxStateManagement:
         Register information of a ybox container including its name, distribution and
         configuration. In addition to the registration, this will also check for orphaned packages
         on the same `shared_root` (if applicable), and reassign them to this container if
-        they were originally installed on a container having an :func:`equivalent_configuration`.
+        they were originally installed on a container having an :meth:`equivalent_configuration`.
 
         :param container_name: name of the container
         :param distribution: the Linux distribution used when creating the container
@@ -315,7 +396,7 @@ class YboxStateManagement:
                     # get rid of destroyed containers whose packages all got reassigned
                     cursor.execute(f"DELETE FROM containers WHERE name IN ({in_args})",
                                    equiv_destroyed)
-            self._conn.commit()
+            self._internal_commit()
             return packages
 
     def unregister_container(self, container_name: str) -> bool:
@@ -332,7 +413,7 @@ class YboxStateManagement:
         with closing(cursor := self._conn.cursor()):
             self._begin_transaction(cursor)
             result = self._unregister_container(container_name, cursor)
-            self._conn.commit()
+            self._internal_commit()
             return result
 
     @staticmethod
@@ -500,7 +581,7 @@ class YboxStateManagement:
                             json.dumps(app_flags)))
             if dep_type:
                 self._register_dependency(container_name, dep_of, package, dep_type, cursor)
-            self._conn.commit()
+            self._internal_commit()
 
     def register_dependency(self, container_name: str, package: str, dependency: str,
                             dep_type: DependencyType) -> None:
@@ -515,7 +596,7 @@ class YboxStateManagement:
         with closing(cursor := self._conn.cursor()):
             self._begin_transaction(cursor)
             self._register_dependency(container_name, package, dependency, dep_type, cursor)
-            self._conn.commit()
+            self._internal_commit()
 
     @staticmethod
     def _register_dependency(container_name: str, package: str, dependency: str,
@@ -531,6 +612,35 @@ class YboxStateManagement:
         """
         cursor.execute("INSERT OR REPLACE INTO package_deps VALUES (?, ?, ?, ?)",
                        (package, container_name, dependency, dep_type.value))
+
+    def register_repository(self, name: str, container_or_shared_root: str, urls: str, key: str,
+                            options: str, with_source_repo: bool, update: bool) -> bool:
+        """
+        Register a new package repository.
+
+        :param name: name of the package repository to be registered
+        :param container_or_shared_root: name of the container where the repository is being
+                                         added or the shared root if container is using one
+        :param urls: comma separated server URLs for the repository
+        :param key: key used for verifying packages fetched from the repository
+        :param options: additional options to be set for the repository (or empty if none)
+        :param with_source_repo: if True then source code repository has also been enabled
+        :param update: if True then update existing entry with the new values
+        :return: True if the package repository was successfully registered and False if the
+                 `name` already exists
+        """
+        with closing(cursor := self._conn.cursor()):
+            self._begin_transaction(cursor)
+            try:
+                insert_clause = "INSERT OR REPLACE INTO" if update else "INSERT INTO"
+                cursor.execute(
+                    f"{insert_clause} package_repos VALUES (?, ?, ?, ?, ?, ?)",
+                    (name, container_or_shared_root, urls, key, options, with_source_repo))
+                return True
+            except sqlite3.IntegrityError:
+                return False
+            finally:
+                self._internal_commit()
 
     def unregister_package(self, container_name: str, package: str,
                            shared_root: str) -> dict[str, DependencyType]:
@@ -601,7 +711,7 @@ class YboxStateManagement:
                 local_copies = self._extract_local_copies(cursor.fetchall())
                 cursor.execute("DELETE FROM package_deps WHERE (name = ? OR dependency = ?) "
                                "AND container = ?", (package, package, container_name))
-            self._conn.commit()
+            self._internal_commit()
         # delete all the files created locally for the container
         self._remove_local_copies(local_copies)
         return orphans
@@ -621,8 +731,30 @@ class YboxStateManagement:
                 "DELETE FROM package_deps WHERE dependency = ? AND container = ? AND name LIKE ?",
                 (dependency, container_name, package))
             result = bool(cursor.rowcount and cursor.rowcount > 0)
-            self._conn.commit()
+            self._internal_commit()
             return result
+
+    def unregister_repository(self, name: str,
+                              container_or_shared_root: str) -> Optional[Tuple[str, bool]]:
+        """
+        Unregister a previously registered package repository (using :meth:`register_repository`).
+
+        :param name: name of the package repository to be unregistered
+        :param container_or_shared_root: name of the container where the repository is being
+                                         removed or the shared root if container is using one
+        :return: if the package repository was successfully unregistered then return a tuple
+                 where the first element is the `key` field for the repository as provided during
+                 registration and the second element is a boolean to indicate whether source code
+                 repository was enabled during registration, else `None` is returned
+        """
+        with closing(cursor := self._conn.cursor()):
+            self._begin_transaction(cursor)
+            cursor.execute("DELETE FROM package_repos WHERE name = ? AND "
+                           "container_or_shared_root = ? RETURNING key, with_source_repo",
+                           (name, container_or_shared_root))
+            result = cursor.fetchone()
+            self._internal_commit()
+            return (str(result[0]), bool(result[1])) if result else None
 
     @staticmethod
     def _clean_destroyed_containers(cursor: sqlite3.Cursor) -> None:
@@ -705,9 +837,34 @@ class YboxStateManagement:
                            f"WHERE pkgs.container = ? AND pkgs.name IN ({in_list})", args)
             return [str(row[0]) for row in cursor.fetchall()]
 
+    def commit(self) -> None:
+        """
+        Invoke an explicit COMMIT on the underly database connection.
+
+        The recommended usage of this class is using a `with` statement for automatic resource
+        management which will automatically commit or rollback any pending transaction and close
+        the connection, so this method is normally not required.
+        """
+        self._conn.commit()
+        self._explicit_transaction = False
+
+    def rollback(self) -> None:
+        """
+        Invoke an explicit ROLLBACK on the underly database connection.
+
+        The recommended usage of this class is using a `with` statement for automatic resource
+        management which will automatically commit or rollback any pending transaction and close
+        the connection, so this method is normally not required.
+        """
+        self._conn.rollback()
+        self._explicit_transaction = False
+
     def close(self) -> None:
-        """Close the underlying connection to the database."""
-        self._conn.rollback()  # rollback any pending transactions
+        """
+        Close the underlying connection to the database. This will first rollback any pending
+        transaction on the connection.
+        """
+        self.rollback()  # rollback any pending transactions
         self._conn.close()
 
     def __enter__(self):
@@ -716,8 +873,8 @@ class YboxStateManagement:
     def __exit__(self, ex_type, ex_value, ex_traceback):  # type: ignore
         try:
             if ex_type:
-                self._conn.rollback()
+                self.rollback()
             else:
-                self._conn.commit()
+                self.commit()
         finally:
             self._conn.close()

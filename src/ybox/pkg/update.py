@@ -5,7 +5,7 @@ Update some or all packages on an active ybox container.
 import argparse
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, run_command
+from ybox.cmd import PkgMgr, build_bash_command, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_warn
 from ybox.state import RuntimeConfiguration, YboxStateManagement
@@ -17,9 +17,9 @@ from ybox.state import RuntimeConfiguration, YboxStateManagement
 #       The biggest problem can be that even a new package install can end up updating shared libs.
 
 
-def update_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                   conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
-                   state: YboxStateManagement) -> int:
+def update_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
+                    conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
+                    state: YboxStateManagement) -> int:
     """
     Update the mentioned package installed in a container which can include packages not managed
     by `ybox-pkg`, as well as those installed by other containers if the container shares the
@@ -30,7 +30,7 @@ def update_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: s
     some rolling distributions like Arch Linux recommend always doing a full installation upgrade
     rather than individual packages.
 
-    :param args: arguments having `package` and all other attributes passed by the user
+    :param args: arguments having `packages` and all other attributes passed by the user
     :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
@@ -52,5 +52,5 @@ def update_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: s
         # show all the containers sharing the same shared root
         print_warn("The operation will also update packages in other containers having the same "
                    f"shared root directory: {', '.join(shared_containers)}")
-    return int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
-                            update_cmd], exit_on_error=False, error_msg="updating packages"))
+    return int(run_command(build_bash_command(docker_cmd, conf.box_name, update_cmd),
+                           exit_on_error=False, error_msg="updating packages"))

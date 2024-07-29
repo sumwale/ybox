@@ -1,6 +1,3 @@
-# these values are from the current upstream:
-# https://github.com/pylint-dev/pylint/blob/main/pylintrc
-
 [DESIGN]
 # Maximum number of arguments for function / method
 max-args = 15 # EDIT: increased from 9 to 15
@@ -13,12 +10,10 @@ max-branches = 35 # EDIT: increased from 20 to 35
 # Maximum number of statements in function / method body
 max-statements = 70 # EDIT: increased from 50 to 70
 # Maximum number of attributes for a class (see R0902).
-max-attributes=20 # EDIT: increased from 11 to 20
+max-attributes = 20 # EDIT: increased from 11 to 20
 # Maximum number of statements in a try-block
 # max-try-statements = 7
 
-
 [MISCELLANEOUS]
-
 # List of note tags to take in consideration, separated by a comma.
 notes=FIXME,XXX

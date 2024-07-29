@@ -7,7 +7,7 @@ import subprocess
 import time
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, check_active_ybox, run_command
+from ybox.cmd import PkgMgr, build_bash_command, check_active_ybox, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import (fgcolor, print_color, print_error, print_info,
                         print_warn)
@@ -21,7 +21,7 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
     Try to repair packages and state after a failed package operation or an interrupt/kill
     or dangling package manager processes and/or locks.
 
-    :param args: arguments having `package` and all other attributes passed by the user
+    :param args: arguments having all attributes passed by the user
     :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
@@ -30,7 +30,7 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
 
     :return: integer exit status of repair command where 0 represents success
     """
-    quiet = bool(args.quiet)
+    quiet: bool = args.quiet
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value] if quiet else ""
     # find all the containers sharing the same shared root
     if runtime_conf.shared_root:
@@ -51,9 +51,9 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
         resp = "y" if quiet else input("Repair thoroughly by reinstalling packages? (y/N) ")
         if resp.strip().lower() == "y":
             repair_cmd = pkgmgr[PkgMgr.REPAIR_ALL.value]
-    if (code := int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
-                                 repair_cmd.format(quiet=quiet_flag)], exit_on_error=False,
-                                error_msg="repairing packages"))) != 0:
+    if (code := int(run_command(build_bash_command(
+            docker_cmd, conf.box_name, repair_cmd.format(quiet=quiet_flag)), exit_on_error=False,
+            error_msg="repairing packages"))) != 0:
         return code
 
     # finally restart containers after user confirmation
@@ -137,7 +137,7 @@ def _remove_locks(pkgmgr: SectionProxy, docker_cmd: str, containers: list[str],
     ls_cmd = f"/bin/ls {locks_pattern.replace(',', ' ')}"
     for container in containers:
         print_info(f"Checking for dangling locks in container '{container}'")
-        ls_result = subprocess.run([docker_cmd, "exec", container, "/bin/bash", "-c", ls_cmd],
+        ls_result = subprocess.run(build_bash_command(docker_cmd, container, ls_cmd),
                                    check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         # confirm with user before removing locks
         if not (locks := ls_result.stdout.decode("utf-8").splitlines()):

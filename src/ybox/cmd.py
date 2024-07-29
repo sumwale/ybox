@@ -58,6 +58,7 @@ class RepoCmd(str, Enum):
     DEFAULT_GPG_KEY_SERVER = "default_gpg_key_server"
     ADD_KEY = "add_key"
     ADD = "add"
+    ADD_SOURCE = "add_source"
     REMOVE_KEY = "remove_key"
     REMOVE = "remove"
 
@@ -66,8 +67,9 @@ class YboxLabel(str, Enum):
     """
     Labels for ybox created objects.
     """
-    CONTAINER_TYPE = "io.ybox.container.type"
-    CONTAINER_DISTRIBUTION = "io.ybox.container.distribution"
+    CONTAINER_LABEL_GROUP = "io.ybox.container"
+    CONTAINER_TYPE = f"{CONTAINER_LABEL_GROUP}.type"
+    CONTAINER_DISTRIBUTION = f"{CONTAINER_LABEL_GROUP}.distribution"
 
     # ybox container types (first two are temporary ones)
     CONTAINER_BASE = f"{CONTAINER_TYPE}=base"
@@ -163,6 +165,24 @@ def check_ybox_exists(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     return check_ybox_state(docker_cmd, box_name, expected_states=[], exit_on_error=exit_on_error)
 
 
+def build_bash_command(docker_cmd: str, box_name: str, cmd: str,
+                       enable_pty: bool = True) -> list[str]:
+    """
+    Build a docker/podman command (as a list) to be run using `/bin/bash`.
+
+    :param docker_cmd: the docker/podman executable to use
+    :param box_name: name of the ybox container
+    :param cmd: the command to be run in the container
+    :param enable_pty: if True then enable pseudo-pty allocation for the `docker/podman exec`
+                       command and set interactive mode else no pty is allocated, defaults to True
+    :return: command to be executed (e.g. in `subprocess`) as a list of strings
+    """
+    if enable_pty:
+        return [docker_cmd, "exec", "-it", box_name, "/bin/bash", "-c", cmd]
+    else:
+        return [docker_cmd, "exec", box_name, "/bin/bash", "-c", cmd]
+
+
 def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
                 exit_on_error: bool = True, error_msg: Optional[str] = None) -> Union[str, int]:
     """
@@ -178,8 +198,8 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
                       user-friendly name of the action that the command was supposed to do;
                       if not specified then the entire command string is displayed;
                       the special value 'SKIP' can be used to skip printing any error message
-    :return: the captured standard output if `capture_output` is true else the return code of
-             the command as a string (if `exit_on_error` is False or command was successful)
+    :return: the captured standard output if `capture_output` is true and command is successful
+             else the return code of the command as an integer (if `exit_on_error` is False)
     """
     args = cmd.split() if isinstance(cmd, str) else cmd
     result = subprocess.run(args, capture_output=capture_output, check=False)

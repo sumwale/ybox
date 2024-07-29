@@ -51,7 +51,7 @@ class TestCmd(unittest.TestCase):
             time.sleep(0.5)
         raise ChildProcessError(f"Failed to stop container {name}")
 
-    def test_get_docker_command(self) -> None:
+    def test_get_docker_command(self):
         """check `get_docker_command` result"""
         docker_cmd, parser = self._get_docker_cmd()
         self.assertIsNotNone(docker_cmd)
@@ -62,7 +62,7 @@ class TestCmd(unittest.TestCase):
         docker_cmd = get_docker_command(args, "-d")
         self.assertEqual("/bin/true", docker_cmd)
 
-    def test_check_ybox_state(self) -> None:
+    def test_check_ybox_state(self):
         """check various cases for `check_ybox_state` and related functions"""
         docker_cmd, _ = self._get_docker_cmd()
         cnt_name = f"ybox-test-cmd-{uuid4()}"
@@ -144,7 +144,7 @@ class TestCmd(unittest.TestCase):
             proc_run([docker_cmd, "container", "stop", cnt_name])
             proc_run([docker_cmd, "container", "rm", cnt_name], stderr=subprocess.DEVNULL)
 
-    def test_run_command(self) -> None:
+    def test_run_command(self):
         """check various cases for `run_command` function"""
         # check string and list arguments for run_command
         expected = [f for f in os.listdir("/") if not f.startswith('.')]

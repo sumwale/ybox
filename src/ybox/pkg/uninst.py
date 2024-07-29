@@ -5,7 +5,7 @@ Methods for uninstalling package uninstallation on an active ybox container.
 import argparse
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, run_command
+from ybox.cmd import PkgMgr, build_bash_command, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_error, print_info
 from ybox.state import RuntimeConfiguration, YboxStateManagement
@@ -31,7 +31,7 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
 
     :return: integer exit status of uninstall command where 0 represents success
     """
-    package = str(args.package)
+    package: str = args.package
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value] if args.quiet else ""
     purge_flag = "" if args.keep_config_files else pkgmgr[PkgMgr.PURGE_FLAG.value]
     remove_deps_flag = "" if args.skip_deps else pkgmgr[PkgMgr.REMOVE_DEPS_FLAG.value]
@@ -52,9 +52,9 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
         installed = True
         package = inst_package
         print_info(f"Uninstalling {dep_msg}'{package}' from '{conf.box_name}'")
-        code = int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
-                                f"{uninstall_cmd} {package}"], exit_on_error=False,
-                               error_msg=f"uninstalling '{package}'"))
+        code = int(run_command(build_bash_command(
+            docker_cmd, conf.box_name, f"{uninstall_cmd} {package}"), exit_on_error=False,
+            error_msg=f"uninstalling '{package}'"))
     else:
         print_error(f"Package '{package}' is not installed in container '{conf.box_name}'")
     # go ahead with removal from local state and wrappers, even if package was not installed

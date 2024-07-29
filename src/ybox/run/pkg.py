@@ -16,12 +16,14 @@ from ybox.pkg.inst import install_package
 from ybox.pkg.list import list_files, list_packages
 from ybox.pkg.mark import mark_package
 from ybox.pkg.repair import repair_package_state
+from ybox.pkg.repo import repo_add, repo_remove
 from ybox.pkg.search import search_packages
 from ybox.pkg.uninst import uninstall_package
-from ybox.pkg.update import update_package
+from ybox.pkg.update import update_packages
 from ybox.print import print_error, print_info
 from ybox.state import YboxStateManagement
-from ybox.util import EnvInterpolation, config_reader, select_item_from_menu
+from ybox.util import (EnvInterpolation, config_reader, get_ybox_version,
+                       select_item_from_menu)
 
 
 def main() -> None:
@@ -64,6 +66,9 @@ def main_argv(argv: list[str]) -> None:
 
     env = Environ()
     with YboxStateManagement(env) as state:
+        # ensure that all state database changes are done as a single transaction and only applied
+        # if there were no failures (commit/rollback are automatic at the end of `with`)
+        state.begin_transaction()
         if (runtime_conf := state.get_container_configuration(container_name)) is None:
             print_error(f"No entry for ybox container '{container_name}' found!")
             sys.exit(1)
@@ -71,11 +76,20 @@ def main_argv(argv: list[str]) -> None:
         distribution_config_file = args.distribution_config if args.distribution_config \
             else conf.distribution_config(conf.distribution)
         env_interpolation = EnvInterpolation(env, [])
-        distro_config = config_reader(env.search_config_path(distribution_config_file),
-                                      env_interpolation)
+        distro_config = config_reader(env.search_config_path(
+            distribution_config_file, only_sys_conf=True), env_interpolation)
+        # if required, migrate the container to work with the latest product
+        state.migrate_container(get_ybox_version(conf), conf, distro_config)
+        # the "repo_cmd" flag set by the subcommands indicate whether the subcommand was
+        # for package management or for repository management
         pkgmgr = distro_config["pkgmgr"]
-        if (code := args.func(args, pkgmgr, docker_cmd, conf, runtime_conf, state)) != 0:
-            sys.exit(code)
+        if args.is_repo_cmd:
+            code = args.func(args, pkgmgr, distro_config["repo"], docker_cmd, conf,
+                             runtime_conf, state)
+        else:
+            code = args.func(args, pkgmgr, docker_cmd, conf, runtime_conf, state)
+        if code != 0:
+            sys.exit(code)  # state will be automatically rolled back for exceptions
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -86,6 +100,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_uninstall(add_subparser(operations, "uninstall", "uninstall a package and "
                                                          "optionally its dependencies"))
     add_update(add_subparser(operations, "update", "update some or all packages"))
+    add_repo_add(add_subparser(operations, "repo-add",
+                               "add a new package repository with a given name and server URL(s)"))
+    add_repo_remove(add_subparser(operations, "repo-remove",
+                                  "remove an existing package repository with the given name"))
     add_list(add_subparser(operations, "list", "list installed packages"))
     add_list_files(add_subparser(operations, "list-files", "list files of an installed package"))
     add_search(add_subparser(operations, "search",
@@ -96,7 +114,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                            "mark a package as a dependency or an explicitly installed package"))
     add_repair(add_subparser(operations, "repair",
                              "try to repair state after a failed operation or an interrupt/kill"))
-    # TODO: repo-add/remove
     return parser.parse_args(argv)
 
 
@@ -104,6 +121,8 @@ def add_subparser(operations, name: str, hlp: str) -> argparse.ArgumentParser:  
     subparser = cast(argparse.ArgumentParser,
                      operations.add_parser(name, help=hlp))  # type: ignore
     add_common_args(subparser)
+    # by default set the flag for repository command as false
+    subparser.set_defaults(is_repo_cmd=False)
     return subparser
 
 
@@ -167,7 +186,7 @@ def add_update(subparser: argparse.ArgumentParser) -> None:
                            help="the packages to update if provided, else update the entire "
                                 "installation of the container (which will end up updating all "
                                 "other containers sharing the same root if configured)")
-    subparser.set_defaults(func=update_package)
+    subparser.set_defaults(func=update_packages)
 
 
 def add_list(subparser: argparse.ArgumentParser) -> None:
@@ -237,3 +256,36 @@ def add_repair(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("--extensive", action="store_true",
                            help="repair thoroughly by reinstalling all packages")
     subparser.set_defaults(func=repair_package_state)
+
+
+def add_repo_add(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-k", "--key", type=str,
+                           help="key to be registered for verification of the packages (usually "
+                                "a GPG/PGP signing key); this can be a URL to the key file or a "
+                                "key ID that can be retrieved from default key server as "
+                                "configured in the distribution's configuration file or the one "
+                                "mentioned by the -s/--key-server option")
+    subparser.add_argument("-s", "--key-server", type=str,
+                           help="URL of the key server to be used for retrieving a key by ID "
+                                "which will override the default key server configured in the "
+                                "distribution's configuration file")
+    subparser.add_argument("-o", "--options", type=str,
+                           help="additional options that may be required for the repository "
+                                "specification; for example debian/ubuntu need '<distribution> "
+                                "<component...>' in its source specification so that need to be "
+                                "provided using '--options=stable main' (as an example)")
+    subparser.add_argument("-S", "--add-source-repo", action="store_true",
+                           help="for distributions like debian/ubuntu, this specifies that the "
+                                "repository for package sources (deb-src) should also be added "
+                                "using the same specification as the package repository")
+    subparser.add_argument("name", type=str, help="name for the package repository to be added")
+    subparser.add_argument("urls", nargs="+",
+                           help="one or more server URLs of the package repository")
+    subparser.set_defaults(is_repo_cmd=True)
+    subparser.set_defaults(func=repo_add)
+
+
+def add_repo_remove(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("name", type=str, help="name of the package repository to be removed")
+    subparser.set_defaults(is_repo_cmd=True)
+    subparser.set_defaults(func=repo_remove)

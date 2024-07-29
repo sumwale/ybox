@@ -11,8 +11,7 @@ from typing import Callable, Optional, Union
 from uuid import uuid4
 
 from ybox.cmd import get_docker_command
-from ybox.config import Consts
-from ybox.config import StaticConfiguration
+from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.util import EnvInterpolation, config_reader
 
@@ -45,7 +44,7 @@ class _DistributionHelper:
 
 class DistributionBase(unittest.TestCase):
 
-    def setUp(self) -> None:
+    def setUp(self):
         os.environ["YBOX_TESTING"] = "1"
         self._resources_dir = f"{os.path.dirname(__file__)}/resources"
         self._home = os.environ["HOME"]
@@ -60,7 +59,7 @@ class DistributionBase(unittest.TestCase):
             self._helpers = [_DistributionHelper(distro) for distro in supp_fd.read().splitlines()]
         self._helper: Optional[_DistributionHelper] = None
 
-    def tearDown(self) -> None:
+    def tearDown(self):
         if self._helper:
             self.cleanup()
 

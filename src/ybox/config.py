@@ -55,9 +55,15 @@ class StaticConfiguration:
         return self._distribution
 
     @staticmethod
-    def distribution_config(distribution: str) -> str:
-        """relative configuration file path for the linux distribution being used"""
-        return f"distros/{distribution}/distro.ini"
+    def distribution_config(distribution: str, config_file: str = "distro.ini") -> str:
+        """
+        Relative configuration file path for the Linux distribution being used.
+
+        :param distribution: name of the Linux distribution
+        :param config_file: name of the configuration file, defaults to "distro.ini"
+        :return: relative path of the configuration file
+        """
+        return f"distros/{distribution}/{config_file}"
 
     @property
     def box_name(self) -> str:

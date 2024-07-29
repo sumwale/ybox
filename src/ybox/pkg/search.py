@@ -23,7 +23,7 @@ def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     of the package, `args.skip_deps` to skip removal of all orphaned dependencies of the package
     (including required and optional dependencies).
 
-    :param args: arguments having `package` and all other attributes passed by the user
+    :param args: arguments having `search` and all other attributes passed by the user
     :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container

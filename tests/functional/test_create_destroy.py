@@ -16,7 +16,7 @@ from ybox.run.destroy import main_argv as ybox_destroy
 class TestCreateDestroy(DistributionBase):
     """check for basic create and destroy of ybox containers"""
 
-    def test_create_no_shared(self) -> None:
+    def test_create_no_shared(self):
         self.for_all_distros(self.create_no_shared)
 
     def create_no_shared(self) -> None:

@@ -31,7 +31,7 @@ class TestFileLock(unittest.TestCase):
         proc.join()
         self.assertEqual(expected_exitcode, proc.exitcode)
 
-    def test_lock(self) -> None:
+    def test_lock(self):
         """test basic file locking behavior"""
         with FileLock(self._lock_file):
             # lock file should exist
@@ -46,7 +46,7 @@ class TestFileLock(unittest.TestCase):
 
             self._run_in_process(do_lock)
 
-    def test_unlock(self) -> None:
+    def test_unlock(self):
         """test basic file unlocking behavior"""
         with FileLock(self._lock_file):
             self.assertTrue(os.path.exists(self._lock_file))
@@ -59,7 +59,7 @@ class TestFileLock(unittest.TestCase):
 
         self._run_in_process(do_lock)
 
-    def test_timeout(self) -> None:
+    def test_timeout(self):
         """test timeout on a locked file"""
         with FileLock(self._lock_file):
             self.assertTrue(os.path.exists(self._lock_file))
@@ -75,7 +75,7 @@ class TestFileLock(unittest.TestCase):
 
             self._run_in_process(do_lock)
 
-    def test_poll(self) -> None:
+    def test_poll(self):
         """test timeout with poll interval on a locked file"""
         with FileLock(self._lock_file):
             self.assertTrue(os.path.exists(self._lock_file))
@@ -98,7 +98,7 @@ class TestFileLock(unittest.TestCase):
 
             self._run_in_process(do_lock)
 
-    def tearDown(self) -> None:
+    def tearDown(self):
         """tearDown will clean up the lock file"""
         Path(self._lock_file).unlink(missing_ok=True)
 

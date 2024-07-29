@@ -5,7 +5,7 @@ Mark a package as a dependency or as explicitly installed.
 import argparse
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, run_command
+from ybox.cmd import PkgMgr, build_bash_command, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_error, print_info
 from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
@@ -28,8 +28,8 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
 
     :return: integer exit status of mark package command where 0 represents success
     """
-    mark_explicit = bool(args.explicit)
-    mark_dependency_of = str(args.dependency_of) if args.dependency_of else ""
+    mark_explicit: bool = args.explicit
+    mark_dependency_of: str = args.dependency_of or ""
     if not mark_explicit ^ bool(mark_dependency_of):
         print_error("ybox-pkg mark: exactly one of -e or -D option must be specified "
                     f"(explicit={mark_explicit}, dependency-of={mark_dependency_of})")
@@ -58,11 +58,12 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
         # the package may or may not be a dependency in the underlying packaging, so don't mark
         # at the package manager level which may cause the package to be orphaned and auto-removed
     else:
+        print_info(f"Marking '{package}' as explicitly installed")
         # remove any dependency entries for this package to mark it as explicitly installed
         state.unregister_dependency(conf.box_name, "%", package)
         # also mark as explicitly installed using the underlying package manager
         mark_cmd = pkgmgr[PkgMgr.MARK_EXPLICIT.value]
-        return int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
-                                mark_cmd.format(package=package)], exit_on_error=False,
-                               error_msg=f"marking '{package}' as explicitly installed"))
+        return int(run_command(build_bash_command(
+            docker_cmd, conf.box_name, mark_cmd.format(package=package)), exit_on_error=False,
+            error_msg=f"marking '{package}' as explicitly installed"))
     return 0

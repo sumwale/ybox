@@ -14,7 +14,7 @@ from typing import Optional, Tuple, Union
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from ybox.cmd import PkgMgr, run_command
+from ybox.cmd import PkgMgr, build_bash_command, run_command
 from ybox.config import Consts, StaticConfiguration
 from ybox.print import print_info, print_notice, print_warn
 from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
@@ -123,9 +123,9 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     if code != 0:
         if not quiet:
             print_info(f"Installing '{package}' in '{conf.box_name}'")
-        code = int(run_command([docker_cmd, "exec", "-it", conf.box_name, "/bin/bash", "-c",
-                                f"{resolved_install_cmd} {package}"], exit_on_error=False,
-                               error_msg=f"installing '{package}'"))
+        code = int(run_command(build_bash_command(
+            docker_cmd, conf.box_name, f"{resolved_install_cmd} {package}"), exit_on_error=False,
+            error_msg=f"installing '{package}'"))
         # actual installed package name can be different due to package being virtual and/or
         # having multiple choices
         if code == 0:
@@ -204,8 +204,9 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     #  2) redirect PKG: lines somewhere else like a common file: this can be done but will
     #          likely be more messy than the code below (e.g. handle concurrent executions),
     #          but still can be considered in future
-    with subprocess.Popen([docker_cmd, "exec", "-it", container_name, "/bin/bash", "-c",
-                           f"{opt_deps_cmd} {package}"], stdout=subprocess.PIPE) as deps_result:
+    with subprocess.Popen(build_bash_command(
+            docker_cmd, container_name, f"{opt_deps_cmd} {package}"),
+            stdout=subprocess.PIPE) as deps_result:
         line = bytearray()
         # possible end of lines
         eol1 = b"\r"[0]
@@ -242,7 +243,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
 
         if deps_result.wait(60) != 0:
             print_warn(f"FAILED to determine optional dependencies of {package} -- "
-                       "see above output for details. Skipping optional dependencies.")
+                       "see the output above for details. Skipping optional dependencies.")
             return [], installed_optional_deps
 
     return optional_deps, installed_optional_deps
@@ -292,8 +293,8 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     if not copy_type:
         return []
     # skip on errors below and do not fail the installation
-    package_files = run_command(
-        [docker_cmd, "exec", conf.box_name, "/bin/bash", "-c", list_cmd.format(package=package)],
+    package_files = run_command(build_bash_command(
+        docker_cmd, conf.box_name, list_cmd.format(package=package), enable_pty=False),
         capture_output=True, exit_on_error=False, error_msg=f"listing files of '{package}'")
     if isinstance(package_files, int):
         return []

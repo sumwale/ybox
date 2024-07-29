@@ -1,4 +1,6 @@
-#!/bin/bash -e
+#!/bin/bash
+
+set -e
 
 # sudo is not present in the upstream archlinux image
 pacman -Sy

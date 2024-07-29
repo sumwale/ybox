@@ -4,12 +4,18 @@ Common utility classes and methods used by the scripts.
 
 import os
 import re
+import stat
 import subprocess
 from configparser import BasicInterpolation, ConfigParser, Interpolation
+from importlib.resources import files
 from typing import Iterable, Optional, Tuple
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
+from ybox import __version__ as PRODUCT_VERSION
+from ybox.cmd import build_bash_command
+
+from .config import Consts, StaticConfiguration
 from .env import Environ, PathName, resolve_inc_path
 from .print import print_warn
 
@@ -46,7 +52,7 @@ class EnvInterpolation(BasicInterpolation):
 
     # override before_read rather than before_get because expanded vars are needed when writing
     # into the state.db database too
-    def before_read(self, parser, section: str, option: str, value: str):  # type: ignore
+    def before_read(self, parser, section: str, option: str, value: str) -> str:  # type: ignore
         """Override before_read to substitute environment variables and ${NOW...} pattern.
            This method is overridden rather than before_get because expanded variables are
            also required when writing the configuration into the state.db database."""
@@ -84,6 +90,8 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
         top_level = conf_file
     if not (includes := config.get("base", "includes", fallback="")):
         return config
+    # TODO: relative paths inside an include file (e.g. scripts in distro.ini) should be relative
+    # to the include and not the parent
     for include in includes.split(","):
         if not (include := include.strip()):
             continue
@@ -120,6 +128,78 @@ def ini_file_reader(fd: Iterable[str], interpolation: Optional[Interpolation],
     return config
 
 
+def copy_file(src: PathName, dest: str, permissions: Optional[int] = None) -> None:
+    """
+    Copy a given source file (can be on filesystem or package resource) to destination path
+    overwriting if it exists, and with given optional permissions.
+
+    :param src: the source file or package resource
+    :param dest: destination file path
+    :param permissions: optional file permissions as an integer as accepted by :func:`os.chmod`,
+                        defaults to None
+    """
+    with open(dest, "w", encoding="utf-8") as dest_fd:
+        dest_fd.write(src.read_text(encoding="utf-8"))
+    if permissions is not None:
+        os.chmod(dest, permissions)
+    elif hasattr(src, "stat"):  # copy the permissions
+        # pyright does not check hasattr, hence the "type: ignore" instead of artificial TypeGuards
+        if hasattr(src, "resolve"):
+            src = src.resolve()  # type: ignore
+        perms = stat.S_IMODE(src.stat().st_mode)  # type: ignore
+        os.chmod(dest, perms)
+
+
+def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: ConfigParser) -> None:
+    """
+    Copy ybox setup scripts to local directory mounted on container.
+
+    :param conf: the `StaticConfiguration` of the container
+    :param distro_config: the parsed configuration (`ConfigParser`) of the Linux distribution
+    """
+    env = conf.env
+    # copy the common scripts
+    for script in Consts.resource_scripts():
+        path = env.search_config_path(f"resources/{script}", only_sys_conf=True)
+        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
+    # also copy distribution specific scripts
+    for script in Consts.distribution_scripts():
+        path = env.search_config_path(conf.distribution_config(conf.distribution, script),
+                                      only_sys_conf=True)
+        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
+    base_section = distro_config["base"]
+    if scripts := base_section.get("scripts"):
+        for script in scripts.split(","):
+            path = env.search_config_path(conf.distribution_config(conf.distribution, script),
+                                          only_sys_conf=True)
+            copy_file(path, f"{conf.scripts_dir}/{script}")
+        # finally copy the ybox python module which may be used by distribution scripts
+        src_dir = files("ybox")
+        dest_dir = f"{conf.scripts_dir}/ybox"
+        os.makedirs(dest_dir, exist_ok=True)
+        for resource in src_dir.iterdir():
+            if resource.is_file():
+                copy_file(resource, f"{dest_dir}/{resource.name}")
+    # finally write the current version string
+    version_file = f"{conf.scripts_dir}/version"
+    with open(version_file, "w", encoding="utf-8") as version_fd:
+        version_fd.write(PRODUCT_VERSION)
+
+
+def get_ybox_version(conf: StaticConfiguration) -> str:
+    """
+    Get the product version string recorded in the container or empty if no version was recorded.
+
+    :param conf: the `StaticConfiguration` of the container
+    :return: the version recorded in the container as a string, or empty if not present
+    """
+    version_file = f"{conf.scripts_dir}/version"
+    if os.access(version_file, os.R_OK):
+        with open(version_file, "r", encoding="utf-8") as fd:
+            return fd.read().strip()
+    return ""
+
+
 def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
                             container_name: str) -> Tuple[int, str]:
     """
@@ -131,8 +211,8 @@ def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
     :param container_name: name of the container
     :return: exit code of the `check_cmd` which should be 0 if the package exists
     """
-    check_result = subprocess.run(
-        [docker_cmd, "exec", container_name, "/bin/bash", "-c", check_cmd.format(package=package)],
+    check_result = subprocess.run(build_bash_command(
+        docker_cmd, container_name, check_cmd.format(package=package), enable_pty=False),
         check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     output = check_result.stdout.decode("utf-8").splitlines()
     first_line = output[0] if len(output) > 0 else ""

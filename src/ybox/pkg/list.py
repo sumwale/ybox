@@ -23,7 +23,7 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     When multiple containers share the same root directory, then listing all packages will include
     those installed from other containers, if any.
 
-    :param args: arguments having `package` and all other attributes passed by the user
+    :param args: arguments having all attributes passed by the user
     :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
@@ -82,7 +82,7 @@ def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
 
     :return: integer exit status of list package files command where 0 represents success
     """
-    package = str(args.package)
+    package: str = args.package
     list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
     docker_args = [docker_cmd, "exec"]
     if sys.stdout.isatty():  # don't act as a terminal if it is being redirected

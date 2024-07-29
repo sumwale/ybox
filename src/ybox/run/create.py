@@ -5,13 +5,11 @@ import os
 import pwd
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import time
 from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
-from importlib.resources import files
 from pathlib import Path
 from textwrap import dedent
 from typing import Optional, Tuple
@@ -29,7 +27,8 @@ from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
 from ybox.run.pkg import parse_args as pkg_parse_args
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 from ybox.util import (EnvInterpolation, NotSupportedError, config_reader,
-                       ini_file_reader, select_item_from_menu)
+                       copy_ybox_scripts_to_container, ini_file_reader,
+                       select_item_from_menu)
 
 _EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 _DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
@@ -271,7 +270,7 @@ def quick_config_read(file: PathName) -> ConfigParser:
 
 
 def select_distribution(args: argparse.Namespace, env: Environ) -> str:
-    support_list = env.search_config_path("distros/supported.list")
+    support_list = env.search_config_path("distros/supported.list", only_sys_conf=True)
     with support_list.open("r", encoding="utf-8") as supp_file:
         supported_distros = supp_file.read().splitlines()
     if distro := args.distribution:
@@ -290,8 +289,8 @@ def select_distribution(args: argparse.Namespace, env: Environ) -> str:
     # show a menu to choose from if the number of supported distributions exceeds 1
     distro_names: list[str] = []
     for distro in supported_distros:
-        distro_config = quick_config_read(
-            env.search_config_path(StaticConfiguration.distribution_config(distro)))
+        distro_config = quick_config_read(env.search_config_path(
+            StaticConfiguration.distribution_config(distro), only_sys_conf=True))
         distro_names.append(f"{distro_config['base']['name']} ({distro})")  # should always exist
     print_info("Please select the distribution to use for the container:", file=sys.stderr)
     if (distro_name := select_item_from_menu(distro_names)) is None:
@@ -430,7 +429,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
                 os.makedirs(val, exist_ok=True)
                 add_mount_option(args, val, env.target_home)
         elif key == "shared_root":
-            shared_root = val if val else ""
+            shared_root = val or ""
         elif key == "config_hardlinks":
             if val:
                 config_hardlinks = _get_boolean(val)
@@ -681,45 +680,12 @@ def copytree(src: str, dest: str, hardlink: bool = False) -> None:
                     shutil.copy2(src_path, f"{dest_dir}/{src_file}", follow_symlinks=True)
 
 
-def copy_file(src: PathName, dest: str, permissions: Optional[int] = None) -> None:
-    with open(dest, "w", encoding="utf-8") as dest_fd:
-        dest_fd.write(src.read_text(encoding="utf-8"))
-    if permissions is not None:
-        os.chmod(dest, permissions)
-    elif hasattr(src, "stat"):  # copy the permissions
-        # pyright does not check hasattr, hence the "type: ignore" instead of artificial TypeGuards
-        if hasattr(src, "resolve"):
-            src = src.resolve()  # type: ignore
-        perms = stat.S_IMODE(src.stat().st_mode)  # type: ignore
-        os.chmod(dest, perms)
-
-
 def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -> None:
     # first create local mount directory having entrypoint and other scripts
     if os.path.exists(conf.scripts_dir):
         shutil.rmtree(conf.scripts_dir)
     os.makedirs(conf.scripts_dir, exist_ok=True)
-    env = conf.env
-    # copy the common scripts
-    for script in Consts.resource_scripts():
-        path = env.search_config_path(f"resources/{script}")
-        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
-    # also copy distribution specific scripts
-    for script in Consts.distribution_scripts():
-        path = env.search_config_path(f"distros/{conf.distribution}/{script}")
-        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
-    base_section = distro_config["base"]
-    if scripts := base_section.get("scripts"):
-        for script in scripts.split(","):
-            path = env.search_config_path(f"distros/{conf.distribution}/{script}")
-            copy_file(path, f"{conf.scripts_dir}/{script}")
-        # finally copy the ybox python module which may be used by distribution scripts
-        src_dir = files("ybox")
-        dest_dir = f"{conf.scripts_dir}/ybox"
-        os.mkdir(dest_dir)
-        for resource in src_dir.iterdir():
-            if resource.is_file():
-                copy_file(resource, f"{dest_dir}/{resource.name}")
+    copy_ybox_scripts_to_container(conf, distro_config)
 
 
 def read_distribution_config(args: argparse.Namespace,
@@ -727,8 +693,8 @@ def read_distribution_config(args: argparse.Namespace,
     env_interpolation = EnvInterpolation(conf.env, [])
     distribution_config_file = args.distribution_config if args.distribution_config \
         else conf.distribution_config(conf.distribution)
-    distro_config = config_reader(conf.env.search_config_path(distribution_config_file),
-                                  env_interpolation)
+    distro_config = config_reader(conf.env.search_config_path(
+        distribution_config_file, only_sys_conf=True), env_interpolation)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
     shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist
@@ -895,5 +861,5 @@ def truncate_file(file: str) -> None:
 def restart_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     if (code := int(run_command([docker_cmd, "container", "start", conf.box_name],
                                 exit_on_error=False, error_msg="container restart"))) != 0:
-        print_error("Also check 'ybox-logs {conf.box_name}' for details")
+        print_error(f"Also check 'ybox-logs {conf.box_name}' for details")
         sys.exit(code)
