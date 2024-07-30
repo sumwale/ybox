@@ -79,11 +79,12 @@ As of now the following is required:
   * for docker follow the instructions in the official [docs](https://docs.docker.com/engine/security/rootless/)
 - python version 3.9 or higher -- all fairly recent Linux distributions should satisfy this
   but still confirm with `python3 --version`
-- install [simple-term-menu](https://pypi.org/project/simple-term-menu/) and
-  [packaging](https://pypi.org/project/packaging/) either from your distribution
-  repository, if available, else: `pip install simple-term-menu packaging` (obviously
-      you will need `pip` itself to be installed which should be in your distribution
-      repositories e.g. ubuntu/debian have it as `python3-pip`)
+- install [simple-term-menu](https://pypi.org/project/simple-term-menu/),
+  [tabulate](https://pypi.org/project/tabulate/) and
+  [packaging](https://pypi.org/project/packaging/),  either from your distribution
+  repository, if available, else: `pip install simple-term-menu packaging tabulate`
+  (obviously you will need `pip` itself to be installed which should be in your
+   distribution repositories e.g. ubuntu/debian have it as `python3-pip`)
 
 In the future, installer will take care of setting all of these up.
 

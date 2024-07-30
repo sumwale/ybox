@@ -6,11 +6,15 @@ import argparse
 import subprocess
 import sys
 from configparser import SectionProxy
+from itertools import chain
+from typing import Iterable, Sequence
 
 from ybox.cmd import PkgMgr, RepoCmd, build_bash_command, run_command
 from ybox.config import StaticConfiguration
-from ybox.print import print_error, print_info
+from ybox.print import fgcolor as fg
+from ybox.print import print_error, print_info, print_warn
 from ybox.state import RuntimeConfiguration, YboxStateManagement
+from ybox.util import format_as_table, page_output
 
 
 def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
@@ -179,3 +183,57 @@ def _refresh_package_metadata(pkgmgr: SectionProxy, docker_cmd: str,
     update_meta_cmd = pkgmgr[PkgMgr.UPDATE_META.value]
     return int(run_command(build_bash_command(docker_cmd, conf.box_name, update_meta_cmd),
                            exit_on_error=False, error_msg="updating package metadata"))
+
+
+# noinspection PyUnusedLocal
+def repo_list(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
+              docker_cmd: str, conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
+              state: YboxStateManagement) -> int:
+    # pylint: disable=unused-argument
+    """
+    List the repositories registered using :func:`repo-add`.
+
+    :param args: arguments having all attributes passed by the user
+    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
+    :param repo: the `repo` section from `distro.ini` configuration file of the distribution
+    :param docker_cmd: the docker/podman executable to use
+    :param conf: the `StaticConfiguration` of the container
+    :param runtime_conf: the `RuntimeConfiguration` of the container
+    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+
+    :return: integer exit status of repo-list command where 0 represents success
+    """
+    def plain_output(table: Iterable[Iterable[str]], headers: Sequence[str]) -> str:
+        sep: str = args.plain_separator or ""
+        return "\n".join(chain((sep.join(headers),), (sep.join(line) for line in table)))
+
+    repos = state.get_repositories(runtime_conf.shared_root or conf.box_name)
+    if not repos:
+        print_warn(f"No external repositories have been registered in container '{conf.box_name}'")
+        return 1
+    fg_name = fg.lightgray
+    fg_urls = fg.orange
+    if args.verbose:
+        table = ((name, urls, key, options, "true" if with_source_repo else "false")
+                 for name, urls, key, options, with_source_repo in repos)
+        headers = ("Name", "Servers", "Key", "Options", "Source")
+        if args.plain_separator:
+            out = plain_output(table, headers)
+        else:
+            # using ratio of 4:16:11:6:3 (out of 40) for the widths of the five columns
+            out = format_as_table(table, headers, (fg_name, fg_urls, fg.cyan, fg.green, fg.blue),
+                                  "rounded_grid", (4.0, 16.0, 11.0, 6.0, 3.0))
+    else:
+        table = ((name, urls) for name, urls, _, _, _ in repos)
+        headers = ("Name", "Servers")
+        if args.plain_separator:
+            out = plain_output(table, headers)
+        else:
+            out = format_as_table(table, headers, (fg_name, fg_urls), "rounded_grid", (2.0, 8.0))
+    # empty pager argument is a valid one and indicates no pagination, hence the `is None` check
+    pager = args.pager if args.pager is not None or args.plain_separator else conf.pager
+    if pager:
+        page_output(out, pager)
+    else:
+        print(out)
+    return 0

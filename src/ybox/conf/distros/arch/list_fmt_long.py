@@ -3,28 +3,21 @@ Format output of `pacman -Qi ...` as a table having four columns (Name, Version,
   Dependency Of) with headings or as plain string-separated fields.
 """
 
-import os
 import re
-import shutil
 import sys
-from typing import Tuple
 
+from list_fmt_common import (FG_DESC, FG_NAME, FG_NONE, FG_OPT, FG_REQ, FG_VER,
+                             parse_separator)
 from tabulate import tabulate
 
-from list_fmt_common import FG_NAME, FG_VER, FG_DESC, FG_REQ, FG_OPT, FG_NONE, parse_separator
+from ybox.print import get_terminal_width
 
 _VAL_RE = re.compile(r"^\s*[^:]*:\s*")
 _WS_RE = re.compile(r"\s\s+")
 
-# Adjust column widths as per the terminal width.
-# Use stderr for the terminal width since stdout is piped to pager.
-try:
-    terminal_width = os.get_terminal_size(sys.stderr.fileno()).columns
-except OSError:
-    terminal_width = shutil.get_terminal_size().columns
-available_width = terminal_width - 12  # -12 is for the borders and padding
+available_width = get_terminal_width() - 12  # -12 is for the borders and padding
 
-# using ratio of 4:4:6:6 for the four columns
+# using ratio of 4:4:6:6 (out of 20) for the widths of the four columns
 name_width = int(available_width * 4.0 / 20.0)
 ver_width = int(available_width * 4.0 / 20.0)
 desc_width = int(available_width * 6.0 / 20.0)
@@ -71,7 +64,7 @@ def format_dep_of(req_by: str, opt_for: str, description: str, plain_sep: str) -
 
 def process() -> None:
     """process pacman output on stdin to create a table or plain output"""
-    table: list[Tuple[str, str, str, str]] = []
+    table: list[tuple[str, str, str, str]] = []
     plain_sep = parse_separator()
     name = version = description = req_by = opt_for = ""
     req_by_start = opt_for_start = False
@@ -111,7 +104,7 @@ def process() -> None:
                 opt_for += line.rstrip()
         elif req_by_start or opt_for_start:
             req_by_start = opt_for_start = False
-
+    # add the last one
     if name:
         format_package()
     if not plain_sep:

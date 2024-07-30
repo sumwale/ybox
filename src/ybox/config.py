@@ -33,6 +33,7 @@ class StaticConfiguration:
         if os.path.exists("/etc/timezone"):
             with open("/etc/timezone", "r", encoding="utf-8") as timezone:
                 self._timezone = timezone.read().rstrip("\n")
+        self._pager = os.environ.get("YBOX_PAGER", Consts.default_pager())
         container_dir = f"{env.data_dir}/{box_name}"
         os.environ["YBOX_CONTAINER_DIR"] = container_dir
         self._configs_dir = f"{container_dir}/configs"
@@ -89,6 +90,11 @@ class StaticConfiguration:
     def timezone(self) -> Optional[str]:
         """the contents of /etc/timezone"""
         return self._timezone
+
+    @property
+    def pager(self) -> str:
+        """pager command to show output one screenful at a time on the terminal"""
+        return self._pager
 
     @property
     def configs_dir(self) -> str:
@@ -211,3 +217,11 @@ class Consts:
         (location is `StaticConfiguration.target_scripts_dir`)
         """
         return "nvidia-setup.sh"
+
+    @staticmethod
+    def default_pager() -> str:
+        """
+        default pager to show output one screenful at a time on the terminal when YBOX_PAGER
+        environment variable is not set
+        """
+        return "/usr/bin/less -RLFX"

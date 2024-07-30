@@ -7,7 +7,7 @@ import time
 import zlib
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import ijson  # type: ignore
 
@@ -25,7 +25,7 @@ _DEFAULT_SEP = "::::"  # something that does not appear in descriptions (at leas
 _PACKAGE_NAME_RE = re.compile(r"^[\w@.+-]+")  # used to strip out version comparisons
 
 # fields: name of original package, description, required dependencies, optional dependencies
-PackageAlternate = Tuple[str, str, list[str], list[str]]
+PackageAlternate = tuple[str, str, list[str], list[str]]
 
 
 def main() -> None:
@@ -62,7 +62,7 @@ def main_argv(argv: list[str]) -> None:
     sep = args.separator
     build_pacman_db_map(all_packages, sep)
 
-    opt_deps: dict[str, Tuple[str, int, bool]] = {}
+    opt_deps: dict[str, tuple[str, int, bool]] = {}
     find_opt_deps(args.package, installed_packages, all_packages, opt_deps, args.level)
     # columns below are expected by ybox-pkg
     if opt_deps:
@@ -132,7 +132,7 @@ def build_aur_db_map(aur_packages: defaultdict[str, list[PackageAlternate]],
 
 def find_opt_deps(package: str, installed: set[str],
                   all_packages: defaultdict[str, list[PackageAlternate]],
-                  opt_deps: dict[str, Tuple[str, int, bool]], max_level: int,
+                  opt_deps: dict[str, tuple[str, int, bool]], max_level: int,
                   level: int = 1) -> None:
     if level > max_level:
         return

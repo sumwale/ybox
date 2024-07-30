@@ -12,7 +12,7 @@ from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
 from textwrap import dedent
-from typing import Optional, Tuple
+from typing import Optional
 
 from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_active_ybox,
                       check_ybox_exists, get_docker_command, run_command)
@@ -336,7 +336,7 @@ def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
     raise ValueError(f"Unexpected profile name string: {profile_name}")
 
 
-def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> Tuple[str, str]:
+def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> tuple[str, str]:
     ini_suffix = ".ini"
     if args.name:
         box_name = args.name
@@ -360,7 +360,7 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> Tu
 
 
 def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: SectionProxy,
-                     docker_args: list[str]) -> Tuple[str, ConfigParser, dict[str, list[str]]]:
+                     docker_args: list[str]) -> tuple[str, ConfigParser, dict[str, list[str]]]:
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
     # Skip environment variable substitution for the "configs" section since the values
@@ -409,7 +409,7 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
 
 
 def process_base_section(base_section: SectionProxy, profile: PathName,
-                         conf: StaticConfiguration, args: list[str]) -> Tuple[str, Optional[bool]]:
+                         conf: StaticConfiguration, args: list[str]) -> tuple[str, Optional[bool]]:
     env = conf.env
     # shared root is disabled by default
     shared_root = ""
@@ -689,7 +689,7 @@ def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
 
 
 def read_distribution_config(args: argparse.Namespace,
-                             conf: StaticConfiguration) -> Tuple[str, str, str, ConfigParser]:
+                             conf: StaticConfiguration) -> tuple[str, str, str, ConfigParser]:
     env_interpolation = EnvInterpolation(conf.env, [])
     distribution_config_file = args.distribution_config if args.distribution_config \
         else conf.distribution_config(conf.distribution)

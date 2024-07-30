@@ -8,7 +8,7 @@ import time
 import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta
-from typing import Any, Tuple, cast
+from typing import Any, cast
 from uuid import uuid4
 
 from ybox.cmd import (YboxLabel, check_active_ybox, check_ybox_exists,
@@ -28,7 +28,7 @@ class TestCmd(unittest.TestCase):
     _TEST_IMAGE = "busybox"
 
     @staticmethod
-    def _get_docker_cmd() -> Tuple[str, argparse.ArgumentParser]:
+    def _get_docker_cmd() -> tuple[str, argparse.ArgumentParser]:
         """build `argparse` and obtain docker/podman path using `get_docker_command`"""
         parser = argparse.ArgumentParser()
         parser.add_argument("-d", "--docker-path")

@@ -1,12 +1,17 @@
 """
-Utility `namedtuple`s and methods to print in color on terminal/console.
+Utility classes and methods to print in color on terminal/console.
 """
 
-from typing import IO, NamedTuple, Optional
+import os
+import shutil
+import sys
+from dataclasses import dataclass
+from typing import IO, Optional
 
 
 # define color names for printing in terminal
-class TermColors(NamedTuple):
+@dataclass(frozen=True)
+class TermColors:
     """basic ASCII color strings for terminals"""
     black: str
     red: str
@@ -29,6 +34,18 @@ fgcolor = TermColors(
 bgcolor = TermColors(
     "\033[40m", "\033[41m", "\033[42m", "\033[43m", "\033[44m", "\033[45m", "\033[46m",
     "\033[47m", "\033[00m", "\033[01m", "\033[02m")
+
+
+def get_terminal_width() -> int:
+    """
+    Get the best estimate of the width of the current terminal.
+    This may not work well if the output is piped, for example.
+    """
+    # Use stderr for the terminal width since stdout can be piped to pager.
+    try:
+        return os.get_terminal_size(sys.stderr.fileno()).columns
+    except OSError:
+        return shutil.get_terminal_size().columns
 
 
 def print_color(msg: str, fg: Optional[str] = None,

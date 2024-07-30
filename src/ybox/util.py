@@ -8,16 +8,17 @@ import stat
 import subprocess
 from configparser import BasicInterpolation, ConfigParser, Interpolation
 from importlib.resources import files
-from typing import Iterable, Optional, Tuple
+from typing import Any, Iterable, Optional, Sequence
 
 from simple_term_menu import TerminalMenu  # type: ignore
+from tabulate import tabulate
 
 from ybox import __version__ as PRODUCT_VERSION
-from ybox.cmd import build_bash_command
 
+from .cmd import build_bash_command
 from .config import Consts, StaticConfiguration
 from .env import Environ, PathName, resolve_inc_path
-from .print import print_warn
+from .print import fgcolor, get_terminal_width, print_warn
 
 
 class NotSupportedError(Exception):
@@ -201,7 +202,7 @@ def get_ybox_version(conf: StaticConfiguration) -> str:
 
 
 def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
-                            container_name: str) -> Tuple[int, str]:
+                            container_name: str) -> tuple[int, str]:
     """
     Check if a given package is installed in a container.
 
@@ -234,3 +235,40 @@ def select_item_from_menu(items: list[str]) -> Optional[str]:
         return items[int(selection)]
     print_warn("Aborted selection")
     return None
+
+
+def format_as_table(table: Iterable[Iterable[Any]], headers: Sequence[str], colors: Sequence[str],
+                    fmt: str, col_width_ratios: Iterable[float]) -> str:
+    """
+    Format given table of values as a table appropriate for display on a terminal.
+
+    :param table: an `Iterable` of `Iterable` values as accepted by :func:`tabulate.tabulate`
+    :param headers: a `Sequence` of header names corresponding to each column in the `table`
+    :param colors: a `Sequence` of color strings (e.g. :func:`fgcolor.red`) for each of the columns
+    :param fmt: formatting style of the table (e.g. `rounded_grid`) as accepted by
+                :func:`tabulate.tabulate`
+    :param col_width_ratios: ratios of widths of the columns as an `Iterable` of floats; the
+                             length of this should match that of `table` and `headers_with_colors`
+    :return: formatted table as a string appropriate for display in the current terminal
+    """
+    # surround the table values and headers with the given color strings
+    table = ((f"{color}{v}{fgcolor.reset}" for v, color in zip(line, colors)) for line in table)
+    headers = [f"{color}{header}{fgcolor.reset}" for header, color in zip(headers, colors)]
+    # reduce available width for borders and padding
+    available_width = get_terminal_width() - (len(headers) - 1) * 4
+    ratio_sum = sum(col_width_ratios)
+    max_col_widths = [int(ratio * available_width / ratio_sum) for ratio in col_width_ratios]
+    return tabulate(table, headers=headers, tablefmt=fmt, maxcolwidths=max_col_widths)
+
+
+def page_output(out: str, pager: str) -> None:
+    """
+    Display given string on the terminal one screenful at a time using the given `pager` command.
+
+    :param out: the string to be displayed
+    :param pager: the command to be executed for pagination as a separate process
+    """
+    with subprocess.Popen(pager.split(), stdin=subprocess.PIPE) as page_in:
+        assert page_in.stdin is not None
+        page_in.stdin.write(out.encode("utf-8"))
+        page_in.communicate()

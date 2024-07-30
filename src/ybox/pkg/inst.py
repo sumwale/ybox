@@ -10,7 +10,7 @@ import subprocess
 import sys
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
@@ -101,7 +101,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     """
     # need to determine optional dependencies before installation else second level or higher
     # dependencies will never be found (as the dependencies are already installed)
-    optional_deps: list[Tuple[str, str, int]] = []
+    optional_deps: list[tuple[str, str, int]] = []
     installed_optional_deps: set[str] = set()
     if opt_dep_install:
         resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
@@ -169,7 +169,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
 
 
 def get_optional_deps(package: str, docker_cmd: str, container_name: str,
-                      opt_deps_cmd: str) -> Tuple[list[Tuple[str, str, int]], set[str]]:
+                      opt_deps_cmd: str) -> tuple[list[tuple[str, str, int]], set[str]]:
     """
     Find the optional dependencies recursively, removing the ones already installed.
 
@@ -185,7 +185,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
               second part of the tuple is the set of optional dependencies of the package that
               are already installed and registered as dependency in state.db for some other package
     """
-    optional_deps: list[Tuple[str, str, int]] = []
+    optional_deps: list[tuple[str, str, int]] = []
     installed_optional_deps: set[str] = set()
     pkg_start = "Found optional dependencies"
     pkg_prefix = "PKG:"
@@ -249,7 +249,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     return optional_deps, installed_optional_deps
 
 
-def select_optional_deps(package: str, deps: list[Tuple[str, str, int]]) -> list[str]:
+def select_optional_deps(package: str, deps: list[tuple[str, str, int]]) -> list[str]:
     """
     Show a selection menu to the user having optional dependencies of a package to be installed.
 

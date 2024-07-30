@@ -8,7 +8,7 @@ from typing import cast
 
 from ybox.cmd import (YboxLabel, check_active_ybox, get_docker_command,
                       run_command)
-from ybox.config import StaticConfiguration
+from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ
 from ybox.pkg.clean import clean_cache
 from ybox.pkg.info import info_packages
@@ -16,7 +16,7 @@ from ybox.pkg.inst import install_package
 from ybox.pkg.list import list_files, list_packages
 from ybox.pkg.mark import mark_package
 from ybox.pkg.repair import repair_package_state
-from ybox.pkg.repo import repo_add, repo_remove
+from ybox.pkg.repo import repo_add, repo_list, repo_remove
 from ybox.pkg.search import search_packages
 from ybox.pkg.uninst import uninstall_package
 from ybox.pkg.update import update_packages
@@ -100,11 +100,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_uninstall(add_subparser(operations, "uninstall", "uninstall a package and "
                                                          "optionally its dependencies"))
     add_update(add_subparser(operations, "update", "update some or all packages"))
+    add_list(add_subparser(operations, "list", "list installed packages"))
     add_repo_add(add_subparser(operations, "repo-add",
                                "add a new package repository with a given name and server URL(s)"))
     add_repo_remove(add_subparser(operations, "repo-remove",
                                   "remove an existing package repository with the given name"))
-    add_list(add_subparser(operations, "list", "list installed packages"))
+    add_repo_list(add_subparser(operations, "repo-list",
+                                "list external repositories registered using 'repo-add'"))
     add_list_files(add_subparser(operations, "list-files", "list files of an installed package"))
     add_search(add_subparser(operations, "search",
                              "search repository for packages with matching string"))
@@ -289,3 +291,18 @@ def add_repo_remove(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("name", type=str, help="name of the package repository to be removed")
     subparser.set_defaults(is_repo_cmd=True)
     subparser.set_defaults(func=repo_remove)
+
+
+def add_repo_list(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-P", "--pager", type=str,
+                           help="pager to use to show the output one screenful at a time, "
+                                "default is YBOX_PAGER environment variable if set else "
+                                f"'{Consts.default_pager()}'; set to empty to skip pagination")
+    subparser.add_argument("-p", "--plain-separator", type=str,
+                           help="show the output in 'plain' format rather than as a table with "
+                                "the fields separated by the given string; disables default "
+                                "pager so use explicit -P/--pager for pagination")
+    subparser.add_argument("-v", "--verbose", action="store_true",
+                           help="show more details of the repositories")
+    subparser.set_defaults(is_repo_cmd=True)
+    subparser.set_defaults(func=repo_list)

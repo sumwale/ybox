@@ -13,7 +13,7 @@ from enum import Enum, IntFlag, auto
 from importlib.resources import files
 from io import StringIO
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Tuple, Union
+from typing import Iterable, Iterator, Optional, Union
 from uuid import uuid4
 
 from packaging.version import Version
@@ -27,7 +27,7 @@ from .print import print_color, print_warn
 from .util import ini_file_reader
 
 
-@dataclass
+@dataclass(frozen=True)
 class RuntimeConfiguration:
     """
     Holds runtime configuration details of a container.
@@ -342,7 +342,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
 
     def register_container(self, container_name: str, distribution: str, shared_root: str,
                            parser: ConfigParser,
-                           force_own_orphans: bool) -> dict[str, Tuple[CopyType, dict[str, str]]]:
+                           force_own_orphans: bool) -> dict[str, tuple[CopyType, dict[str, str]]]:
         """
         Register information of a ybox container including its name, distribution and
         configuration. In addition to the registration, this will also check for orphaned packages
@@ -362,7 +362,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
                  this container mapped to the `CopyType` for the wrapper files of those packages
                  (which can be used to recreate wrappers for container desktop/executable files)
         """
-        packages: dict[str, Tuple[CopyType, dict[str, str]]] = {}
+        packages: dict[str, tuple[CopyType, dict[str, str]]] = {}
         # build the ini string from parser
         with StringIO() as config:
             parser.write(config)
@@ -735,7 +735,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
             return result
 
     def unregister_repository(self, name: str,
-                              container_or_shared_root: str) -> Optional[Tuple[str, bool]]:
+                              container_or_shared_root: str) -> Optional[tuple[str, bool]]:
         """
         Unregister a previously registered package repository (using :meth:`register_repository`).
 
@@ -816,6 +816,23 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
             cursor.execute(
                 f"SELECT name FROM packages WHERE {predicate} ORDER BY name ASC", args)
             return [str(row[0]) for row in cursor.fetchall()]
+
+    def get_repositories(self,
+                         container_or_shared_root: str) -> list[tuple[str, str, str, str, bool]]:
+        """
+        Get the list of externally registered repositories using :meth:`register_repository`
+
+        :param container_or_shared_root: if container uses shared root, then the shared root path
+                                         else name of the container to search for repositories
+        :return: list of tuples having: name of repository, comma-separated list of server URLs,
+                 verification key, additional options, and boolean set to True if source code
+                 repository is enabled
+        """
+        with closing(cursor := self._conn.cursor()):
+            cursor.execute("SELECT name, urls, key, options, with_source_repo FROM package_repos "
+                           "WHERE container_or_shared_root = ? ORDER BY name ASC",
+                           (container_or_shared_root,))
+            return [(row[0], row[1], row[2], row[3], bool(row[4])) for row in cursor.fetchall()]
 
     def check_packages(self, container_name: str, packages: Iterable[str]) -> list[str]:
         """

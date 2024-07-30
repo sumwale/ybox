@@ -4,16 +4,14 @@ fields.
 """
 
 import sys
-from typing import Tuple
 
+from list_fmt_common import FG_NAME, FG_NONE, FG_VER, parse_separator
 from tabulate import tabulate
-
-from list_fmt_common import FG_NAME, FG_VER, FG_NONE, parse_separator
 
 
 def process() -> None:
     """process pacman output on stdin to create a table or plain output"""
-    table: list[Tuple[str, str]] = []
+    table: list[tuple[str, str]] = []
     plain_sep = parse_separator()
     for line in sys.stdin:
         s_line = line.rstrip().split(maxsplit=1)
