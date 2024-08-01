@@ -9,12 +9,13 @@ from configparser import SectionProxy
 from itertools import chain
 from typing import Iterable, Sequence
 
-from ybox.cmd import PkgMgr, RepoCmd, build_bash_command, run_command
+from ybox.cmd import (PkgMgr, RepoCmd, build_bash_command, page_output,
+                      run_command)
 from ybox.config import StaticConfiguration
 from ybox.print import fgcolor as fg
 from ybox.print import print_error, print_info, print_warn
 from ybox.state import RuntimeConfiguration, YboxStateManagement
-from ybox.util import format_as_table, page_output
+from ybox.util import FormatTable
 
 
 def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
@@ -31,7 +32,7 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+    :param state: instance of `YboxStateManagement` having the state of all ybox containers
 
     :return: integer exit status of repo-add command where 0 represents success
     """
@@ -134,7 +135,7 @@ def repo_remove(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionPro
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+    :param state: instance of `YboxStateManagement` having the state of all ybox containers
 
     :return: integer exit status of repo-remove command where 0 represents success
     """
@@ -158,7 +159,7 @@ def repo_remove(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionPro
                                     error_msg=f"unregistering key '{key}'"))) != 0:
             return code
     # next remove the repository
-    print_info(f"Unegistering repository '{name}'")
+    print_info(f"Unregistering repository '{name}'")
     remove_cmd = repo[RepoCmd.REMOVE.value].format(name=name, remove_source=with_source_repo)
     if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, remove_cmd),
                                 exit_on_error=False,
@@ -199,13 +200,15 @@ def repo_list(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+    :param state: instance of `YboxStateManagement` having the state of all ybox containers
 
     :return: integer exit status of repo-list command where 0 represents success
     """
-    def plain_output(table: Iterable[Iterable[str]], headers: Sequence[str]) -> str:
-        sep: str = args.plain_separator or ""
-        return "\n".join(chain((sep.join(headers),), (sep.join(line) for line in table)))
+    separator: str = args.plain_separator or ""
+
+    def plain_output(tbl: Iterable[Iterable[str]], hdr: Sequence[str]) -> str:
+        return "\n".join(chain((separator.join(hdr),),
+                               (separator.join(line) for line in tbl)))
 
     repos = state.get_repositories(runtime_conf.shared_root or conf.box_name)
     if not repos:
@@ -217,23 +220,20 @@ def repo_list(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy
         table = ((name, urls, key, options, "true" if with_source_repo else "false")
                  for name, urls, key, options, with_source_repo in repos)
         headers = ("Name", "Servers", "Key", "Options", "Source")
-        if args.plain_separator:
+        if separator:
             out = plain_output(table, headers)
         else:
             # using ratio of 4:16:11:6:3 (out of 40) for the widths of the five columns
-            out = format_as_table(table, headers, (fg_name, fg_urls, fg.cyan, fg.green, fg.blue),
-                                  "rounded_grid", (4.0, 16.0, 11.0, 6.0, 3.0))
+            out = FormatTable(table, headers, (fg_name, fg_urls, fg.cyan, fg.green, fg.blue),
+                              "rounded_grid", (4.0, 16.0, 11.0, 6.0, 3.0)).show()
     else:
         table = ((name, urls) for name, urls, _, _, _ in repos)
         headers = ("Name", "Servers")
-        if args.plain_separator:
+        if separator:
             out = plain_output(table, headers)
         else:
-            out = format_as_table(table, headers, (fg_name, fg_urls), "rounded_grid", (2.0, 8.0))
+            out = FormatTable(table, headers, (fg_name, fg_urls),
+                              "rounded_grid", (2.0, 8.0)).show()
     # empty pager argument is a valid one and indicates no pagination, hence the `is None` check
-    pager = args.pager if args.pager is not None or args.plain_separator else conf.pager
-    if pager:
-        page_output(out, pager)
-    else:
-        print(out)
-    return 0
+    pager: str = (args.pager or "") if args.pager is not None or separator else conf.pager
+    return page_output((out.encode("utf-8"),), pager)

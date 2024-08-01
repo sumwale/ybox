@@ -19,7 +19,7 @@ from uuid import uuid4
 from packaging.version import Version
 from packaging.version import parse as parse_version
 
-from ybox import __version__ as PRODUCT_VERSION
+from ybox import __version__ as product_version
 
 from .config import StaticConfiguration
 from .env import Environ, PathName, resolve_inc_path
@@ -134,7 +134,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
             self._conn.create_function("JSON_FROM_CSV", 1, self.json_from_csv, deterministic=True)
             self._conn.create_function("EQUIV_CONFIG", 2, self.equivalent_configuration,
                                        deterministic=True)
-            self._version = parse_version(PRODUCT_VERSION)
+            self._version = parse_version(product_version)
             self._init_schema(cursor)
             self._internal_commit()
 
@@ -225,10 +225,18 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
 
         # determine the migration scripts that need to be run by comparing versions
         def check_version(file: str) -> bool:
-            """check if the versions in the given migration script (<ver1>:<ver2>.<suffix>)
-                are within the stored schema version and current schema version"""
-            return all((version := parse_version(ver)) and old_version <= version <= new_version
-                       for ver in file.removesuffix(suffix).split(sep) if file.endswith(suffix))
+            """
+            Check if the versions in the given migration script <ver1_1>[-<ver1_2>]:<ver2>.<suffix>
+            are within the stored schema version and current schema version
+            """
+            if not file.endswith(suffix):
+                return False
+            part1, _, part2 = file.removesuffix(suffix).partition(sep)
+            part1_1, _, part1_2 = part1.partition("-")
+            if part1_2:
+                return parse_version(part1_1) <= old_version <= parse_version(part1_2) < \
+                    parse_version(part2) <= new_version
+            return old_version <= parse_version(part1) < parse_version(part2) <= new_version
 
         version_files = [file for file in file_iter if file.is_file() and check_version(file.name)]
         if len(version_files) > 1:
@@ -624,7 +632,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         :param urls: comma separated server URLs for the repository
         :param key: key used for verifying packages fetched from the repository
         :param options: additional options to be set for the repository (or empty if none)
-        :param with_source_repo: if True then source code repository has also been enabled
+        :param with_source_repo: True when source code repository has also been enabled
         :param update: if True then update existing entry with the new values
         :return: True if the package repository was successfully registered and False if the
                  `name` already exists
@@ -856,7 +864,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
 
     def commit(self) -> None:
         """
-        Invoke an explicit COMMIT on the underly database connection.
+        Invoke an explicit COMMIT on the underlying database connection.
 
         The recommended usage of this class is using a `with` statement for automatic resource
         management which will automatically commit or rollback any pending transaction and close
@@ -867,7 +875,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
 
     def rollback(self) -> None:
         """
-        Invoke an explicit ROLLBACK on the underly database connection.
+        Invoke an explicit ROLLBACK on the underlying database connection.
 
         The recommended usage of this class is using a `with` statement for automatic resource
         management which will automatically commit or rollback any pending transaction and close
@@ -878,7 +886,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
 
     def close(self) -> None:
         """
-        Close the underlying connection to the database. This will first rollback any pending
+        Close the underlying connection to the database. This will first roll back any pending
         transaction on the connection.
         """
         self.rollback()  # rollback any pending transactions

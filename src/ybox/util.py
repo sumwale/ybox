@@ -7,18 +7,20 @@ import re
 import stat
 import subprocess
 from configparser import BasicInterpolation, ConfigParser, Interpolation
+from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import Any, Iterable, Optional, Sequence
 
 from simple_term_menu import TerminalMenu  # type: ignore
 from tabulate import tabulate
 
-from ybox import __version__ as PRODUCT_VERSION
+from ybox import __version__ as product_version
 
 from .cmd import build_bash_command
 from .config import Consts, StaticConfiguration
 from .env import Environ, PathName, resolve_inc_path
-from .print import fgcolor, get_terminal_width, print_warn
+from .print import fgcolor as fg
+from .print import get_terminal_width, print_warn
 
 
 class NotSupportedError(Exception):
@@ -132,15 +134,18 @@ def ini_file_reader(fd: Iterable[str], interpolation: Optional[Interpolation],
 def copy_file(src: PathName, dest: str, permissions: Optional[int] = None) -> None:
     """
     Copy a given source file (can be on filesystem or package resource) to destination path
-    overwriting if it exists, and with given optional permissions.
+    overwriting if it exists, and with given optional permissions. If `permissions` is not provided
+    then this method tries to copy the permissions of the source to the destination (thus ignoring
+    the `umask`), so is similar to `cp --preserve=mode` for that case. The size of the file should
+    not be large since this method loads the entire `src` file as bytes then writes to `dest`.
 
     :param src: the source file or package resource
     :param dest: destination file path
     :param permissions: optional file permissions as an integer as accepted by :func:`os.chmod`,
                         defaults to None
     """
-    with open(dest, "w", encoding="utf-8") as dest_fd:
-        dest_fd.write(src.read_text(encoding="utf-8"))
+    with open(dest, "wb") as dest_fd:
+        dest_fd.write(src.read_bytes())
     if permissions is not None:
         os.chmod(dest, permissions)
     elif hasattr(src, "stat"):  # copy the permissions
@@ -184,7 +189,7 @@ def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: Con
     # finally write the current version string
     version_file = f"{conf.scripts_dir}/version"
     with open(version_file, "w", encoding="utf-8") as version_fd:
-        version_fd.write(PRODUCT_VERSION)
+        version_fd.write(product_version)
 
 
 def get_ybox_version(conf: StaticConfiguration) -> str:
@@ -232,43 +237,41 @@ def select_item_from_menu(items: list[str]) -> Optional[str]:
                                  status_bar="Press <Enter> to select, <Esc> to exit")
     selection = terminal_menu.show()
     if isinstance(selection, int):
-        return items[int(selection)]
+        return items[selection]
     print_warn("Aborted selection")
     return None
 
 
-def format_as_table(table: Iterable[Iterable[Any]], headers: Sequence[str], colors: Sequence[str],
-                    fmt: str, col_width_ratios: Iterable[float]) -> str:
+@dataclass
+class FormatTable:
     """
-    Format given table of values as a table appropriate for display on a terminal.
+    Format a given table of values as a table appropriate for display on a terminal.
 
-    :param table: an `Iterable` of `Iterable` values as accepted by :func:`tabulate.tabulate`
-    :param headers: a `Sequence` of header names corresponding to each column in the `table`
-    :param colors: a `Sequence` of color strings (e.g. :func:`fgcolor.red`) for each of the columns
-    :param fmt: formatting style of the table (e.g. `rounded_grid`) as accepted by
-                :func:`tabulate.tabulate`
-    :param col_width_ratios: ratios of widths of the columns as an `Iterable` of floats; the
-                             length of this should match that of `table` and `headers_with_colors`
-    :return: formatted table as a string appropriate for display in the current terminal
+    Attributes:
+        table: an `Iterable` of `Iterable` values as accepted by :func:`tabulate.tabulate`
+        headers: a `Sequence` of header names corresponding to each column in the `table`
+        colors: a `Sequence` of color strings (e.g. :func:`fgcolor.red`) for each of the columns
+        fmt: formatting style of the table (e.g. `rounded_grid`) as accepted by `tabulate.tabulate`
+        col_width_ratios: ratios of widths of the columns as an `Iterable` of floats; the length
+                          of this should match that of `table` and `headers_with_colors`
+        max_col_widths: calculated maximum widths of the columns from `col_width_ratios` as a
+                        `Sequence` of integers
     """
-    # surround the table values and headers with the given color strings
-    table = ((f"{color}{v}{fgcolor.reset}" for v, color in zip(line, colors)) for line in table)
-    headers = [f"{color}{header}{fgcolor.reset}" for header, color in zip(headers, colors)]
-    # reduce available width for borders and padding
-    available_width = get_terminal_width() - (len(headers) - 1) * 4
-    ratio_sum = sum(col_width_ratios)
-    max_col_widths = [int(ratio * available_width / ratio_sum) for ratio in col_width_ratios]
-    return tabulate(table, headers=headers, tablefmt=fmt, maxcolwidths=max_col_widths)
+    table: Iterable[Iterable[Any]]
+    headers: Sequence[str]
+    colors: Sequence[str]
+    fmt: str
+    col_width_ratios: Iterable[float]
+    max_col_widths: Sequence[int] = field(init=False)
 
+    def __post_init__(self):
+        # reduce available width for borders and padding
+        available_width = get_terminal_width() - len(self.headers) * 4 - 1
+        ratio_sum = sum(self.col_width_ratios)
+        self.max_col_widths = [int(r * available_width / ratio_sum) for r in self.col_width_ratios]
 
-def page_output(out: str, pager: str) -> None:
-    """
-    Display given string on the terminal one screenful at a time using the given `pager` command.
-
-    :param out: the string to be displayed
-    :param pager: the command to be executed for pagination as a separate process
-    """
-    with subprocess.Popen(pager.split(), stdin=subprocess.PIPE) as page_in:
-        assert page_in.stdin is not None
-        page_in.stdin.write(out.encode("utf-8"))
-        page_in.communicate()
+    def show(self) -> str:
+        """return formatted table as a string appropriate for display in the current terminal"""
+        table = ((f"{c}{v}{fg.reset}" for v, c in zip(line, self.colors)) for line in self.table)
+        headers = [f"{c}{h}{fg.reset}" for h, c in zip(self.headers, self.colors)]
+        return tabulate(table, headers, tablefmt=self.fmt, maxcolwidths=self.max_col_widths)

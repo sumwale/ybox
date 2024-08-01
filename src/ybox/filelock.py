@@ -12,7 +12,7 @@ from typing import Optional
 
 class FileLock:
     """
-    A simple file locker class that takes a fcntl() lock on given file with polling and timeout.
+    A simple file locker class that takes an `fcntl()` lock on given file with polling and timeout.
     The lock file should always be separate from the resource being locked (if the resource
     is also a file).
 

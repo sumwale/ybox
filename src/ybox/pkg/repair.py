@@ -26,7 +26,7 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+    :param state: instance of `YboxStateManagement` having the state of all ybox containers
 
     :return: integer exit status of repair command where 0 represents success
     """

@@ -6,7 +6,7 @@ import argparse
 import sys
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, run_command
+from ybox.cmd import PkgMgr, page_command
 from ybox.config import StaticConfiguration
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 
@@ -24,7 +24,7 @@ def info_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+    :param state: instance of `YboxStateManagement` having the state of all ybox containers
 
     :return: integer exit status of info command where 0 represents success
     """
@@ -36,5 +36,6 @@ def info_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     if sys.stdout.isatty():  # don't act as a terminal if it is being redirected
         docker_args.append("-it")
     docker_args.extend([conf.box_name, "/bin/bash", "-c", info_cmd])
-    return int(run_command(docker_args, exit_on_error=False,
-                           error_msg="showing information of package(s)"))
+    # empty pager argument is a valid one and indicates no pagination, hence the `is None` check
+    pager: str = args.pager if args.pager is not None else conf.pager
+    return page_command(docker_args, pager, error_msg="showing information of package(s)")

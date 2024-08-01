@@ -224,4 +224,9 @@ class Consts:
         default pager to show output one screenful at a time on the terminal when YBOX_PAGER
         environment variable is not set
         """
-        return "/usr/bin/less -RLFX"
+        return "/usr/bin/less -RLFXK"
+
+    @staticmethod
+    def default_field_separator() -> str:
+        """default separator used between the fields in output of docker/podman exec commands"""
+        return "::::"

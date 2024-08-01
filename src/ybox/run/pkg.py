@@ -146,6 +146,14 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
                                 "will silently override system executables with local ones)")
 
 
+def add_pager_arg(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument("-P", "--pager", type=str,
+                           help="pager to use to show the output one screenful at a time, "
+                                "default is YBOX_PAGER environment variable if set else "
+                                f"'{Consts.default_pager()}'; empty skips pagination; command is "
+                                "split using shell-like syntax e.g. quoted value is one argument")
+
+
 def add_install(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-o", "--skip-opt-deps", action="store_true",
                            help="skip installation of optional dependencies (or recommendations)")
@@ -204,15 +212,18 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
                                 "option to list all the packages including dependents")
     subparser.add_argument("-p", "--plain-separator", type=str,
                            help="show the output in 'plain' format rather than as a table with "
-                                "the fields separated by the given string; it will also skip "
-                                "any truncation of the 'Dependency Of' column")
+                                "the fields separated by the given string; ; disables default "
+                                "pager so use explicit -P/--pager for pagination; it will also "
+                                "skip any truncation of the 'Dependency Of' column")
     subparser.add_argument("-v", "--verbose", action="store_true",
                            help="show some package details including version, description and "
                                 "whether it is a dependency or a top-level package")
+    add_pager_arg(subparser)
     subparser.set_defaults(func=list_packages)
 
 
 def add_list_files(subparser: argparse.ArgumentParser) -> None:
+    add_pager_arg(subparser)
     subparser.add_argument("package", type=str, help="list files of this package")
     subparser.set_defaults(func=list_files)
 
@@ -225,6 +236,7 @@ def add_search(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-o", "--official", action="store_true",
                            help="search only in the official repositories and not the extra ones "
                                 "(e.g. skip AUR repository on Arch Linux)")
+    add_pager_arg(subparser)
     subparser.add_argument("search", nargs="+", help="one or more search terms")
     subparser.set_defaults(func=search_packages)
 
@@ -233,6 +245,7 @@ def add_info(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-a", "--all", action="store_true",
                            help="search for package information in the repositories, "
                                 "otherwise search only among the installed packages")
+    add_pager_arg(subparser)
     subparser.add_argument("packages", nargs="+", help="one or more packages")
     subparser.set_defaults(func=info_packages)
 
@@ -294,15 +307,12 @@ def add_repo_remove(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_repo_list(subparser: argparse.ArgumentParser) -> None:
-    subparser.add_argument("-P", "--pager", type=str,
-                           help="pager to use to show the output one screenful at a time, "
-                                "default is YBOX_PAGER environment variable if set else "
-                                f"'{Consts.default_pager()}'; set to empty to skip pagination")
     subparser.add_argument("-p", "--plain-separator", type=str,
                            help="show the output in 'plain' format rather than as a table with "
                                 "the fields separated by the given string; disables default "
                                 "pager so use explicit -P/--pager for pagination")
     subparser.add_argument("-v", "--verbose", action="store_true",
                            help="show more details of the repositories")
+    add_pager_arg(subparser)
     subparser.set_defaults(is_repo_cmd=True)
     subparser.set_defaults(func=repo_list)

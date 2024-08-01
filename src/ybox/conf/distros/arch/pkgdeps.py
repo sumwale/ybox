@@ -71,7 +71,7 @@ def main_argv(argv: list[str]) -> None:
         prefix = args.prefix
         for key, val in opt_deps.items():
             desc, level, installed = val
-            print(f"{prefix}{key}{sep}{desc}{sep}{level}{sep}{installed}")
+            print(f"{prefix}{key}{sep}{level}{sep}{installed}{sep}{desc}")
 
 
 def build_pacman_db_map(arch_packages: defaultdict[str, list[PackageAlternate]], sep: str) -> None:

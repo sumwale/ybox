@@ -50,7 +50,7 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+    :param state: instance of `YboxStateManagement` having the state of all ybox containers
 
     :return: integer exit status of install command where 0 represents success
     """
@@ -87,7 +87,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     :param docker_cmd: the docker/podman executable to use
     :param conf: the `StaticConfiguration` of the container
     :param rt_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of the `YboxStateManagement` class having the state of all yboxes
+    :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :param opt_deps_cmd: command to determine optional dependencies as read from `distro.ini`
     :param opt_dep_flag: flag to be added during installation of an optional dependency to mark
                          it as a dependency (as read from `distro.ini`)
@@ -189,10 +189,10 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     installed_optional_deps: set[str] = set()
     pkg_start = "Found optional dependencies"
     pkg_prefix = "PKG:"
-    pkg_sep = "::::"
+    pkg_sep = Consts.default_field_separator()
     # fill in the expected separator, prefix and header line
     opt_deps_cmd = opt_deps_cmd.format(separator=pkg_sep, prefix=pkg_prefix, header=pkg_start)
-    # Expected format of output below is -- PKG:<name>::::<description>::::<level>::::<installed>
+    # Expected format of output below is -- PKG:<name>::::<level>::::<installed>::::<description>
     # This is preceded by a line "Found optional dependencies".
     # Print other lines on output as is which are for informational purpose.
     # Code below does progressive display of output which is required for showing stuff like
@@ -235,7 +235,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
             # there can be a trailing '\n' from the loop before due to '\r\n' ending
             if output == "\n":
                 continue
-            name, desc, level, installed = output[len(pkg_prefix):].split(pkg_sep)
+            name, level, installed, desc = output[len(pkg_prefix):].split(pkg_sep, maxsplit=3)
             if installed.rstrip().lower() == "true":
                 installed_optional_deps.add(name)
             else:

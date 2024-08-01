@@ -4,12 +4,13 @@ Utilities related to command execution like running a command, get docker/podman
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 from enum import Enum
-from typing import Optional, Union
+from typing import Callable, Iterable, Optional, Union
 
-from .print import print_error, print_notice, print_warn
+from .print import print_error, print_info, print_notice, print_warn
 
 
 class PkgMgr(str, Enum):
@@ -179,8 +180,7 @@ def build_bash_command(docker_cmd: str, box_name: str, cmd: str,
     """
     if enable_pty:
         return [docker_cmd, "exec", "-it", box_name, "/bin/bash", "-c", cmd]
-    else:
-        return [docker_cmd, "exec", box_name, "/bin/bash", "-c", cmd]
+    return [docker_cmd, "exec", box_name, "/bin/bash", "-c", cmd]
 
 
 def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
@@ -199,9 +199,10 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
                       if not specified then the entire command string is displayed;
                       the special value 'SKIP' can be used to skip printing any error message
     :return: the captured standard output if `capture_output` is true and command is successful
-             else the return code of the command as an integer (if `exit_on_error` is False)
+             encoded as UTF-8 string else the return code of the command as an integer
+             (if `exit_on_error` is False)
     """
-    args = cmd.split() if isinstance(cmd, str) else cmd
+    args = shlex.split(cmd) if isinstance(cmd, str) else cmd
     result = subprocess.run(args, capture_output=capture_output, check=False)
     if result.returncode != 0:
         if capture_output:
@@ -226,3 +227,59 @@ def _print_subprocess_output(result: subprocess.CompletedProcess[bytes]) -> None
         print_notice(result.stdout.decode("utf-8"))
     if result.stderr:
         print_warn(result.stderr.decode("utf-8"))
+
+
+def page_output(output: Iterable[bytes], pager: str) -> int:
+    """
+    Display an `Iterable` of bytes on the terminal one screenful at a time using the given `pager`.
+
+    :param output: the `Iterable` of `bytes` to be displayed (e.g. file/stream object, `list` etc)
+    :param pager: the command to be executed for pagination as a separate process
+    :return: the exit code of the `pager` command
+    """
+    if not pager:
+        for out in output:
+            sys.stdout.buffer.write(out)
+        sys.stdout.flush()
+        return 0
+    try:
+        with subprocess.Popen(shlex.split(pager), stdin=subprocess.PIPE) as page_in:
+            assert page_in.stdin is not None
+            for out in output:
+                page_in.stdin.write(out)
+            page_in.communicate()
+            return page_in.returncode
+    except BrokenPipeError:
+        return 0  # ignore since this will happen if pager ends (e.g. using 'q' in less)
+    except KeyboardInterrupt:
+        # fail cleanly for user interrupt in the pager
+        print()
+        print_info("Interrupt")
+        return 130  # see https://tldp.org/LDP/abs/html/exitcodes.html
+
+
+def page_command(cmd: Union[str, list[str]], pager: str, error_msg: Optional[str] = None,
+                 transform: Optional[Callable[[str], str]] = None, header: str = "") -> int:
+    """
+    Execute a given command using `subprocess.run` and show its output one screenful at a time
+    as UTF-8 string using the given `pager` command. In case of failure of either the command
+    or the `pager`, a failure message is shown and the exit code of the failed process is returned.
+
+    :param cmd: the command to be run which can be either a list of strings, or a single string
+                which will be split on whitespace
+    :param pager: the command to be executed for pagination as a separate process,
+                  or empty to skip pagination
+    :param error_msg: string to be inserted in error message "FAILURE in ..." so should be a
+                      user-friendly name of the action that the command was supposed to do;
+                      if not specified then the entire command string is displayed;
+                      the special value 'SKIP' can be used to skip printing any error message
+    :param transform: optional function to apply to the output of command before pagination
+    :param header: header to be inserted at the start of output, default is empty string
+    :return: the exit code of `cmd` if it failed else the exit code of the `pager` command
+    """
+    result = run_command(cmd, capture_output=True, exit_on_error=False, error_msg=error_msg)
+    if isinstance(result, int):
+        return result
+    result_bytes = transform(result).encode("utf-8") if transform else result.encode("utf-8")
+    output = (header.encode("utf-8"), result_bytes) if header else (result_bytes,)
+    return page_output(output, pager)
