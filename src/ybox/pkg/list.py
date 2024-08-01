@@ -115,8 +115,8 @@ def _build_table_transform(args: argparse.Namespace, separator: str,
         table_fmt = FormatTable((), headers, colors, "rounded_grid", (2.0, 2.0, 3.0, 3.0))
         # build the table data which uses the "Dependency Of" column width to decide on how
         # to truncate the various "req" and "opt" dependency lists
-        table_fmt.table = (_format_long_line(line, separator, table_fmt.max_col_widths[dep_of_idx])
-                           for line in s.splitlines())
+        table_fmt.table = (_format_long_line(line, separator, table_fmt.max_col_widths[dep_of_idx],
+                                             args.no_trunc) for line in s.splitlines())
         return table_fmt.show()
 
     return as_long_table if args.verbose else as_table
@@ -126,7 +126,8 @@ def _build_table_transform(args: argparse.Namespace, separator: str,
 _DEP_OF_RE = re.compile(r"(req\((?P<req>[^)]+)\))?,?(opt\((?P<opt>.+)\))?")
 
 
-def _format_long_line(line: str, separator: str, dep_of_width: int) -> tuple[str, str, str, str]:
+def _format_long_line(line: str, separator: str, dep_of_width: int,
+                      no_trunc: bool) -> tuple[str, str, str, str]:
     """
     Format the `Dependency Of` column to include the required and optional dependencies while the
     other three fields are returned as is after extraction from the given `line`.
@@ -135,6 +136,7 @@ def _format_long_line(line: str, separator: str, dep_of_width: int) -> tuple[str
                  <name>{separator}<version>{separator}<dependency of>{separator}<description>
     :param separator: the separator used between the fields
     :param dep_of_width: the final calculated display width of the "Dependency Of" column
+    :param no_trunc: if true then do not truncate the 'Dependency Of' column value
 
     :return: tuple of formatted (<name>, <version>, <dependency of>, <description>) fields
     """
@@ -144,8 +146,7 @@ def _format_long_line(line: str, separator: str, dep_of_width: int) -> tuple[str
         req_by = dep_of_dict.get("req") or ""
         opt_for = dep_of_dict.get("opt") or ""
         # description is not trimmed and is shown multi-line, so use its size as an upper limit
-        max_width = max(dep_of_width, len(description))
-        if len(dep_of) > max_width:
+        if not no_trunc and len(dep_of) > (max_width := max(dep_of_width, len(description))):
             trim_factor = (len(dep_of) - max_width) / float(len(req_by) + len(opt_for))
             if req_by:
                 trim_size = int(trim_factor * len(req_by) + 0.5)  # round off to nearest int
@@ -161,7 +162,7 @@ def _format_long_line(line: str, separator: str, dep_of_width: int) -> tuple[str
                 dep_of_parts.append(" ")
             dep_of_parts.extend((fg.cyan, "opt(", opt_for, ")", fg.reset))
         return name, version, "".join(dep_of_parts), description
-    return name, version, "", description
+    return name, version, dep_of, description
 
 
 # noinspection PyUnusedLocal

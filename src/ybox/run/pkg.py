@@ -218,6 +218,9 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-v", "--verbose", action="store_true",
                            help="show some package details including version, description and "
                                 "whether it is a dependency or a top-level package")
+    subparser.add_argument("-N", "--no-trunc", action="store_true",
+                           help="do not truncate the 'Dependency Of' column values when using "
+                                "the -v/--verbose option")
     add_pager_arg(subparser)
     subparser.set_defaults(func=list_packages)
 
