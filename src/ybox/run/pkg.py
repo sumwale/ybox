@@ -105,7 +105,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     Parse command-line arguments for the program and return the result :class:`argparse.Namespace`.
 
     :param argv: the list of arguments to be parsed
-    :return: the result of parsing using the `argparse` library as a `argparse.Namespace` object
+    :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
     """
     parser = argparse.ArgumentParser(description="Package management across ybox containers")
     operations = parser.add_subparsers(title="Operations", required=True, metavar="OPERATION",
@@ -134,6 +134,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def add_subparser(operations, name: str, hlp: str) -> argparse.ArgumentParser:  # type: ignore
+    """
+    Add a sub-command parser to `ybox-pkg` having a given name and help string.
+
+    :param operations: the sub-parser obtained using :meth:`argparse.ArgumentParser.add_subparsers`
+    :param name: name of the sub-command (e.g. `install` for `ybox-pkg install`)
+    :param hlp: top-level help string for the sub-command
+    :return: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser = cast(argparse.ArgumentParser,
                      operations.add_parser(name, help=hlp))  # type: ignore
     add_common_args(subparser)
@@ -143,6 +151,12 @@ def add_subparser(operations, name: str, hlp: str) -> argparse.ArgumentParser:  
 
 
 def add_common_args(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add arguments common to all the `ybox-pkg` sub-commands like `-d/--docker-path` for
+    docker/podman path, `-q/--quiet` for quiet operations with minimal user interaction etc.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-d", "--docker-path", type=str,
                            help="path of docker/podman if not in /usr/bin")
     subparser.add_argument("-z", "--ybox", type=str,
@@ -161,6 +175,12 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_pager_arg(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the `-P/--pager` argument to the sub-command that allows user to change the pager command
+    used to show the output one screenful at a time.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-P", "--pager", type=str,
                            help="pager to use to show the output one screenful at a time, "
                                 "default is YBOX_PAGER environment variable if set else "
@@ -169,6 +189,12 @@ def add_pager_arg(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_install(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg install` sub-command and set the `func`
+    attribute to point to the implementation method for package installation.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-o", "--skip-opt-deps", action="store_true",
                            help="skip installation of optional dependencies (or recommendations)")
     subparser.add_argument("-w", "--with-opt-deps", type=str,
@@ -197,6 +223,12 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_uninstall(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg uninstall` sub-command and set the `func`
+    attribute to point to the implementation method for package uninstallation.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-k", "--keep-config-files", action="store_true",
                            help="keep system configuration and/or data files of the package")
     subparser.add_argument("-s", "--skip-deps", action="store_true",
@@ -206,6 +238,12 @@ def add_uninstall(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_update(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg update` sub-command and set the `func`
+    attribute to point to the implementation method for updating one or more packages.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("packages", nargs="*",
                            help="the packages to update if provided, else update the entire "
                                 "installation of the container (which will end up updating all "
@@ -214,6 +252,12 @@ def add_update(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_list(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg list` sub-command and set the `func`
+    attribute to point to the implementation method for listing installed packages.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-a", "--all", action="store_true",
                            help="show all packages including dependent packages in the output "
                                 "otherwise only the packages that have been explicitly installed "
@@ -240,12 +284,24 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_list_files(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg list-files` sub-command and set the `func`
+    attribute to point to the implementation method for listing files of an installed package.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     add_pager_arg(subparser)
     subparser.add_argument("package", type=str, help="list files of this package")
     subparser.set_defaults(func=list_files)
 
 
 def add_search(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg search` sub-command and set the `func`
+    attribute to point to the implementation method for searching among all available packages.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-w", "--word", action="store_true",
                            help="match given search terms as full words")
     subparser.add_argument("-a", "--all", action="store_true",
@@ -259,6 +315,13 @@ def add_search(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_info(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg info` sub-command and set the `func`
+    attribute to point to the implementation method for displaying detailed information of one
+    or more packages.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-a", "--all", action="store_true",
                            help="search for package information in the repositories, "
                                 "otherwise search only among the installed packages")
@@ -268,10 +331,24 @@ def add_info(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_clean(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg clean` sub-command and set the `func`
+    attribute to point to the implementation method for cleaning package cache and related
+    intermediate files.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.set_defaults(func=clean_cache)
 
 
 def add_mark(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg mark` sub-command and set the `func`
+    attribute to point to the implementation method for marking package as explicitly installed
+    or as a dependency of another package.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-e", "--explicit", action="store_true",
                            help="mark the package as explicitly installed; the package will "
                                 "henceforth be managed by `ybox-pkg` if not already; "
@@ -285,12 +362,25 @@ def add_mark(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_repair(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg repair` sub-command and set the `func`
+    attribute to point to the implementation method for repairing system state after a failed
+    installation/operation or an interrupt/kill during package operations.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("--extensive", action="store_true",
                            help="repair thoroughly by reinstalling all packages")
     subparser.set_defaults(func=repair_package_state)
 
 
 def add_repo_add(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg repo-add` sub-command and set the `func`
+    attribute to point to the implementation method for adding a new external package repository.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-k", "--key", type=str,
                            help="key to be registered for verification of the packages (usually "
                                 "a GPG/PGP signing key); this can be a URL to the key file or a "
@@ -318,12 +408,25 @@ def add_repo_add(subparser: argparse.ArgumentParser) -> None:
 
 
 def add_repo_remove(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg repo-remove` sub-command and set the `func`
+    attribute to point to the implementation method for removing an external package repository.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("name", type=str, help="name of the package repository to be removed")
     subparser.set_defaults(is_repo_cmd=True)
     subparser.set_defaults(func=repo_remove)
 
 
 def add_repo_list(subparser: argparse.ArgumentParser) -> None:
+    """
+    Add the arguments required for the `ybox-pkg repo-list` sub-command and set the `func`
+    attribute to point to the implementation method for listing information of registered external
+    package repositories.
+
+    :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
+    """
     subparser.add_argument("-p", "--plain-separator", type=str,
                            help="show the output in 'plain' format rather than as a table with "
                                 "the fields separated by the given string; disables default "

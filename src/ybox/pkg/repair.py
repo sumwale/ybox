@@ -22,12 +22,11 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
     or dangling package manager processes and/or locks.
 
     :param args: arguments having all attributes passed by the user
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
-
     :return: integer exit status of repair command where 0 represents success
     """
     quiet: bool = args.quiet
@@ -74,11 +73,10 @@ def _kill_processes(pkgmgr: SectionProxy, docker_cmd: str, containers: list[str]
     """
     Kill any package manager related processes after user confirmation (if required).
 
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
     :param containers: list of affected containers having the same shared root
-    :param quiet: if true then skip user confirmation before removing any lock files
-
+    :param quiet: if True then skip user confirmation before removing any lock files
     :return: true for success, else false in case of failure to kill one or more processes
     """
     processes_pattern = pkgmgr[PkgMgr.PROCESSES_PATTERN.value]
@@ -128,10 +126,10 @@ def _remove_locks(pkgmgr: SectionProxy, docker_cmd: str, containers: list[str],
     """
     Remove any package manager related lock files after user confirmation (if required).
 
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
     :param containers: list of affected containers having the same shared root
-    :param quiet: if true then skip user confirmation before removing any lock files
+    :param quiet: if True then skip user confirmation before removing any lock files
     """
     locks_pattern = pkgmgr[PkgMgr.LOCKS_PATTERN.value]
     ls_cmd = f"/bin/ls {locks_pattern.replace(',', ' ')}"

@@ -45,7 +45,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     Parse command-line arguments for the program and return the result :class:`argparse.Namespace`.
 
     :param argv: the list of arguments to be parsed
-    :return: the result of parsing using the `argparse` library as a `argparse.Namespace` object
+    :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
     """
     parser = argparse.ArgumentParser(description="List ybox containers")
     parser.add_argument("-a", "--all", action="store_true",

@@ -6,15 +6,18 @@ import glob
 import os
 from itertools import chain
 from os.path import realpath
-from typing import Optional
+from typing import Iterable, Optional
 
-from ybox.config import Consts, StaticConfiguration
+from .config import Consts, StaticConfiguration
 from .env import Environ
 
-_STD_LIB_DIRS = ["/usr/lib", "/lib", "/usr/local/lib"]
-_STD_LIB64_DIRS = ["/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", "/usr/lib64", "/lib64"]
-_STD_LIB32_DIRS = ["/usr/lib/i386-linux-gnu", "/lib/i386-linux-gnu",
-                   "/usr/lib/i686-linux-gnu", "/lib/i686-linux-gnu", "/usr/lib32", "/lib32"]
+# standard library directories to search for NVIDIA libraries
+_STD_LIB_DIRS = ["/usr/lib", "/lib", "/usr/local/lib", "/usr/lib64", "/lib64",
+                 "/usr/lib32", "/lib32"]
+# additional library directory glob patterns to search for NVIDIA libraries in 32/64-bit systems
+# (the '&' in front of the paths is an indicator to the code that this is a glob pattern)
+_STD_LIB_DIR_PATTERNS = ["&/usr/lib/*-linux-gnu", "&/lib/*-linux-gnu", "&/usr/lib64/*-linux-gnu",
+                         "&/lib64/*-linux-gnu", "&/usr/lib32/*-linux-gnu", "&/lib32/*-linux-gnu"]
 _STD_BIN_DIRS = ["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"]
 _STD_LD_LIB_PATH_VARS = ["LD_LIBRARY_PATH", "LD_LIBRARY_PATH_64", "LD_LIBRARY_PATH_32"]
 _NVIDIA_LIB_PATTERNS = ["*nvidia*.so*", "*NVIDIA*.so*", "libcuda*.so*", "libnvcuvid*.so*",
@@ -28,68 +31,114 @@ _NVIDIA_DATA_PATTERNS = ["/usr/share/nvidia", "/usr/local/share/nvidia", "/lib/f
 _LD_SO_CONF = "/etc/ld.so.conf"
 
 
-def add_env_option(args: list[str], env_var: str, env_val: Optional[str] = None) -> None:
+def add_env_option(docker_args: list[str], env_var: str, env_val: Optional[str] = None) -> None:
+    """
+    Add option to the list of docker/podman arguments to set an environment variable.
+
+    :param docker_args: list of docker/podman arguments to which required option has to be appended
+    :param env_var: the environment variable to be set
+    :param env_val: the value of the environment variable, defaults to None which implies that
+                    its value will be set to be the same as in the host environment
+    """
     if env_val is None:
-        args.append(f"-e={env_var}")
+        docker_args.append(f"-e={env_var}")
     else:
-        args.append(f"-e={env_var}={env_val}")
+        docker_args.append(f"-e={env_var}={env_val}")
 
 
-def add_mount_option(args: list[str], src: str, dest: str, flags: str = "") -> None:
+def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "") -> None:
+    """
+    Add option to the list of docker/podman arguments to bind mount a source directory to
+    given destination directory.
+
+    :param docker_args: list of docker/podman arguments to which required option has to be appended
+    :param src: the source directory in the host system
+    :param dest: the destination directory in the container
+    :param flags: any additional flags to be passed to `-v` docker/podman argument, defaults to ""
+    """
     if flags:
-        args.append(f"-v={src}:{dest}:{flags}")
+        docker_args.append(f"-v={src}:{dest}:{flags}")
     else:
-        args.append(f"-v={src}:{dest}")
+        docker_args.append(f"-v={src}:{dest}")
 
 
-def enable_x11(args: list[str]) -> None:
-    add_env_option(args, "DISPLAY")
+def enable_x11(docker_args: list[str]) -> None:
+    """
+    Append options to docker/podman arguments to share host machine's Xorg X11 server
+    with the new ybox container. This also sets up sharing of XAUTHORITY file (with automatic
+    update, if required, in the `run-in-dir` script) so that no additional setup is required for
+    X authentication to work.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    """
+    add_env_option(docker_args, "DISPLAY")
     xsock = "/tmp/.X11-unix"
     if os.access(xsock, os.R_OK):
-        add_mount_option(args, xsock, xsock, "ro")
+        add_mount_option(docker_args, xsock, xsock, "ro")
     if xauth := os.environ.get("XAUTHORITY"):
         # XAUTHORITY file may change after a restart or login (e.g. with Xwayland), so mount its
         # parent directory which is adjusted by run-in-dir script if it has changed
         parent_dir = os.path.dirname(xauth)
         target_dir = f"{parent_dir}-host"
         target_xauth = f"{target_dir}/{os.path.basename(xauth)}"
-        add_mount_option(args, parent_dir, target_dir, "ro")
-        add_env_option(args, "XAUTHORITY", target_xauth)
-        add_env_option(args, "XAUTHORITY_ORIG", target_xauth)
+        add_mount_option(docker_args, parent_dir, target_dir, "ro")
+        add_env_option(docker_args, "XAUTHORITY", target_xauth)
+        add_env_option(docker_args, "XAUTHORITY_ORIG", target_xauth)
 
 
-def enable_wayland(args: list[str], env: Environ) -> None:
+def enable_wayland(docker_args: list[str], env: Environ) -> None:
+    """
+    Append options to docker/podman arguments to share host machine's Wayland server
+    with the new ybox container.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param env: an instance of the current :class:`Environ`
+    """
     if env.xdg_rt_dir and (wayland_display := os.environ.get("WAYLAND_DISPLAY")):
-        add_env_option(args, "WAYLAND_DISPLAY", wayland_display)
+        add_env_option(docker_args, "WAYLAND_DISPLAY", wayland_display)
         wayland_sock = f"{env.xdg_rt_dir}/{wayland_display}"
         if os.access(wayland_sock, os.W_OK):
-            add_mount_option(args, wayland_sock, wayland_sock)
+            add_mount_option(docker_args, wayland_sock, wayland_sock)
 
 
-def enable_nvidia(args: list[str], conf: StaticConfiguration) -> None:
+def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
+    """
+    Append options to docker/podman arguments to share host machine's NVIDIA libraries and
+    data files with the new ybox container.
+
+    It mounts the required directories from the host system, creates a script in the container
+    that is invoked by the container entrypoint script which create links to the NVIDIA libraries
+    and data files and sets up LD_LIBRARY_PATH in the container to point to the NVIDIA library
+    directories.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param conf: the :class:`StaticConfiguration` of the container
+    """
     # search for nvidia device files and add arguments for those
     for nvidia_dev in _find_nvidia_devices():
-        args.append(f"--device={nvidia_dev}")
+        docker_args.append(f"--device={nvidia_dev}")
     # gather the library directories from standard paths, LD_LIBRARY_PATH* and /etc/ld.so.conf
     lib_dirs = _find_all_lib_dirs()
     # find the list of nvidia library directories to be mounted in the target container
     nvidia_lib_dirs = _filter_nvidia_dirs(lib_dirs, _NVIDIA_LIB_PATTERNS)
     # add the directories to tbe mounted to docker/podman arguments
     mount_nvidia_subdir = conf.target_scripts_dir
-    mount_lib_dirs = _prepare_mount_dirs(nvidia_lib_dirs, args, f"{mount_nvidia_subdir}/mnt_lib")
+    mount_lib_dirs = _prepare_mount_dirs(nvidia_lib_dirs, docker_args,
+                                         f"{mount_nvidia_subdir}/mnt_lib")
     # create the script to be run in the container which will create the target
     # directories that will be added to LD_LIBRARY_PATH having symlinks to the mounted libraries
-    nvidia_setup = _create_nvidia_setup(args, mount_lib_dirs)
+    nvidia_setup = _create_nvidia_setup(docker_args, mount_lib_dirs)
 
     # mount nvidia binary directories and add code to script to link to them in container
     nvidia_bin_dirs = _filter_nvidia_dirs({realpath(d) for d in _STD_BIN_DIRS},
                                           _NVIDIA_BIN_PATTERNS)
-    mount_bin_dirs = _prepare_mount_dirs(nvidia_bin_dirs, args, f"{mount_nvidia_subdir}/mnt_bin")
+    mount_bin_dirs = _prepare_mount_dirs(nvidia_bin_dirs, docker_args,
+                                         f"{mount_nvidia_subdir}/mnt_bin")
     _add_nvidia_bin_links(mount_bin_dirs, nvidia_setup)
 
     # finally mount nvidia data file directories and add code to script to link to them
     # which has to be the same paths as in the host
-    _process_nvidia_data_files(args, nvidia_setup, f"{mount_nvidia_subdir}/mnt_share")
+    _process_nvidia_data_files(docker_args, nvidia_setup, f"{mount_nvidia_subdir}/mnt_share")
 
     # create the nvidia setup script
     setup_script = f"{conf.scripts_dir}/{Consts.nvidia_setup_script()}"
@@ -98,56 +147,106 @@ def enable_nvidia(args: list[str], conf: StaticConfiguration) -> None:
 
 
 def _find_nvidia_devices() -> list[str]:
+    """
+    Return the list of NVIDIA device files in /dev by matching against appropriate glob patterns.
+    """
     return [p for p in chain(glob.glob("/dev/nvidia*"), glob.glob(
         "/dev/nvidia*/**/*", recursive=True)) if not os.path.isdir(p)]
 
 
-def _find_all_lib_dirs() -> set[str]:
-    # iterate standard library paths, then LD_LIBRARY_PATH components
+def _find_all_lib_dirs() -> Iterable[str]:
+    """
+    Return the list of all the library directories used by the system for shared libraries which
+    includes the LD_LIBRARY_PATH, /etc/ld.so.conf and standard library paths.
+    """
+    # add LD_LIBRARY_PATH components, then /etc/ld.so.conf and then standard library paths
     ld_libs: list[str] = []
     for lib_path_var in _STD_LD_LIB_PATH_VARS:
         if ld_lib := os.environ.get(lib_path_var):
             ld_libs.extend(ld_lib.split(os.pathsep))
-    lib_dirs = {r for p in chain(_STD_LIB_DIRS, _STD_LIB64_DIRS, _STD_LIB32_DIRS,
-                                 ld_libs) if (r := realpath(p)) if os.path.isdir(r)}
-    _parse_ld_so_conf(_LD_SO_CONF, lib_dirs)
-    return lib_dirs
+    _parse_ld_so_conf(_LD_SO_CONF, ld_libs)
+    # using dict with None values instead of set to preserve order while keeping keys unique
+    lib_dirs = {r: None for p in chain(ld_libs, _STD_LIB_DIRS, _STD_LIB_DIR_PATTERNS)
+                for d in (glob.glob(p[1:]) if p[0] == "&" else (p,))
+                if (r := realpath(d)) and os.path.isdir(r)}
+    return lib_dirs.keys()
 
 
-def _parse_ld_so_conf(conf: str, ld_lib_paths: set[str]) -> None:
-    if os.access(conf, os.R_OK):
-        with open(conf, "r", encoding="utf-8") as conf_fd:
-            while line := conf_fd.readline():
-                if line[0] != '#':
-                    words = line.split()
-                    if len(words) > 0:
-                        if words[0].lower() == "include":
-                            for inc in glob.glob(words[1]):
-                                _parse_ld_so_conf(inc, ld_lib_paths)
-                        else:
-                            ld_lib_paths.add(realpath(line.strip()))
+def _parse_ld_so_conf(conf: str, ld_lib_paths: list[str]) -> None:
+    """
+    Read /etc/ld.so.conf and append all the mentioned library directories (including the
+      `include` directives) in the passed list.
+
+    :param conf: the path to ld.so.conf being processed which is either /etc/ld.so.conf or
+                 one of the files included by it (in the recursive call)
+    :param ld_lib_paths: list of library directories to which the results are appended
+    """
+    if not os.access(conf, os.R_OK):
+        return
+    with open(conf, "r", encoding="utf-8") as conf_fd:
+        while line := conf_fd.readline():
+            if not (line := line.strip()) or line[0] == '#':
+                continue
+            if words := line.split():
+                if words[0].lower() == "include":
+                    for inc in glob.glob(words[1]):
+                        _parse_ld_so_conf(inc, ld_lib_paths)
+                else:
+                    ld_lib_paths.append(realpath(line))
 
 
-def _filter_nvidia_dirs(dirs: set[str], patterns: list[str]) -> list[str]:
+def _filter_nvidia_dirs(dirs: Iterable[str], patterns: list[str]) -> list[str]:
+    """
+    Filter out the directories having NVIDIA artifacts from the given `dirs`.
+
+    :param dirs: an `Iterable` of directory paths that are checked for NVIDIA artifacts
+    :param patterns: directory or file patterns to search in `dirs`
+    :return: list of filtered directories that contain an NVIDIA artifact
+    """
     def has_nvidia_artifact(d: str) -> bool:
         for pat in patterns:
             if glob.glob(f"{d}/{pat}"):
                 return True
         return False
 
-    return [lib_dir for lib_dir in dirs if has_nvidia_artifact(lib_dir)]
+    return [nvidia_dir for nvidia_dir in dirs if has_nvidia_artifact(nvidia_dir)]
 
 
-def _prepare_mount_dirs(dirs: list[str], args: list[str], mount_dir_prefix: str) -> list[str]:
+def _prepare_mount_dirs(dirs: list[str], docker_args: list[str],
+                        mount_dir_prefix: str) -> list[str]:
+    """
+    Append options to the list of docker/podman arguments to bind mount given source directories
+    to target directories having given prefix and index as the suffix. This means that the first
+    directory in the given `dirs` will be mounted in `<prefix>0`, second in `<prefix>1` and so on.
+
+    :param dirs: the list of source directories to be mounted
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param mount_dir_prefix: the prefix of the destination directories
+    :return: list of destination directories where the source directories will be mounted
+    """
     mount_dirs: list[str] = []
     for idx, d in enumerate(dirs):
         mount_dir = f"{mount_dir_prefix}{idx}"
-        add_mount_option(args, d, mount_dir, "ro")
+        add_mount_option(docker_args, d, mount_dir, "ro")
         mount_dirs.append(mount_dir)
     return mount_dirs
 
 
-def _create_nvidia_setup(args: list[str], mount_lib_dirs: list[str]) -> list[str]:
+def _create_nvidia_setup(docker_args: list[str], mount_lib_dirs: list[str]) -> list[str]:
+    """
+    Generate contents of a `bash` script (returned as a list of strings) to be run on container
+    which will setup required NVIDIA libraries from the mounted host library directories.
+
+    The script will create new directories in the container and links to NVIDIA libraries in those
+    from the mounted directories. Then it will add option to docker/podman arguments to set
+    LD_LIBRARY_PATH in the target container to point to these directories. The returned `bash`
+    script should be executed as superuser by the container entrypoint script.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param mount_lib_dirs: list of destination directory mounts
+    :return: contents of a `bash` script as a list of strings for each line of the script which
+             should be joined with newlines to get the final contents of the script
+    """
     target_dir = Consts.nvidia_target_base_dir()
     setup_script = ["# this script should be run using bash", "", "# setup libraries", "",
                     f"mkdir -p {target_dir} && chmod 0755 {target_dir}"]
@@ -161,15 +260,25 @@ def _create_nvidia_setup(args: list[str], mount_lib_dirs: list[str]) -> list[str
             setup_script.append(
                 f'if [ "$?" -eq 0 ]; then ln -s $libs {target_lib_dir}/. 2>/dev/null; fi')
         ld_lib_path.append(target_lib_dir)
-    # add libraries to LD_LIBRARY_PATH rather than adding to system /etc/ld.so.conf otherwise
-    # the system ldconfig cache may go out of sync from another shared root container that does
-    # not have nvidia enabled
+    # add libraries to LD_LIBRARY_PATH rather than adding to system /etc/ld.so.conf in the
+    # container since the system ldconfig cache may go out of sync with latter due to `ldconfig`
+    # invocation on another container having the same shared root but with disabled NVIDIA support
     if ld_lib_path:
-        add_env_option(args, "LD_LIBRARY_PATH", os.pathsep.join(ld_lib_path))
+        # this assumes that LD_LIBRARY_PATH is not touched anywhere else, so NVIDIA will not
+        # work if user explicitly overrides LD_LIBRARY_PATH in the [env] section
+        add_env_option(docker_args, "LD_LIBRARY_PATH", os.pathsep.join(ld_lib_path))
     return setup_script
 
 
 def _add_nvidia_bin_links(mount_bin_dirs: list[str], script: list[str]) -> None:
+    """
+    Add `bash` code to given script contents to create links to NVIDIA programs in `/usr/local/bin`
+    inside the container.
+
+    :param mount_bin_dirs: target directories where host's directories having NVIDIA programs
+                           will be mounted
+    :param script: the `bash` script contents as a list of string to which the new code is appended
+    """
     script.append("# setup binaries")
     for mount_bin_dir in mount_bin_dirs:
         for pat in _NVIDIA_BIN_PATTERNS:
@@ -177,8 +286,17 @@ def _add_nvidia_bin_links(mount_bin_dirs: list[str], script: list[str]) -> None:
             script.append('if [ "$?" -eq 0 ]; then ln -sf $bins /usr/local/bin/. 2>/dev/null; fi')
 
 
-def _process_nvidia_data_files(args: list[str], script: list[str],
+def _process_nvidia_data_files(docker_args: list[str], script: list[str],
                                mount_data_dir_prefix: str) -> None:
+    """
+    Add `bash` code to given script contents to create symlinks to NVIDIA data files mounted
+    from the host environment.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param script: the `bash` script contents as a list of string to which the new code is appended
+    :param mount_data_dir_prefix: the prefix of the destination directories where the host
+                                  data directories have to be mounted
+    """
     script.append("# setup data files")
     nvidia_data_dirs = set[str]()
     idx = 0
@@ -192,7 +310,7 @@ def _process_nvidia_data_files(args: list[str], script: list[str],
                 continue
             mount_data_dir = f"{mount_data_dir_prefix}{idx}"
             idx += 1
-            add_mount_option(args, data_dir, mount_data_dir, "ro")
+            add_mount_option(docker_args, data_dir, mount_data_dir, "ro")
             nvidia_data_dirs.add(data_dir)
             if path_is_dir:
                 # links for data directories need to be in the same location as original

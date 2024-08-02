@@ -34,7 +34,7 @@ class EnvInterpolation(BasicInterpolation):
     current time (captured by InitNow above) in the 'datetime.strftime' format.
 
     This class extends `BasicInterpolation` hence the `%(.)s` syntax can be used to expand other
-    keys in the same section or the `DEFAULT` section in the `before_get`. If a bare '%' is
+    keys in the same section or the `[DEFAULT]` section in the `before_get`. If a bare '%' is
     required in the value, then it should be escaped with a '%' i.e. use '%%' for a single '%'.
     Note that the environment variable and NOW substitution is done in the `before_read` phase
     before any `BasicInterpolation` is done, so any '%' characters in those environment variable
@@ -121,7 +121,7 @@ def ini_file_reader(fd: Iterable[str], interpolation: Optional[Interpolation],
 
     :param fd: file handle for the INI format data
     :param interpolation: if provided then used for value interpolation
-    :param case_sensitive: if true then keys are case-sensitive (default) else case-insensitive
+    :param case_sensitive: if True then keys are case-sensitive (default) else case-insensitive
     :return: instance of `configparser.ConfigParser` built after parsing the given file
     """
     config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
@@ -160,8 +160,9 @@ def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: Con
     """
     Copy ybox setup scripts to local directory mounted on container.
 
-    :param conf: the `StaticConfiguration` of the container
-    :param distro_config: the parsed configuration (`ConfigParser`) of the Linux distribution
+    :param conf: the :class:`StaticConfiguration` of the container
+    :param distro_config: an object of :class:`ConfigParser` from parsing the Linux
+                          distribution's `distro.ini`
     """
     env = conf.env
     # copy the common scripts
@@ -192,7 +193,7 @@ def write_ybox_version(conf: StaticConfiguration) -> None:
     """
     Write the version file having the current product version to container scripts directory.
 
-    :param conf: the `StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` of the container
     """
     version_file = f"{conf.scripts_dir}/version"
     with open(version_file, "w", encoding="utf-8") as version_fd:
@@ -203,7 +204,7 @@ def get_ybox_version(conf: StaticConfiguration) -> str:
     """
     Get the product version string recorded in the container or empty if no version was recorded.
 
-    :param conf: the `StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` of the container
     :return: the version recorded in the container as a string, or empty if not present
     """
     version_file = f"{conf.scripts_dir}/version"

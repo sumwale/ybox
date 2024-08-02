@@ -27,13 +27,12 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
     This method will also update the package metadata cache to reflect the change.
 
     :param args: arguments having `name`, `urls` and all other attributes passed by the user
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
-    :param repo: the `repo` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
+    :param repo: the `[repo]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
-
     :return: integer exit status of repo-add command where 0 represents success
     """
     name: str = args.name
@@ -130,13 +129,12 @@ def repo_remove(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionPro
     This method will also update the package metadata cache to reflect the change.
 
     :param args: arguments having `name` and all other attributes passed by the user
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
-    :param repo: the `repo` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
+    :param repo: the `[repo]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
-
     :return: integer exit status of repo-remove command where 0 represents success
     """
     # unregister from the state database to check if there is no existing entry (the changes
@@ -174,10 +172,9 @@ def _refresh_package_metadata(pkgmgr: SectionProxy, docker_cmd: str,
     """
     Refresh package metadata cache to reflect the change in the registered repositories.
 
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `StaticConfiguration` of the container
-
+    :param conf: the :class:`StaticConfiguration` of the container
     :return: integer exit status of package refresh command where 0 represents success
     """
     print_info("Refreshing package metadata")
@@ -195,13 +192,12 @@ def repo_list(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy
     List the repositories registered using :func:`repo-add`.
 
     :param args: arguments having all attributes passed by the user
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
-    :param repo: the `repo` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
+    :param repo: the `[repo]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
-
     :return: integer exit status of repo-list command where 0 represents success
     """
     separator: str = args.plain_separator or ""

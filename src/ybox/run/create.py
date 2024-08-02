@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """
 Code for the `ybox-create` script that is used to create and configure a new ybox container.
 """
@@ -42,7 +43,7 @@ _WS_RE = re.compile(r"\s+")
 # Note: deliberately not using os.path.join for joining paths since the code only works on
 # Linux/POSIX systems where path separator will always be "/" and explicitly forcing the same.
 #
-# Configuration files should be in $HOME/.config/ybox or ybox package directory.
+# Configuration files should be in $HOME/.config/ybox or ybox package installation directory.
 
 def main() -> None:
     """main function for `ybox-create` script"""
@@ -236,7 +237,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     Parse command-line arguments for the program and return the result :class:`argparse.Namespace`.
 
     :param argv: the list of arguments to be parsed
-    :return: the result of parsing using the `argparse` library as a `argparse.Namespace` object
+    :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
     """
     parser = argparse.ArgumentParser(
         description="""Create a new ybox container for given Linux distribution and configured
@@ -282,12 +283,27 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def quick_config_read(file: PathName) -> ConfigParser:
-    """Quick read of an INI file without processing includes or any value interpolation"""
+    """
+    Quickly read an INI file without processing `includes` or applying any value interpolation.
+
+    :param file: a `Path` or resource file from importlib (`Traversable`) for the configuration
+    :return: an object of :class:`ConfigParser` from parsing the configuration file
+    """
     with file.open("r", encoding="utf-8") as profile_fd:
         return ini_file_reader(profile_fd, None)
 
 
 def select_distribution(args: argparse.Namespace, env: Environ) -> str:
+    """
+    Interactively select a Linux distribution from a menu among the ones supported by this
+    installation of ybox, or if there is only one supported distribution, then return its name.
+    User can also provide one explicitly on the command-line which will be returned if valid.
+
+    :param args: the parsed arguments passed to the invoking `ybox-create` script
+    :param env: an instance of the current :class:`Environ`
+    :raises ValueError: unexpected internal error in the distribution name
+    :return: name of the selected or provided distribution
+    """
     support_list = env.search_config_path("distros/supported.list", only_sys_conf=True)
     with support_list.open("r", encoding="utf-8") as supp_file:
         supported_distros = supp_file.read().splitlines()
@@ -295,7 +311,8 @@ def select_distribution(args: argparse.Namespace, env: Environ) -> str:
         # check that the distribution is in supported.list
         if distro in supported_distros:
             return str(distro)
-        raise NotSupportedError(f"Distribution '{distro}' not supported in {support_list}")
+        print_error(f"Distribution '{distro}' not supported in {support_list}")
+        sys.exit(1)
     if len(supported_distros) == 1:
         print_info(f"Using distribution '{supported_distros[0]}'")
         return supported_distros[0]
@@ -319,6 +336,17 @@ def select_distribution(args: argparse.Namespace, env: Environ) -> str:
 
 
 def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
+    """
+    Interactively select a profile for ybox container to use for its setup from a menu among the
+    ones provided by this installation of ybox, or those setup in user's configuration.
+    If there is only one available profile, then return its name. User can also provide one
+    explicitly on the command-line which will be returned if valid.
+
+    :param args: the parsed arguments passed to the invoking `ybox-create` script
+    :param env: an instance of the current :class:`Environ`
+    :raises ValueError: unexpected internal error in the profile name
+    :return: name of the selected or provided profile
+    """
     # the profile used to build the docker/podman command-line
     if profile_arg := args.profile:
         if os.access(profile_arg, os.R_OK):
@@ -355,6 +383,17 @@ def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
 
 
 def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> tuple[str, str]:
+    """
+    Initial processing of the provided command-line arguments to form the desired name of the
+    ybox container and the docker/podman command to use.
+
+    :param args: the parsed arguments passed to the invoking `ybox-create` script
+    :param distro: the Linux distribution name returned by :func:`select_distribution` to use for
+                   the ybox container
+    :param profile: the profile file returned by :func:`select_profile` to use for ybox container
+                    configuration as a `Path` or resource file from importlib (`Traversable`)
+    :return: tuple of ybox container name and docker/podman command to use
+    """
     ini_suffix = ".ini"
     if args.name:
         box_name = args.name
@@ -379,6 +418,25 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> tu
 
 def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: SectionProxy,
                      docker_args: list[str]) -> tuple[str, ConfigParser, dict[str, list[str]]]:
+    """
+    Process all the sections in the given profile file to return a tuple having:
+      * shared root to use for the container (if any)
+      * :class:`ConfigParser` object from parsing the ini format profile, and
+      * dictionary having the packages to be installed as specified in the `[apps]` section
+        of the profile mapped to list of dependent packages for each application.
+
+    :param profile: the profile file returned by :func:`select_profile` to use for ybox container
+                    configuration as a `Path` or resource file from importlib (`Traversable`)
+    :param conf: the :class:`StaticConfiguration` of the container
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
+    :param docker_args: list of arguments to be provided to docker/podman command for creating the
+                        final ybox container which is populated with required options as per
+                        the configuration in the given profile
+    :raises NotSupportedError: if there is an unknown section or key in the ini format profile
+    :return: tuple of container's shared root, :class:`ConfigParser` object from parsing the
+             profile, and dictionary of apps with dependencies to be installed in the container
+             from the `[apps]` section of the profile
+    """
     # Read the config file, recursively reading the includes if present,
     # then replace the environment variables and the special ${NOW:...} from all values.
     # Skip environment variable substitution for the "configs" section since the values
@@ -412,6 +470,15 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
 
 
 def process_distribution_config(distro_config: ConfigParser, docker_args: list[str]) -> None:
+    """
+    Process the Linux distribution's `distro.ini` file and populate relevant docker/podman options
+    in the given `docker_args` list.
+
+    :param distro_config: an object of :class:`ConfigParser` from parsing the Linux
+                          distribution's `distro.ini`
+    :param docker_args: list of arguments to be provided to docker/podman command for creating the
+                        final ybox container which is populated with required options
+    """
     if distro_config.getboolean("base", "configure_fastest_mirrors", fallback=False):
         add_env_option(docker_args, "CONFIGURE_FASTEST_MIRRORS", "1")
     if distro_config.has_section("packages"):
@@ -426,8 +493,22 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
         add_env_option(docker_args, "DEFAULT_GPG_KEY_SERVER", key_server)
 
 
-def process_base_section(base_section: SectionProxy, profile: PathName,
-                         conf: StaticConfiguration, args: list[str]) -> tuple[str, Optional[bool]]:
+def process_base_section(base_section: SectionProxy, profile: PathName, conf: StaticConfiguration,
+                         docker_args: list[str]) -> tuple[str, Optional[bool]]:
+    """
+    Process the `[base]` section in the container profile to append required docker/podman
+    options in the passed list, and return a tuple having the shared root to use for the container
+    (if any), and the value of `config_hardlinks` key in the section.
+
+    :param base_section: an object of :class:`SectionProxy` from parsing the `[base]` section
+    :param profile: the profile file returned by :func:`select_profile` to use for ybox container
+                    configuration as a `Path` or resource file from importlib (`Traversable`)
+    :param conf: the :class:`StaticConfiguration` of the container
+    :param docker_args: list of docker/podman arguments to which required options as per the
+                        configuration in the `[base]` section are appended
+    :raises NotSupportedError: if there is an unknown key in the `[base]` section
+    :return: tuple of container's shared root and the value of `config_hardlinks` key
+    """
     env = conf.env
     # shared root is disabled by default
     shared_root = ""
@@ -445,7 +526,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
             if val:
                 # create the source directory if it does not exist
                 os.makedirs(val, exist_ok=True)
-                add_mount_option(args, val, env.target_home)
+                add_mount_option(docker_args, val, env.target_home)
         elif key == "shared_root":
             shared_root = val or ""
         elif key == "config_hardlinks":
@@ -457,16 +538,16 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
             config_locale = _get_boolean(val)
         elif key == "x11":
             if _get_boolean(val):
-                enable_x11(args)
+                enable_x11(docker_args)
         elif key == "wayland":
             if _get_boolean(val):
-                enable_wayland(args, env)
+                enable_wayland(docker_args, env)
         elif key == "pulseaudio":
             if _get_boolean(val):
-                enable_pulse(args, env)
+                enable_pulse(docker_args, env)
         elif key == "dbus":
             if _get_boolean(val):
-                enable_dbus(args, base_section.getboolean("dbus_sys", fallback=False))
+                enable_dbus(docker_args, base_section.getboolean("dbus_sys", fallback=False))
         elif key == "dri":
             dri = _get_boolean(val)
         elif key == "nvidia":
@@ -475,18 +556,18 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
             nvidia_ctk = _get_boolean(val)
         elif key == "shm_size":
             if val:
-                args.append(f"--shm-size={val}")
+                docker_args.append(f"--shm-size={val}")
         elif key == "pids_limit":
             if val:
-                args.append(f"--pids-limit={val}")
+                docker_args.append(f"--pids-limit={val}")
         elif key == "log_driver":
             if val:
-                args.append(f"--log-driver={val}")
+                docker_args.append(f"--log-driver={val}")
         elif key == "log_opts":
-            add_multi_opt(args, val, "log-opt")
+            add_multi_opt(docker_args, "log-opt", val)
             # create the log directory if required
             log_dirs = [mt.group(1) for mt in
-                        (re.match("^--log-opt=path=(.*)/.*$", path) for path in args) if mt]
+                        (re.match("^--log-opt=path=(.*)/.*$", path) for path in docker_args) if mt]
             for log_dir in log_dirs:
                 os.makedirs(log_dir, exist_ok=True)
         elif key not in ("name", "dbus_sys", "includes"):
@@ -494,14 +575,14 @@ def process_base_section(base_section: SectionProxy, profile: PathName,
                                     "or its includes")
     if config_locale:
         for lang_var in ("LANG", "LANGUAGE"):
-            add_env_option(args, lang_var)
+            add_env_option(docker_args, lang_var)
     if dri or nvidia or nvidia_ctk:
-        args.append("--device=/dev/dri")
-        add_mount_option(args, "/dev/dri/by-path", "/dev/dri/by-path")
+        docker_args.append("--device=/dev/dri")
+        add_mount_option(docker_args, "/dev/dri/by-path", "/dev/dri/by-path")
     if nvidia_ctk:  # takes precedence over "nvidia" option
-        args.append("--device=nvidia.com/gpu=all")
+        docker_args.append("--device=nvidia.com/gpu=all")
     elif nvidia:
-        enable_nvidia(args, conf)
+        enable_nvidia(docker_args, conf)
     return shared_root, config_hardlinks
 
 
@@ -512,44 +593,77 @@ def _get_boolean(value: str) -> bool:
     raise ValueError(f"Not a boolean: {value}")
 
 
-def enable_pulse(args: list[str], env: Environ) -> None:
+def enable_pulse(docker_args: list[str], env: Environ) -> None:
+    """
+    Append options to docker/podman arguments to share host machine's pulse/pipewire audio server
+    with the new ybox container.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param env: an instance of the current :class:`Environ`
+    """
     cookie = f"{env.home}/.config/pulse/cookie"
     if os.access(cookie, os.R_OK):
-        add_mount_option(args, cookie, f"{env.target_home}/.config/pulse/cookie", "ro")
+        add_mount_option(docker_args, cookie, f"{env.target_home}/.config/pulse/cookie", "ro")
     if env.xdg_rt_dir:
         pulse_native = f"{env.xdg_rt_dir}/pulse/native"
         if os.access(pulse_native, os.W_OK):
-            add_mount_option(args, pulse_native, pulse_native)
+            add_mount_option(docker_args, pulse_native, pulse_native)
         for pwf in [f for f in os.listdir(env.xdg_rt_dir) if re.match("pipewire-[0-9]+$", f)]:
             pipewire_path = f"{env.xdg_rt_dir}/{pwf}"
             if os.access(pipewire_path, os.W_OK):
-                add_mount_option(args, pipewire_path, pipewire_path)
+                add_mount_option(docker_args, pipewire_path, pipewire_path)
 
 
-def enable_dbus(args: list[str], sys_enable: bool) -> None:
+def enable_dbus(docker_args: list[str], sys_enable: bool) -> None:
+    """
+    Append options to docker/podman arguments to share host machine's dbus message bus
+    with the new ybox container.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param sys_enable: if True then also share host machine's system dbus message bus in addition
+                       to the user dbus message bus
+    """
     if dbus_session := os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
         dbus_user = dbus_session[dbus_session.find("=") + 1:]
         if (dbus_opts_idx := dbus_user.find(",")) != -1:
             dbus_user = dbus_user[:dbus_opts_idx]
-        add_mount_option(args, dbus_user, dbus_user)
-        add_env_option(args, "DBUS_SESSION_BUS_ADDRESS", dbus_session)
+        add_mount_option(docker_args, dbus_user, dbus_user)
+        add_env_option(docker_args, "DBUS_SESSION_BUS_ADDRESS", dbus_session)
     if sys_enable:
         dbus_sys = "/run/dbus/system_bus_socket"
         dbus_sys2 = "/var/run/dbus/system_bus_socket"
         if os.access(dbus_sys, os.W_OK):
-            add_mount_option(args, dbus_sys, dbus_sys)
+            add_mount_option(docker_args, dbus_sys, dbus_sys)
         elif os.access(dbus_sys2, os.W_OK):
-            add_mount_option(args, dbus_sys2, dbus_sys)
+            add_mount_option(docker_args, dbus_sys2, dbus_sys)
 
 
-def add_multi_opt(args: list[str], val: str, opt: str) -> None:
+def add_multi_opt(docker_args: list[str], opt: str, val: Optional[str]) -> None:
+    """
+    Append a comma-separated value in the profile as multiple options to docker/podman arguments.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param val: the comma-separated value
+    :param opt: the option name which is added as `--{opt}=...` to docker/podman arguments
+    """
     if val:
         for opt_val in val.split(","):
-            args.append(f"--{opt}={opt_val}")
+            docker_args.append(f"--{opt}={opt_val}")
 
 
 def process_security_section(sec_section: SectionProxy, profile: PathName,
-                             args: list[str]) -> None:
+                             docker_args: list[str]) -> None:
+    """
+    Process the `[security]` section in the container profile to append required docker/podman
+    options in the passed list.
+
+    :param sec_section: an object of :class:`SectionProxy` from parsing the `[security]` section
+    :param profile: the profile file returned by :func:`select_profile` to use for ybox container
+                    configuration as a `Path` or resource file from importlib (`Traversable`)
+    :param docker_args: list of docker/podman arguments to which required options as per the
+                        configuration in the `[security]` section are appended
+    :raises NotSupportedError: if there is an unknown key in the `[security]` section
+    """
     sec_options = {"label", "apparmor", "seccomp", "mask", "umask", "proc_opts"}
     single_options = {"seccomp_policy", "ipc", "cgroup_parent", "cgroupns", "cgroups"}
     multi_options = {"caps_add": "cap-add", "caps_drop": "cap-drop", "ulimits": "ulimit",
@@ -557,42 +671,56 @@ def process_security_section(sec_section: SectionProxy, profile: PathName,
                      "secrets": "secret"}
     for key, val in sec_section.items():
         if key in sec_options:
-            add_sec_option_if_exists(args, key.replace("_", "-"), val)
+            if val:
+                docker_args.append(f"--security-opt={key.replace('_', '-')}={val}")
         elif opt := multi_options.get(key):
-            add_multi_opt(args, val, opt)
+            add_multi_opt(docker_args, opt, val)
         elif key in single_options:
-            add_option_if_exists(args, key.replace("_", "-"), val)
+            if val:
+                docker_args.append(f"--{key.replace('_', '-')}={val}")
         elif key == "no_new_privileges":
             if _get_boolean(val):
-                args.append("--security-opt=no-new-privileges")
+                docker_args.append("--security-opt=no-new-privileges")
         else:
             raise NotSupportedError(f"Unknown key '{key}' in the [security] of {profile} "
                                     "or its includes")
 
 
-def add_sec_option_if_exists(args: list[str], key: str, val: str) -> None:
-    if val:
-        args.append(f"--security-opt={key}={val}")
+def process_mounts_section(mounts_section: SectionProxy, docker_args: list[str]) -> None:
+    """
+    Process the `[mounts]` section in the container profile to append required docker/podman
+    options in the passed list.
 
-
-def add_option_if_exists(args: list[str], opt: str, val: str) -> None:
-    if val:
-        args.append(f"--{opt}={val}")
-
-
-def process_mounts_section(mounts_section: SectionProxy, args: list[str]) -> None:
+    :param mounts_section: an object of :class:`SectionProxy` from parsing the `[mounts]` section
+    :param docker_args: list of docker/podman arguments to which required options as per the
+                        configuration in the `[mounts]` section are appended
+    """
     # keys here are only symbolic names and serve no purpose other than allowing
     # later profile files to override previous ones
     for _, val in mounts_section.items():
         if val:
             if "=" in val or "," in val:
-                args.append(f"--mount={val}")
+                docker_args.append(f"--mount={val}")
             else:
-                args.append(f"-v={val}")
+                docker_args.append(f"-v={val}")
 
 
 def process_configs_section(configs_section: SectionProxy, config_hardlinks: bool,
-                            conf: StaticConfiguration, args: list[str]) -> None:
+                            conf: StaticConfiguration, docker_args: list[str]) -> None:
+    """
+    Process the `[configs]` section in the container profile to append required docker/podman
+    options in the passed list. This method also makes hard-links or copies of the configuration
+    files in local user's ybox data directory to mount inside the ybox container so that the
+    selected configuration files from host are available in the container.
+
+    :param configs_section: an object of :class:`SectionProxy` from parsing the `[configs]` section
+    :param config_hardlinks: the value of `config_hardlinks` key from the `[base]` section that
+                             indicates whether the configuration files from host have to be made
+                             available by creating hard-links to them or by making copies
+    :param conf: the :class:`StaticConfiguration` of the container
+    :param docker_args: list of docker/podman arguments to which required options as per the
+                        configuration in the `[configs]` section are appended
+    """
     # copy or link the mentioned files in [configs] section which can be either files
     # or directories (recursively copy/link in the latter case)
     # this is refreshed on every container start
@@ -632,16 +760,33 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                 print_warn(f"Skipping inaccessible configuration path '{src_path}'")
     print_info("DONE.")
     # finally mount the configs directory to corresponding directory in the target container
-    add_mount_option(args, conf.configs_dir, conf.target_configs_dir, "ro")
+    add_mount_option(docker_args, conf.configs_dir, conf.target_configs_dir, "ro")
 
 
-def process_env_section(env_section: SectionProxy, args: list[str]) -> None:
+def process_env_section(env_section: SectionProxy, docker_args: list[str]) -> None:
+    """
+    Process the `[env]` section in the container profile to append required docker/podman
+    options in the passed list.
+
+    :param env_section: an object of :class:`SectionProxy` from parsing the `[env]` section
+    :param docker_args: list of docker/podman arguments to which required options as per the
+                        configuration in the `[env]` section are appended
+    """
     for key, val in env_section.items():
-        add_env_option(args, key, val)
+        add_env_option(docker_args, key, val)
 
 
 def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
                          pkgmgr: SectionProxy) -> dict[str, list[str]]:
+    """
+    Process the `[apps]` section in the container profile to return a dictionary having packages
+    to be installed mapped to the list of dependencies to be installed along with.
+
+    :param apps_section: an object of :class:`SectionProxy` from parsing the `[apps]` section
+    :param conf: the :class:`StaticConfiguration` of the container
+    :return: dictionary of package names mapped to their list of dependencies as specified
+             in the `[apps]` section
+    """
     if len(apps_section) == 0:
         return {}
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
@@ -684,6 +829,16 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
 # This is a simplified version using os.walk(...) that works correctly that always has:
 #   a. follow_symlinks=True, and b. ignore_dangling_symlinks=True
 def copytree(src: str, dest: str, hardlink: bool = False) -> None:
+    """
+    Copy or create hard links to a source directory tree in the given destination directory.
+    Since hard links to directories are not supported, the destination will mirror the directories
+    of the source while the files inside will be either copies or hard links to the source.
+
+    :param src: the source directory tree
+    :param dest: the destination directory which should exist
+    :param hardlink: if True then create hard links to the files in the source (so it should
+                       be in the same filesystem) else copy the files, defaults to False
+    """
     for src_dir, _, src_files in os.walk(src, followlinks=True):
         # substitute 'src' prefix with 'dest'
         dest_dir = f"{dest}{src_dir[len(src):]}"
@@ -699,6 +854,14 @@ def copytree(src: str, dest: str, hardlink: bool = False) -> None:
 
 
 def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -> None:
+    """
+    Create/copy various scripts required for the ybox container including entrypoint scripts,
+    Linux distribution specific scripts and other required executables (e.g. `run-in-dir`).
+
+    :param conf: the :class:`StaticConfiguration` of the container
+    :param distro_config: an object of :class:`ConfigParser` from parsing the Linux
+                          distribution's `distro.ini`
+    """
     # first create local mount directory having entrypoint and other scripts
     if os.path.exists(conf.scripts_dir):
         shutil.rmtree(conf.scripts_dir)

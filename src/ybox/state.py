@@ -120,7 +120,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         """
         Initialize connection to database and create tables+indexes if not present.
 
-        :param env: the current Environ
+        :param env: an instance of the current :class:`Environ`
         """
         # explicitly control transaction begin (in exclusive mode) since SERIALIZABLE isolation
         # level is required while sqlite3 module will not start transactions before reads
@@ -154,7 +154,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         """
         Callable for the user-defined EQUIV_CONFIG function. Checking equivalence consists
         of deleting sections and keys that don't affect behavior of the container in terms
-        of running the apps. Specifically the `log_opts` key from the `base` section has to
+        of running the apps. Specifically the `log_opts` key from the `[base]` section has to
         be removed because the log-file name, when set based on time, will change in every run.
         """
         with StringIO(conf_str1) as conf_io1:
@@ -330,8 +330,9 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         will continue to work on it with expected semantics.
 
         :param container_version: version string as recorded in the container
-        :param conf: the `StaticConfiguration` of the container
-        :param distro_config: the parsed configuration (`ConfigParser`) of the Linux distribution
+        :param conf: the :class:`StaticConfiguration` of the container
+        :param distro_config: an object of :class:`ConfigParser` from parsing the Linux
+                              distribution's `distro.ini`
         """
         # pylint: disable=exec-used
         old_version = parse_version(container_version) if container_version \
@@ -364,7 +365,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         :param shared_root: the local shared root directory if `shared_root` is provided
                             for the container
         :param parser: parser object for the configuration file used for creating the container
-        :param force_own_orphans: if true, then force the ownership of orphan packages on the
+        :param force_own_orphans: if True, then force the ownership of orphan packages on the
                                   same shared root to this container even if the container
                                   configuration is not equivalent to the original container
                                   configuration under which those packages were installed
@@ -568,7 +569,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         :param dep_type: the `DependencyType` for the package, or None if not a dependency
         :param dep_of: if `dep_type` is not None, then this is the package that has this one
                        as a dependency of that type
-        :param skip_if_exists: if true them skip if package is already registered else replace
+        :param skip_if_exists: if True them skip if package is already registered else replace
                                with the given information
         """
         with closing(cursor := self._conn.cursor()):

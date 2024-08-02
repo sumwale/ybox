@@ -76,6 +76,7 @@ class StaticConfiguration:
         Container image created with basic required user configuration from base image.
         This can either be container specific, or if `base.shared_root` is provided, then
         it will be common for all such images for the same distribution.
+
         :param has_shared_root: whether `base.shared_root` is provided in configuration file
         :return: the docker/podman image to be created and used for the ybox
         """

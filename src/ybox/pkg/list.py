@@ -28,12 +28,11 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     those installed from other containers, if any.
 
     :param args: arguments having all attributes passed by the user
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
-
     :return: integer exit status of list packages command where 0 represents success
     """
     plain_sep: str = args.plain_separator
@@ -86,7 +85,6 @@ def _build_table_transform(args: argparse.Namespace, separator: str,
     :param args: the parsed arguments passed to the invoking script
     :param separator: the separator used between the fields
     :param headers: list of header strings to use for the columns
-
     :return: a transformation function that takes input string having the output from package
              manager and returns a string where the fields are formatted as a table appropriate
              for display in a terminal
@@ -136,8 +134,7 @@ def _format_long_line(line: str, separator: str, dep_of_width: int,
                  <name>{separator}<version>{separator}<dependency of>{separator}<description>
     :param separator: the separator used between the fields
     :param dep_of_width: the final calculated display width of the "Dependency Of" column
-    :param no_trunc: if true then do not truncate the 'Dependency Of' column value
-
+    :param no_trunc: if True then do not truncate the 'Dependency Of' column value
     :return: tuple of formatted (<name>, <version>, <dependency of>, <description>) fields
     """
     name, version, dep_of, description = line.split(separator, maxsplit=3)
@@ -174,12 +171,11 @@ def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
     List the files of a package installed in a container including those not managed by `ybox-pkg`.
 
     :param args: arguments having `package` and all other attributes passed by the user
-    :param pkgmgr: the `pkgmgr` section from `distro.ini` configuration file of the distribution
+    :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the `StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` of the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
-
     :return: integer exit status of list package files command where 0 represents success
     """
     package: str = args.package

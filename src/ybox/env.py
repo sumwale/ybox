@@ -11,7 +11,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Union
 
-from ybox.print import print_error
+from .print import print_error
 
 PathName = Union[Path, Traversable]
 
