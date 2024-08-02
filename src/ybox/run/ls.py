@@ -1,14 +1,26 @@
+"""
+Code for the `ybox-ls` script that is used to show the active or stopped ybox containers.
+"""
+
 import argparse
 import sys
 
-from ybox.cmd import get_docker_command, run_command, YboxLabel
+from ybox.cmd import YboxLabel, get_docker_command, run_command
 
 
 def main() -> None:
+    """main function for `ybox-ls` script"""
     main_argv(sys.argv[1:])
 
 
 def main_argv(argv: list[str]) -> None:
+    """
+    Main entrypoint of `ybox-ls` that takes a list of arguments which are usually the
+    command-line arguments of the `main()` function. Pass ["-h"]/["--help"] to see all the
+    available arguments with help message for each.
+
+    :param argv: arguments to the function (main function passes `sys.argv[1:]`)
+    """
     args = parse_args(argv)
     docker_cmd = get_docker_command(args, "-d")
 
@@ -29,6 +41,12 @@ def main_argv(argv: list[str]) -> None:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
+    """
+    Parse command-line arguments for the program and return the result :class:`argparse.Namespace`.
+
+    :param argv: the list of arguments to be parsed
+    :return: the result of parsing using the `argparse` library as a `argparse.Namespace` object
+    """
     parser = argparse.ArgumentParser(description="List ybox containers")
     parser.add_argument("-a", "--all", action="store_true",
                         help="show all containers including stopped and temporary ones; "

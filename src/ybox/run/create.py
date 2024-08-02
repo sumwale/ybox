@@ -1,3 +1,7 @@
+"""
+Code for the `ybox-create` script that is used to create and configure a new ybox container.
+"""
+
 import argparse
 import getpass
 import grp
@@ -28,7 +32,7 @@ from ybox.run.pkg import parse_args as pkg_parse_args
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 from ybox.util import (EnvInterpolation, NotSupportedError, config_reader,
                        copy_ybox_scripts_to_container, ini_file_reader,
-                       select_item_from_menu)
+                       select_item_from_menu, write_ybox_version)
 
 _EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 _DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
@@ -41,10 +45,18 @@ _WS_RE = re.compile(r"\s+")
 # Configuration files should be in $HOME/.config/ybox or ybox package directory.
 
 def main() -> None:
+    """main function for `ybox-create` script"""
     main_argv(sys.argv[1:])
 
 
 def main_argv(argv: list[str]) -> None:
+    """
+    Main entrypoint of `ybox-create` that takes a list of arguments which are usually the
+    command-line arguments of the `main()` function. Pass ["-h"]/["--help"] to see all the
+    available arguments with help message for each.
+
+    :param argv: arguments to the function (main function passes `sys.argv[1:]`)
+    """
     args = parse_args(argv)
     env = Environ()
 
@@ -220,6 +232,12 @@ def main_argv(argv: list[str]) -> None:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
+    """
+    Parse command-line arguments for the program and return the result :class:`argparse.Namespace`.
+
+    :param argv: the list of arguments to be parsed
+    :return: the result of parsing using the `argparse` library as a `argparse.Namespace` object
+    """
     parser = argparse.ArgumentParser(
         description="""Create a new ybox container for given Linux distribution and configured
                        with given file in INI format. It allows for set up of various aspects of
@@ -686,15 +704,16 @@ def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
         shutil.rmtree(conf.scripts_dir)
     os.makedirs(conf.scripts_dir, exist_ok=True)
     copy_ybox_scripts_to_container(conf, distro_config)
+    # finally write the current version to "version" file in scripts directory of the container
+    write_ybox_version(conf)
 
 
 def read_distribution_config(args: argparse.Namespace,
                              conf: StaticConfiguration) -> tuple[str, str, str, ConfigParser]:
     env_interpolation = EnvInterpolation(conf.env, [])
-    distribution_config_file = args.distribution_config if args.distribution_config \
-        else conf.distribution_config(conf.distribution)
+    distro_conf_file = args.distribution_config or conf.distribution_config(conf.distribution)
     distro_config = config_reader(conf.env.search_config_path(
-        distribution_config_file, only_sys_conf=True), env_interpolation)
+        distro_conf_file, only_sys_conf=True), env_interpolation)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
     shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist

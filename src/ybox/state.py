@@ -24,7 +24,7 @@ from ybox import __version__ as product_version
 from .config import StaticConfiguration
 from .env import Environ, PathName, resolve_inc_path
 from .print import print_color, print_warn
-from .util import ini_file_reader
+from .util import ini_file_reader, write_ybox_version
 
 
 @dataclass(frozen=True)
@@ -342,11 +342,13 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         if not (scripts := self._filter_and_sort_files_by_version(
                 files("ybox").joinpath("migrate").iterdir(), old_version, self._version, ".py")):
             return
-        print_color("Running migration scripts for container version upgrade from "
-                    f"{old_version} to {self._version}")
         for script in scripts:
+            print_color(f"Running migration script '{script}' for container version upgrade from "
+                        f"{old_version} to {self._version}")
             with script.open("r", encoding="utf-8") as py_fd:
                 exec(py_fd.read(), {}, {"conf": conf, "distro_config": distro_config})
+        # finally write the current version to "version" file in scripts directory of the container
+        write_ybox_version(conf)
 
     def register_container(self, container_name: str, distribution: str, shared_root: str,
                            parser: ConfigParser,
@@ -444,7 +446,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         if not cursor.fetchone():
             return row is not None
 
-        distro, shared_root, config = row if row else (None, None, None)
+        distro, shared_root, config = row or (None, None, None)
         if shared_root:
             new_name = str(uuid4())  # generate a unique name
             insert_done = False

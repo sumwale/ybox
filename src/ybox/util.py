@@ -186,7 +186,14 @@ def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: Con
         for resource in src_dir.iterdir():
             if resource.is_file():
                 copy_file(resource, f"{dest_dir}/{resource.name}")
-    # finally write the current version string
+
+
+def write_ybox_version(conf: StaticConfiguration) -> None:
+    """
+    Write the version file having the current product version to container scripts directory.
+
+    :param conf: the `StaticConfiguration` of the container
+    """
     version_file = f"{conf.scripts_dir}/version"
     with open(version_file, "w", encoding="utf-8") as version_fd:
         version_fd.write(product_version)

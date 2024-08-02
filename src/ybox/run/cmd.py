@@ -1,3 +1,7 @@
+"""
+Code for the `ybox-cmd` script that is used to execute programs in an active ybox container.
+"""
+
 import argparse
 import sys
 
@@ -5,10 +9,18 @@ from ybox.cmd import get_docker_command, run_command
 
 
 def main() -> None:
+    """main function for `ybox-cmd` script"""
     main_argv(sys.argv[1:])
 
 
 def main_argv(argv: list[str]) -> None:
+    """
+    Main entrypoint of `ybox-cmd` that takes a list of arguments which are usually the
+    command-line arguments of the `main()` function. Pass ["-h"]/["--help"] to see all the
+    available arguments with help message for each.
+
+    :param argv: arguments to the function (main function passes `sys.argv[1:]`)
+    """
     args = parse_args(argv)
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
@@ -22,6 +34,12 @@ def main_argv(argv: list[str]) -> None:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
+    """
+    Parse command-line arguments for the program and return the result :class:`argparse.Namespace`.
+
+    :param argv: the list of arguments to be parsed
+    :return: the result of parsing using the `argparse` library as a `argparse.Namespace` object
+    """
     parser = argparse.ArgumentParser(description="Run a command on an active ybox container")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")

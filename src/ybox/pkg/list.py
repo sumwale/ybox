@@ -37,7 +37,7 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     :return: integer exit status of list packages command where 0 represents success
     """
     plain_sep: str = args.plain_separator
-    separator = plain_sep if plain_sep else Consts.default_field_separator()
+    separator = plain_sep or Consts.default_field_separator()
     if args.os_pkgs:
         # package list and details will all be fetched using distribution's package manager
         if args.verbose:
@@ -149,10 +149,10 @@ def _format_long_line(line: str, separator: str, dep_of_width: int,
         if not no_trunc and len(dep_of) > (max_width := max(dep_of_width, len(description))):
             trim_factor = (len(dep_of) - max_width) / float(len(req_by) + len(opt_for))
             if req_by:
-                trim_size = int(trim_factor * len(req_by) + 0.5)  # round off to nearest int
+                trim_size = int(trim_factor * len(req_by) + 0.5)  # floor to nearest int
                 req_by = req_by[:max(0, len(req_by) - trim_size - 3)] + "..."
             if opt_for:
-                trim_size = int(trim_factor * len(opt_for) + 0.5)  # round off to nearest int
+                trim_size = int(trim_factor * len(opt_for) + 0.5)  # floor to nearest int
                 opt_for = opt_for[:max(0, len(opt_for) - trim_size - 3)] + "..."
         dep_of_parts: list[str] = []
         if req_by:

@@ -1,5 +1,6 @@
 """
-Package management utility for ybox containers.
+Code for the `ybox-pkg` script which is a high-level generic package management utility for
+ybox containers.
 """
 
 import argparse
@@ -27,10 +28,18 @@ from ybox.util import (EnvInterpolation, config_reader, get_ybox_version,
 
 
 def main() -> None:
+    """main function for `ybox-pkg` script"""
     main_argv(sys.argv[1:])
 
 
 def main_argv(argv: list[str]) -> None:
+    """
+    Main entrypoint of `ybox-pkg` that takes a list of arguments which are usually the
+    command-line arguments of the `main()` function. Pass ["-h"]/["--help"] to see all the
+    available arguments with help message for each.
+
+    :param argv: arguments to the function (main function passes `sys.argv[1:]`)
+    """
     args = parse_args(argv)
     # --quiet can be specified at most two times
     if args.quiet > 2:
@@ -73,11 +82,10 @@ def main_argv(argv: list[str]) -> None:
             print_error(f"No entry for ybox container '{container_name}' found!")
             sys.exit(1)
         conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
-        distribution_config_file = args.distribution_config if args.distribution_config \
-            else conf.distribution_config(conf.distribution)
+        distro_conf_file = args.distribution_config or conf.distribution_config(conf.distribution)
         env_interpolation = EnvInterpolation(env, [])
         distro_config = config_reader(env.search_config_path(
-            distribution_config_file, only_sys_conf=True), env_interpolation)
+            distro_conf_file, only_sys_conf=True), env_interpolation)
         # if required, migrate the container to work with the latest product
         state.migrate_container(get_ybox_version(conf), conf, distro_config)
         # the "repo_cmd" flag set by the subcommands indicate whether the subcommand was
@@ -93,6 +101,12 @@ def main_argv(argv: list[str]) -> None:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
+    """
+    Parse command-line arguments for the program and return the result :class:`argparse.Namespace`.
+
+    :param argv: the list of arguments to be parsed
+    :return: the result of parsing using the `argparse` library as a `argparse.Namespace` object
+    """
     parser = argparse.ArgumentParser(description="Package management across ybox containers")
     operations = parser.add_subparsers(title="Operations", required=True, metavar="OPERATION",
                                        help="DESCRIPTION")

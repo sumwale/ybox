@@ -1,6 +1,6 @@
 """
-Format output of `pacman -Qi ...` as a table having four columns (Name, Version, Description,
-  Dependency Of) with headings or as plain string-separated fields.
+Format output of `pacman -Qi ...` as a table having four columns (Name, Version, Dependency Of,
+  Description) string-separated fields using provided separator.
 """
 
 import argparse
