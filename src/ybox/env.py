@@ -39,6 +39,7 @@ class Environ:
         sys_conf_dir = files("ybox").joinpath("conf")
         os.environ["YBOX_SYS_CONF_DIR"] = str(sys_conf_dir)
         self._sys_conf_dirs = [sys_conf_dir]
+        self._root_dir = [Path("/")]
         self._configuration_dirs: list[PathName] = []
         # for tests, only the bundled configurations should be tested
         if os.environ.get("YBOX_TESTING"):
@@ -64,9 +65,9 @@ class Environ:
                  importlib (i.e. `Traversable`)
         """
         if os.path.isabs(conf_path):
-            return Path(conf_path)
-        # order is first search in user's config directory, and then the system config directory
-        conf_dirs = self._sys_conf_dirs if only_sys_conf else self._configuration_dirs
+            conf_dirs = self._root_dir
+        else:
+            conf_dirs = self._sys_conf_dirs if only_sys_conf else self._configuration_dirs
         for config_dir in conf_dirs:
             path = config_dir.joinpath(conf_path)
             if os.access(path, os.R_OK):  # type: ignore
@@ -125,8 +126,3 @@ class Environ:
     def user_man_dir(self) -> str:
         """User's local man pages directory which should be in the path returned by `manpath`"""
         return self._user_man_dir
-
-
-def resolve_inc_path(inc: str, src: PathName) -> PathName:
-    """resolve `include` path specified relative to a given source, or as an absolute string"""
-    return Path(inc) if os.path.isabs(inc) else src.parent.joinpath(inc)  # type: ignore

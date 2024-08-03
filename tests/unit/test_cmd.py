@@ -197,5 +197,5 @@ class TestCmd(unittest.TestCase):
         self.assertNotIn("FAILURE in", out)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

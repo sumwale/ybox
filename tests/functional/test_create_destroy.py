@@ -67,5 +67,5 @@ class TestCreateDestroy(DistributionBase):
         self.assertEqual(expected, output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ import subprocess
 from configparser import BasicInterpolation, ConfigParser, Interpolation
 from dataclasses import dataclass, field
 from importlib.resources import files
+from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 
 from simple_term_menu import TerminalMenu  # type: ignore
@@ -18,7 +19,7 @@ from ybox import __version__ as product_version
 
 from .cmd import build_bash_command
 from .config import Consts, StaticConfiguration
-from .env import Environ, PathName, resolve_inc_path
+from .env import Environ, PathName
 from .print import fgcolor as fg
 from .print import get_terminal_width, print_warn
 
@@ -67,6 +68,11 @@ class EnvInterpolation(BasicInterpolation):
         return self._NOW_RE.sub(lambda mt: self._now.strftime(mt.group(1)), value)
 
 
+def resolve_inc_path(inc: str, src: PathName) -> PathName:
+    """resolve `include` path specified relative to a given source, or as an absolute string"""
+    return Path(inc) if os.path.isabs(inc) else src.parent.joinpath(inc)  # type: ignore
+
+
 # read the ini file, recursing into the includes to build the final dictionary
 def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
                   top_level: Optional[PathName] = None) -> ConfigParser:
@@ -93,11 +99,11 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
         top_level = conf_file
     if not (includes := config.get("base", "includes", fallback="")):
         return config
-    # TODO: relative paths inside an include file (e.g. scripts in distro.ini) should be relative
-    # to the include and not the parent
     for include in includes.split(","):
         if not (include := include.strip()):
             continue
+        # relative paths inside an include file (e.g. scripts in distro.ini) are relative
+        # to the including file and not the top-level parent
         inc_file = resolve_inc_path(include, conf_file)
         inc_conf = config_reader(inc_file, interpolation, top_level)
         for section in inc_conf.sections():

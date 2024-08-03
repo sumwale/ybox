@@ -29,6 +29,5 @@ python3 -m venv "$SRC_DIR/.venv"
 source "$SRC_DIR/.venv/bin/activate"
 
 pip3 install pip --upgrade
-pip3 install setuptools --upgrade
 pip3 install --upgrade -r "$SRC_DIR/requirements-venv.txt"
 pip3 cache purge

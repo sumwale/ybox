@@ -22,9 +22,9 @@ from packaging.version import parse as parse_version
 from ybox import __version__ as product_version
 
 from .config import StaticConfiguration
-from .env import Environ, PathName, resolve_inc_path
+from .env import Environ, PathName
 from .print import print_color, print_warn
-from .util import ini_file_reader, write_ybox_version
+from .util import ini_file_reader, resolve_inc_path, write_ybox_version
 
 
 @dataclass(frozen=True)

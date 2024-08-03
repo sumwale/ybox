@@ -78,21 +78,29 @@ class TestEnv(unittest.TestCase):
 
         dir_mode = 0o750
         file_mode = 0o600
-        config_dir = Path(os.environ['HOME'], ".config", "ybox")
+        config_dir = Path(os.environ["HOME"], ".config", "ybox")
         config_dir.mkdir(mode=dir_mode, parents=True, exist_ok=True)
         # create temporary file in $HOME/.config/ybox and check that it is picked
+        # then check the same for a temporary file in /tmp using absolute path
         uuid = uuid4()
         conf_file = f"test_search-{uuid}.config"
-        conf_path = config_dir.joinpath(conf_file)
-        conf_path.touch(mode=file_mode, exist_ok=True)
-        # should fail when checking for only system configuration
-        self.assertRaises(FileNotFoundError, self._env.search_config_path, conf_file,
-                          only_sys_conf=True)
-        try:
-            self.assertEqual(conf_path, self._env.search_config_path(conf_file))
-        finally:
-            conf_path.unlink()
-        self.assertRaises(FileNotFoundError, self._env.search_config_path, conf_file, quiet=True)
+        for conf_path in (config_dir.joinpath(conf_file), Path("/tmp", conf_file)):
+            conf_path.touch(mode=file_mode, exist_ok=True)
+            try:
+                # check absolute path for the /tmp file
+                if conf_path.parent.name == "tmp":
+                    conf_file = str(conf_path)
+                    self.assertEqual(conf_path, self._env.search_config_path(conf_file,
+                                                                             only_sys_conf=True))
+                else:
+                    # should fail when checking for only system configuration
+                    self.assertRaises(FileNotFoundError, self._env.search_config_path, conf_file,
+                                      only_sys_conf=True)
+                    self.assertEqual(conf_path, self._env.search_config_path(conf_file))
+            finally:
+                conf_path.unlink()
+            self.assertRaises(FileNotFoundError, self._env.search_config_path,
+                              conf_file, quiet=True)
         # check for a standard config file in $HOME
         prof_file = f"profiles/test_search_config-{uuid}.ini"
         prof_path = config_dir.joinpath(prof_file)
@@ -135,5 +143,5 @@ class TestEnv(unittest.TestCase):
                               quiet=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -64,7 +64,7 @@ class FileLock:
                             remaining_time -= self._poll
                             remaining_time = max(remaining_time, 0)
                     else:
-                        raise
+                        raise  # pragma: no cover
             wait_time = (datetime.now() - start_time).total_seconds() if start_time else 0.0
             raise TimeoutError(f"Failed to lock '{self._lock_file}' in {wait_time} seconds")
         finally:
