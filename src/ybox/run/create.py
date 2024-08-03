@@ -23,8 +23,8 @@ from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_active_ybox,
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
-from ybox.graphics import (add_env_option, add_mount_option, enable_nvidia,
-                           enable_wayland, enable_x11)
+from ybox.graphics import (add_env_option, add_mount_option, enable_dri,
+                           enable_nvidia, enable_wayland, enable_x11)
 from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
                         print_warn)
@@ -601,9 +601,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
         for lang_var in ("LANG", "LANGUAGE"):
             add_env_option(docker_args, lang_var)
     if dri or nvidia or nvidia_ctk:
-        if os.access("/dev/dri/by-path", os.W_OK):
-            docker_args.append("--device=/dev/dri")
-            add_mount_option(docker_args, "/dev/dri/by-path", "/dev/dri/by-path")
+        enable_dri(docker_args)
     if nvidia_ctk:  # takes precedence over "nvidia" option
         docker_args.append("--device=nvidia.com/gpu=all")
     elif nvidia:

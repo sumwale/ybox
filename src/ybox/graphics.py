@@ -101,6 +101,17 @@ def enable_wayland(docker_args: list[str], env: Environ) -> None:
             add_mount_option(docker_args, wayland_sock, wayland_sock)
 
 
+def enable_dri(docker_args: list[str]) -> None:
+    """
+    Append options to docker/podman arguments to enable DRI access.
+
+    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    """
+    if os.access("/dev/dri/by-path", os.W_OK):
+        docker_args.append("--device=/dev/dri")
+        add_mount_option(docker_args, "/dev/dri/by-path", "/dev/dri/by-path")
+
+
 def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
     """
     Append options to docker/podman arguments to share host machine's NVIDIA libraries and
