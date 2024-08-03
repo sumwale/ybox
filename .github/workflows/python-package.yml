@@ -6,8 +6,6 @@ name: Python package
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:
@@ -19,6 +17,8 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
+    - name: Use Docker in rootless mode.
+      uses: ScribeMD/rootless-docker@0.2.2
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
@@ -31,4 +31,4 @@ jobs:
         if [ -r requirements.txt ]; then pip install --upgrade -r requirements.txt; fi
     - name: Run tox actions in parallel
       run: |
-        tox -p
+        tox -e py -p

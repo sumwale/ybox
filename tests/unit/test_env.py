@@ -92,11 +92,15 @@ class TestEnv(unittest.TestCase):
                     conf_file = str(conf_path)
                     self.assertEqual(conf_path, self._env.search_config_path(conf_file,
                                                                              only_sys_conf=True))
+                    self.assertEqual(conf_path, self._env.search_config_path(conf_file,
+                                                                             only_sys_conf=False))
                 else:
                     # should fail when checking for only system configuration
                     self.assertRaises(FileNotFoundError, self._env.search_config_path, conf_file,
                                       only_sys_conf=True)
                     self.assertEqual(conf_path, self._env.search_config_path(conf_file))
+                    self.assertEqual(conf_path, self._env.search_config_path(conf_file,
+                                                                             only_sys_conf=False))
             finally:
                 conf_path.unlink()
             self.assertRaises(FileNotFoundError, self._env.search_config_path,
