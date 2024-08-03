@@ -601,8 +601,9 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
         for lang_var in ("LANG", "LANGUAGE"):
             add_env_option(docker_args, lang_var)
     if dri or nvidia or nvidia_ctk:
-        docker_args.append("--device=/dev/dri")
-        add_mount_option(docker_args, "/dev/dri/by-path", "/dev/dri/by-path")
+        if os.access("/dev/dri/by-path", os.W_OK):
+            docker_args.append("--device=/dev/dri")
+            add_mount_option(docker_args, "/dev/dri/by-path", "/dev/dri/by-path")
     if nvidia_ctk:  # takes precedence over "nvidia" option
         docker_args.append("--device=nvidia.com/gpu=all")
     elif nvidia:
@@ -1082,6 +1083,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
         docker_full_cmd.append(f"{conf.target_scripts_dir}/app.list")
     docker_full_cmd.append(conf.box_name)
 
+    print_info(f"Running {' '.join(docker_full_cmd)}")
     if (code := int(run_command(docker_full_cmd, exit_on_error=False,
                                 error_msg="container launch"))) != 0:
         print_error(f"Also check 'ybox-logs {conf.box_name}' for details")

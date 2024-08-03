@@ -17,18 +17,17 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-    - name: Use Docker in rootless mode.
+    - name: Use Docker in rootless mode
       uses: ScribeMD/rootless-docker@0.2.2
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
-        cache: "pip"
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         if [ -r requirements.txt ]; then pip install --upgrade -r requirements.txt; fi
-    - name: Run tox actions in parallel
+    - name: Run tox actions
       run: |
-        tox -e py -p
+        tox -e py
