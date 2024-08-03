@@ -28,6 +28,6 @@ rm -rf "$SRC_DIR/.venv"
 python3 -m venv "$SRC_DIR/.venv"
 source "$SRC_DIR/.venv/bin/activate"
 
-pip3 install pip --upgrade
-pip3 install --upgrade -r "$SRC_DIR/requirements-venv.txt"
+python3 -m pip install --upgrade pip
+pip3 install --upgrade -r "$SRC_DIR/requirements.txt"
 pip3 cache purge
