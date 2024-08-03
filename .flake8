@@ -1,7 +1,0 @@
-[flake8]
-exclude = .git,.venv,.tox,__pycache__,src/ybox/conf,src/ybox/schema
-max_line_length = 99
-ignore = W504
-extend-select = B90
-extend-ignore = B905,B907
-show-source = true

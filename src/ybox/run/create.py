@@ -1081,7 +1081,6 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
         docker_full_cmd.append(f"{conf.target_scripts_dir}/app.list")
     docker_full_cmd.append(conf.box_name)
 
-    print_info(f"Running {' '.join(docker_full_cmd)}")
     if (code := int(run_command(docker_full_cmd, exit_on_error=False,
                                 error_msg="container launch"))) != 0:
         print_error(f"Also check 'ybox-logs {conf.box_name}' for details")

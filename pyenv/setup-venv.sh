@@ -20,7 +20,7 @@ source "$SCRIPT_DIR/activate.sh"
   fi
   all_versions="3.9 3.10 3.11 3.12"
   req_versions="$(echo "$all_versions" | sed "s/\<$system_version\>//")"
-  pyenv install $req_versions
+  pyenv install $req_versions || /bin/true
   pyenv local $req_versions || /bin/true
 )
 
@@ -30,4 +30,5 @@ source "$SRC_DIR/.venv/bin/activate"
 
 python3 -m pip install --upgrade pip
 pip3 install --upgrade -r "$SRC_DIR/requirements.txt"
+pip3 install --upgrade tox coverage
 pip3 cache purge
