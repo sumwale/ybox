@@ -50,7 +50,6 @@ def get_terminal_width() -> int:
 
 def print_color(msg: str, fg: Optional[str] = None,
                 bg: Optional[str] = None, end: str = "\n", file: Optional[IO[str]] = None) -> None:
-    # pylint: disable=invalid-name
     """
     Display given string to standard output with foreground and background colors, if provided.
     The colors will show up as expected on most known Linux terminals and console though

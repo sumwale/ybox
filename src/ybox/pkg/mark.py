@@ -22,7 +22,7 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
     :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of mark package command where 0 represents success

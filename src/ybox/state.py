@@ -64,7 +64,7 @@ class DependencyType(str, Enum):
     SUGGESTION = "suggestion"
 
 
-class YboxStateManagement:  # pylint: disable=too-many-public-methods
+class YboxStateManagement:
     """
     Maintain the state of all ybox containers. This includes:
 
@@ -330,7 +330,7 @@ class YboxStateManagement:  # pylint: disable=too-many-public-methods
         will continue to work on it with expected semantics.
 
         :param container_version: version string as recorded in the container
-        :param conf: the :class:`StaticConfiguration` of the container
+        :param conf: the :class:`StaticConfiguration` for the container
         :param distro_config: an object of :class:`ConfigParser` from parsing the Linux
                               distribution's `distro.ini`
         """

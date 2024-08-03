@@ -48,7 +48,7 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of install command where 0 represents success
@@ -60,7 +60,8 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
     selected_deps = args.with_opt_deps.split(",") if args.with_opt_deps else None
     opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS.value]
-    # TODO: use this flag for -w option only if get_optional_deps returned the package/provides
+    # TODO: use this flag for -w option only if get_optional_deps returned the package/provides;
+    #       also allow for re-installation of packages using a flag
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
     check_cmd = pkgmgr[PkgMgr.CHECK_INSTALL.value]
     return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,
@@ -84,14 +85,14 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                         for the `opt_dep_flag`
     :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param rt_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :param opt_deps_cmd: command to determine optional dependencies as read from `distro.ini`
     :param opt_dep_flag: flag to be added during installation of an optional dependency to mark
                          it as a dependency (as read from `distro.ini`)
     :param opt_dep_install: `True` if installation is for an optional dependency
-    :param check_pkg: if `True` then skip installation if package already exists
+    :param check_pkg: if True then skip installation if package already exists
     :param check_cmd: command to check if package exists before installation
     :param selected_deps: list of dependencies to install if user has already provided them
     :param quiet: perform operations quietly
@@ -277,7 +278,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     :param app_flags: application flags that have been explicitly specified with --app-flags
     :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param box_conf: the resolved INI format configuration of the container as a string or
                      a `ConfigParser` object
     :param shared_root: the local shared root directory if `shared_root` is provided
@@ -383,7 +384,7 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
     :param file: full path of the desktop file being wrapped
     :param package: the package being installed
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param app_flags: map of executable file name to the value from [app_flags] section from the
                       container configuration
     :param wrapper_files: the accumulated list of all wrapper files so far
@@ -427,7 +428,7 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
 
     :param filename: name of the executable file being wrapped
     :param file: full path of the executable file being wrapped
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param quiet: perform operations quietly: a value of 1 will overwrite existing wrapper file
                   without confirmation while a value of 2 will also override system executable,
                   if present, without confirmation
@@ -461,7 +462,7 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     :param filename: name of the executable file being wrapped
     :param file: full path of the executable file being wrapped
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param app_flags: map of executable file name to the value from [app_flags] section from the
                       container configuration
     :param wrapper_files: the accumulated list of all wrapper files so far
@@ -496,7 +497,7 @@ def _link_man_page(file: str, shared_root: str, conf: StaticConfiguration,
     :param file: full path of the executable file being wrapped
     :param shared_root: the local shared root directory if `shared_root` is provided
                         for the container
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
     man_dir_base = file.index("/man/")  # expect /man/ to exist in the file path

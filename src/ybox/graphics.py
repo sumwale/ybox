@@ -14,8 +14,8 @@ from .env import Environ
 # standard library directories to search for NVIDIA libraries
 _STD_LIB_DIRS = ["/usr/lib", "/lib", "/usr/local/lib", "/usr/lib64", "/lib64",
                  "/usr/lib32", "/lib32"]
-# additional library directory glob patterns to search for NVIDIA libraries in 32/64-bit systems
-# (the '&' in front of the paths is an indicator to the code that this is a glob pattern)
+# additional library directory glob patterns to search for NVIDIA libraries in 32/64-bit systems;
+# the '&' in front of the paths is an indicator to the code that this is a glob pattern
 _STD_LIB_DIR_PATTERNS = ["&/usr/lib/*-linux-gnu", "&/lib/*-linux-gnu", "&/usr/lib64/*-linux-gnu",
                          "&/lib64/*-linux-gnu", "&/usr/lib32/*-linux-gnu", "&/lib32/*-linux-gnu"]
 _STD_BIN_DIRS = ["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"]
@@ -112,7 +112,7 @@ def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
     directories.
 
     :param docker_args: list of docker/podman arguments to which the options have to be appended
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     """
     # search for nvidia device files and add arguments for those
     for nvidia_dev in _find_nvidia_devices():
@@ -175,7 +175,7 @@ def _find_all_lib_dirs() -> Iterable[str]:
 def _parse_ld_so_conf(conf: str, ld_lib_paths: list[str]) -> None:
     """
     Read /etc/ld.so.conf and append all the mentioned library directories (including the
-      `include` directives) in the passed list.
+      `include` directives) in the list that has been passed.
 
     :param conf: the path to ld.so.conf being processed which is either /etc/ld.so.conf or
                  one of the files included by it (in the recursive call)
@@ -235,7 +235,7 @@ def _prepare_mount_dirs(dirs: list[str], docker_args: list[str],
 def _create_nvidia_setup(docker_args: list[str], mount_lib_dirs: list[str]) -> list[str]:
     """
     Generate contents of a `bash` script (returned as a list of strings) to be run on container
-    which will setup required NVIDIA libraries from the mounted host library directories.
+    which will set up required NVIDIA libraries from the mounted host library directories.
 
     The script will create new directories in the container and links to NVIDIA libraries in those
     from the mounted directories. Then it will add option to docker/podman arguments to set

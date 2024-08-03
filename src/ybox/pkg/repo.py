@@ -30,7 +30,7 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param repo: the `[repo]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of repo-add command where 0 represents success
@@ -132,7 +132,7 @@ def repo_remove(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionPro
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param repo: the `[repo]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of repo-remove command where 0 represents success
@@ -174,7 +174,7 @@ def _refresh_package_metadata(pkgmgr: SectionProxy, docker_cmd: str,
 
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :return: integer exit status of package refresh command where 0 represents success
     """
     print_info("Refreshing package metadata")
@@ -195,7 +195,7 @@ def repo_list(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param repo: the `[repo]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of repo-list command where 0 represents success

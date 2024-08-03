@@ -25,7 +25,7 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
     :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of uninstall command where 0 represents success
@@ -56,10 +56,11 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
                       as read from distribution's `distro.ini`; this should have {package}
                       placeholder in the string which will be resolved before execution
     :param docker_cmd: the docker/podman executable to use
-    :param conf: the :class:`StaticConfiguration` of the container
+    :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
-    :param dep_msg: _description_, defaults to ""
+    :param dep_msg: if this is invoked for uninstalling a dependency then the string "dependency "
+                    to display in messages, defaults to ""
     :return: exit code of the underlying package manager command run using docker/podman
     """
     installed = False

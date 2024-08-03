@@ -17,9 +17,11 @@ class TestCreateDestroy(DistributionBase):
     """check for basic create and destroy of ybox containers"""
 
     def test_create_no_shared(self):
+        """test a basic container profile with no shared root for all supported distributions"""
         self.for_all_distros(self.create_no_shared)
 
     def create_no_shared(self) -> None:
+        """create a container using `distro_minimal.ini` profile having no shared root"""
         print(f"Running create_no_shared for Linux distribution '{self.distribution}'")
         distro_config_file = f"{self._resources_dir}/distro_minimal.ini"
         box_config = f"{self._resources_dir}/basic_no_shared.ini"
@@ -53,6 +55,7 @@ class TestCreateDestroy(DistributionBase):
         self.assertEqual(0, result.returncode)
 
     def _check_output(self, result: subprocess.CompletedProcess[bytes], expected: str) -> None:
+        """check output of `subprocess.run` against given expected string"""
         output = result.stdout.decode("utf-8").strip()
         if result.returncode != 0:
             if output:
