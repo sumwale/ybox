@@ -2,9 +2,19 @@
 
 set -e
 
-pip install .
-if [ "$1" = "-u" ]; then
-  python3 -m unittest discover -s tests/unit
+export PYTHONPATH=./src
+
+rm -f .coverage
+if [ "$1" = "-f" ]; then
+  coverage run -m unittest discover -s tests
 else
-  python3 -m unittest discover -s tests
+  coverage run -m unittest discover -s tests/unit
 fi
+
+echo
+echo "----------------------------------------------------------------------"
+echo "                           COVERAGE REPORT"
+echo "----------------------------------------------------------------------"
+echo
+echo "----------------------------------------------------"
+coverage report -m | tee coverage-report.txt

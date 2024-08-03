@@ -427,8 +427,9 @@ using `tox` in the checkout directory, or `tox -p` for parallel run. It will run
 all supported python versions (i.e. from 3.9 onwards).
 
 There is also a simple script `run-tests.sh` in the top-level directory which can be used
-to run just the tests with the current python version. This will skip other stuff like
-`pyright`, for example, which is invoked by `tox`. The lint and other related tools can
-be run explicitly using the `code-check.sh` script in the top-level directory.
+to run just the tests with the current python version and produce coverage report.
+This will skip other stuff like `pyright`, for example, which is invoked by `tox`.
+The lint and other related tools can be run explicitly using the `code-check.sh` script
+in the top-level directory.
 
 See `tox` and `unittest` documentation for more details like running individual tests.

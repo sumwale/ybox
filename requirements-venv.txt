@@ -11,3 +11,4 @@ flake8-builtins
 flake8-comprehensions
 pylint
 tox
+coverage

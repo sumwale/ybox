@@ -6,3 +6,5 @@ src/ybox.egg-info
 .tox
 .venv
 build/
+.coverage
+coverage-report.txt
