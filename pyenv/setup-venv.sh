@@ -30,5 +30,5 @@ source "$SRC_DIR/.venv/bin/activate"
 
 python3 -m pip install --upgrade pip
 pip3 install --upgrade -r "$SRC_DIR/requirements.txt"
-pip3 install --upgrade tox coverage
+pip3 install --upgrade tox
 pip3 cache purge

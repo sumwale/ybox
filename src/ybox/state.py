@@ -118,7 +118,9 @@ class YboxStateManagement:
 
     def __init__(self, env: Environ):
         """
-        Initialize connection to database and create tables+indexes if not present.
+        Initialize connection to database and create tables+indexes if not present. If the
+        product version has upgraded that needs updated schema, then also run the required
+        schema migration scripts.
 
         :param env: an instance of the current :class:`Environ`
         """

@@ -1,5 +1,4 @@
 **/__pycache__/
-**/.mypy_cache/
 dist/
 src/ybox.egg-info
 .python-version
@@ -8,3 +7,4 @@ src/ybox.egg-info
 build/
 .coverage
 coverage-report.txt
+coverage.xml

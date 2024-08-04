@@ -5,11 +5,12 @@ import configparser
 import os
 import shutil
 import subprocess
-import unittest
 from dataclasses import dataclass
 from importlib.resources import files
 from typing import Callable, Optional, Union
 from uuid import uuid4
+
+import pytest
 
 from ybox.cmd import get_docker_command
 from ybox.config import Consts, StaticConfiguration
@@ -42,14 +43,19 @@ class _DistributionHelper:
                    f"{Consts.image_prefix()}/{distribution}/{box_name}")
 
 
-class DistributionBase(unittest.TestCase):
+class DistributionBase:
     """base class to help execute tests on multiple distributions"""
 
-    def setUp(self):
-        """distribution configuration executed before each test method in the class"""
+    _resources_dir = f"{os.path.dirname(__file__)}/resources"
+    _home = os.environ["HOME"]
+    _docker_cmd = ""
+    _helpers: list[_DistributionHelper] = []
+    _helper: Optional[_DistributionHelper] = None
+
+    @pytest.fixture(autouse=True)
+    def distro_setup(self):
+        """distribution setup executed before and after each test method in the class"""
         os.environ["YBOX_TESTING"] = "1"
-        self._resources_dir = f"{os.path.dirname(__file__)}/resources"
-        self._home = os.environ["HOME"]
         if not os.path.exists(f"{self._home}/Downloads"):
             os.mkdir(f"{self._home}/Downloads", mode=0o755)
         args_parser = argparse.ArgumentParser()
@@ -60,10 +66,10 @@ class DistributionBase(unittest.TestCase):
                 "r", encoding="utf-8") as supp_fd:
             self._helpers = [_DistributionHelper.create(distro)
                              for distro in supp_fd.read().splitlines()]
-        self._helper: Optional[_DistributionHelper] = None
 
-    def tearDown(self):
-        """cleanup executed after each test method in the class"""
+        yield
+
+        # cleanup executed after each test method in the class
         if self._helper:
             self.cleanup()
 
