@@ -69,6 +69,7 @@ class DistributionBase:
 
         yield
 
+        del os.environ["YBOX_TESTING"]
         # cleanup executed after each test method in the class
         if self._helper:
             self.cleanup()

@@ -11,7 +11,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Union
 
-from .print import print_error
+from .print import print_error, print_notice
 
 PathName = Union[Path, Traversable]
 
@@ -43,6 +43,7 @@ class Environ:
         self._configuration_dirs: list[PathName] = []
         # for tests, only the bundled configurations should be tested
         if os.environ.get("YBOX_TESTING"):
+            print_notice("Running with YBOX_TESTING enabled")
             self._configuration_dirs = self._sys_conf_dirs
         else:
             self._configuration_dirs = [Path(f"{self._home_dir}/.config/ybox"),
