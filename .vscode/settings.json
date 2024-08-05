@@ -10,6 +10,9 @@
     "editor.wordWrapColumn": 99,
     "python.analysis.typeCheckingMode": "strict",
     "python.testing.cwd": "${workspaceFolder}",
+    "python.testing.pytestArgs": [
+        "-s"
+    ],
     "python.testing.unittestArgs": [
         "-v",
         "-s",

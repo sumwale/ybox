@@ -89,14 +89,16 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
     """
     # check for podman first then docker
     if args.docker_path:
-        return args.docker_path
+        if os.access(args.docker_path, os.X_OK):
+            return args.docker_path
+        raise PermissionError(
+            f"Cannot execute '{args.docker_path}' provided in '{option_name}' option")
     if os.access("/usr/bin/podman", os.X_OK):
         return "/usr/bin/podman"
-    if os.access("/usr/bin/docker", os.X_OK):
+    if os.access("/usr/bin/docker", os.X_OK):  # pragma: no cover
         return "/usr/bin/docker"
-    print_error("Neither /usr/bin/podman nor /usr/bin/docker found "
-                f"and no '{option_name}' option has been provided")
-    raise FileNotFoundError(f"No podman/docker found or '{option_name}' specified")
+    raise FileNotFoundError(
+        f"No podman/docker found or '{option_name}' specified")  # pragma: no cover
 
 
 def check_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str],
@@ -203,12 +205,18 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
              (if `exit_on_error` is False)
     """
     args = shlex.split(cmd) if isinstance(cmd, str) else cmd
-    result = subprocess.run(args, capture_output=capture_output, check=False)
+    try:
+        result = subprocess.run(args, capture_output=capture_output, check=False)
+    except OSError as err:
+        if exit_on_error:
+            raise  # an unexpected internal issue, so keep the full stack trace
+        print_error(f"FAILURE invoking '{cmd}': {err}")
+        return err.errno
     if result.returncode != 0:
         if capture_output:
             _print_subprocess_output(result)
         if not error_msg:
-            error_msg = f"'{' '.join(args)}'"
+            error_msg = f"'{cmd}'"
         if error_msg != "SKIP":
             print_error(f"FAILURE in {error_msg} -- see the output above for details")
         if exit_on_error:
@@ -216,7 +224,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
         else:
             return result.returncode
     if capture_output and result.stderr:
-        print_warn(result.stderr.decode("utf-8"))
+        print_warn(result.stderr.decode("utf-8"), file=sys.stderr)
     return result.stdout.decode("utf-8") if capture_output else result.returncode
 
 
@@ -226,7 +234,7 @@ def _print_subprocess_output(result: subprocess.CompletedProcess[bytes]) -> None
     if result.stdout:
         print_notice(result.stdout.decode("utf-8"))
     if result.stderr:
-        print_warn(result.stderr.decode("utf-8"))
+        print_warn(result.stderr.decode("utf-8"), file=sys.stderr)
 
 
 def page_output(output: Iterable[bytes], pager: str) -> int:
@@ -234,12 +242,14 @@ def page_output(output: Iterable[bytes], pager: str) -> int:
     Display an `Iterable` of bytes on the terminal one screenful at a time using the given `pager`.
 
     :param output: the `Iterable` of `bytes` to be displayed (e.g. file/stream object, `list` etc)
-    :param pager: the command to be executed for pagination as a separate process
+    :param pager: the command to be executed for pagination as a separate process with any
+                  arguments that are required; the arguments are split using :func:`shlex.split`
+                  so you can use shell-like quoting/escaping if they have spaces
     :return: the exit code of the `pager` command
     """
     if not pager:
         for out in output:
-            sys.stdout.buffer.write(out)
+            sys.stdout.write(out.decode("utf-8"))
         sys.stdout.flush()
         return 0
     try:
@@ -250,7 +260,10 @@ def page_output(output: Iterable[bytes], pager: str) -> int:
             page_in.communicate()
             return page_in.returncode
     except BrokenPipeError:
-        return 0  # ignore since this will happen if pager ends (e.g. using 'q' in less)
+        return 1  # this can happen if pager ends (e.g. using 'q' in less)
+    except OSError as err:
+        print_error(f"FAILURE invoking pager '{pager}': {err}")
+        return err.errno
     except KeyboardInterrupt:
         # fail cleanly for user interrupt in the pager
         print()

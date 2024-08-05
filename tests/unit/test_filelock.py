@@ -10,6 +10,7 @@ from datetime import datetime
 from multiprocessing import Process
 from multiprocessing.synchronize import Event
 from pathlib import Path
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -51,10 +52,15 @@ def test_lock():
             assert cm.value.errno in (errno.EACCES, errno.EAGAIN)
 
         _run_in_process(do_lock)
-    # trying to lock an unwritable file should raise an error
+    # trying to lock an un-writable file should raise an error
     with pytest.raises(PermissionError):
         with FileLock(f"/usr/{_lock_file}"):
             pass
+    # mock the case of an OSError with errno other than EACCES or EAGAIN
+    with patch("ybox.filelock.fcntl.lockf", side_effect=OSError(errno.ENOLCK, "too many locks")):
+        with pytest.raises(OSError) as cm:
+            with FileLock(_lock_file):
+                assert cm.value.errno == errno.ENOLCK
 
 
 def test_unlock():
@@ -73,9 +79,9 @@ def test_unlock():
 
 def test_timeout():
     """test timeout on a locked file"""
-    def do_lock(ev: Event) -> None:
+    def do_lock(e: Event) -> None:
         with FileLock(_lock_file):
-            ev.set()
+            e.set()
             time.sleep(6.0)
 
     # acquire the lock in a separate process, then check lock timeout in the main process
