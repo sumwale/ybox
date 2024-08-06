@@ -9,6 +9,7 @@ import os
 import pwd
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -23,11 +24,11 @@ from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_active_ybox,
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
-from ybox.graphics import (add_env_option, add_mount_option, enable_dri,
-                           enable_nvidia, enable_wayland, enable_x11)
 from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
                         print_warn)
+from ybox.run.graphics import (add_env_option, add_mount_option, enable_dri,
+                               enable_nvidia, enable_wayland, enable_x11)
 from ybox.run.pkg import parse_args as pkg_parse_args
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 from ybox.util import (EnvInterpolation, NotSupportedError, config_reader,
@@ -129,7 +130,8 @@ def main_argv(argv: list[str]) -> None:
 
     # handle the shared_root case: acquire file lock and check if shared container image exists
     if shared_root:
-        os.makedirs(os.path.dirname(shared_root), exist_ok=True)
+        os.makedirs(os.path.dirname(shared_root),
+                    mode=Consts.default_directory_mode(), exist_ok=True)
         with FileLock(f"{shared_root}-image.lock"):
             # if image already exists, then skip the subsequent steps
             if subprocess.run([docker_cmd, "inspect", "--type=image",
@@ -549,7 +551,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
         if key == "home":
             if val:
                 # create the source directory if it does not exist
-                os.makedirs(val, exist_ok=True)
+                os.makedirs(val, mode=Consts.default_directory_mode(), exist_ok=True)
                 add_mount_option(docker_args, val, env.target_home)
         elif key == "shared_root":
             shared_root = val or ""
@@ -593,7 +595,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
             log_dirs = [mt.group(1) for mt in
                         (re.match("^--log-opt=path=(.*)/.*$", path) for path in docker_args) if mt]
             for log_dir in log_dirs:
-                os.makedirs(log_dir, exist_ok=True)
+                os.makedirs(log_dir, mode=Consts.default_directory_mode(), exist_ok=True)
         elif key not in ("name", "dbus_sys", "includes"):
             raise NotSupportedError(f"Unknown key '{key}' in the [base] of {profile} "
                                     "or its includes")
@@ -754,7 +756,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
     # always recreate the directory to pick up any changes
     if os.path.exists(conf.configs_dir):
         shutil.rmtree(conf.configs_dir)
-    os.makedirs(conf.configs_dir, exist_ok=True)
+    os.makedirs(conf.configs_dir, mode=Consts.default_directory_mode(), exist_ok=True)
     if config_hardlinks:
         print_info("Creating hard links to paths specified in [configs]  ...")
     else:
@@ -772,7 +774,8 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
             src_path = os.path.realpath(f_val[:split_idx].strip())
             dest_path = f"{conf.configs_dir}/{f_val[split_idx + 2:].strip()}"
             if os.access(src_path, os.R_OK):
-                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                os.makedirs(os.path.dirname(dest_path),
+                            mode=Consts.default_directory_mode(), exist_ok=True)
                 if os.path.isdir(src_path):
                     copytree(src_path, dest_path, hardlink=config_hardlinks)
                 else:
@@ -869,7 +872,7 @@ def copytree(src: str, dest: str, hardlink: bool = False) -> None:
     for src_dir, _, src_files in os.walk(src, followlinks=True):
         # substitute 'src' prefix with 'dest'
         dest_dir = f"{dest}{src_dir[len(src):]}"
-        os.mkdir(dest_dir)
+        os.mkdir(dest_dir, mode=stat.S_IMODE(os.stat(src_dir).st_mode))
         for src_file in src_files:
             src_path = f"{src_dir}/{src_file}"
             if os.path.exists(src_path):
@@ -892,7 +895,7 @@ def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
     # first create local mount directory having entrypoint and other scripts
     if os.path.exists(conf.scripts_dir):
         shutil.rmtree(conf.scripts_dir)
-    os.makedirs(conf.scripts_dir, exist_ok=True)
+    os.makedirs(conf.scripts_dir, mode=Consts.default_directory_mode(), exist_ok=True)
     copy_ybox_scripts_to_container(conf, distro_config)
     # finally write the current version to "version" file in scripts directory of the container
     write_ybox_version(conf)
@@ -975,7 +978,7 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root: str
             # remove the temporary image before exit
             remove_image(docker_cmd, image_name)
             sys.exit(1)
-    os.makedirs(shared_root)
+    os.makedirs(shared_root, mode=Consts.default_directory_mode())
     # the entrypoint-cp.sh script requires two arguments: first is the comma separated
     # list of directories to be copied, and second the target directory
     run_command([docker_cmd, "run", "-it", f"--name={conf.box_name}",

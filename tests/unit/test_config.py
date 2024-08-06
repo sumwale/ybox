@@ -84,6 +84,7 @@ def test_consts():
     """check the constants defined in :class:`Consts`"""
     assert Consts.image_prefix() == "ybox-local"
     assert Consts.shared_image_prefix() == "ybox-shared-local"
+    assert Consts.default_directory_mode() == 0o750
     assert Consts.entrypoint_base() == "entrypoint-base.sh"
     assert Consts.entrypoint_cp() == "entrypoint-cp.sh"
     assert Consts.entrypoint() == "entrypoint.sh"

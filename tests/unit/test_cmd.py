@@ -245,7 +245,7 @@ def test_page_output(capfd: pytest.CaptureFixture[str]):
     assert captured.out == str_out.replace(" or ", "/")
     # mock for broken pipe with pager
     with patch("ybox.cmd.subprocess.Popen", side_effect=BrokenPipeError):
-        assert page_output(out, "less") == 1
+        assert page_output(out, "less") == 0
     # mock for keyboard interrupt
     with patch("ybox.cmd.subprocess.Popen", side_effect=KeyboardInterrupt):
         assert page_output(out, "less") == 130

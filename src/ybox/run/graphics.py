@@ -8,8 +8,8 @@ from itertools import chain
 from os.path import realpath
 from typing import Iterable, Optional
 
-from .config import Consts, StaticConfiguration
-from .env import Environ
+from ybox.config import Consts, StaticConfiguration
+from ybox.env import Environ
 
 # standard library directories to search for NVIDIA libraries
 _STD_LIB_DIRS = ["/usr/lib", "/lib", "/usr/local/lib", "/usr/lib64", "/lib64",

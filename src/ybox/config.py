@@ -155,6 +155,11 @@ class Consts:
         return "ybox-shared-local"
 
     @staticmethod
+    def default_directory_mode() -> int:
+        """return the default mode to use for new directories"""
+        return 0o750
+
+    @staticmethod
     def entrypoint_base() -> str:
         """entrypoint script name for the base container (which is booted to configure
            the final container)"""

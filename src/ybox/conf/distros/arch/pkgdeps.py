@@ -16,6 +16,7 @@ from typing import Optional
 import ijson  # type: ignore
 
 from ybox.cmd import run_command
+from ybox.config import Consts
 from ybox.print import print_error, print_notice, print_warn
 
 _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
@@ -122,7 +123,7 @@ def refresh_aur_metadata() -> None:
     refresh AUR metadata having details on all available AUR packages which is refreshed if it
     is missing or older than 24 hours
     """
-    os.makedirs(_AUR_META_CACHE_DIR, mode=0o750, exist_ok=True)
+    os.makedirs(_AUR_META_CACHE_DIR, mode=Consts.default_directory_mode(), exist_ok=True)
     # fetch AUR metadata if not present or older than a day
     if (not os.access(_AUR_META_FILE, os.R_OK) or
             time.time() > os.path.getctime(_AUR_META_FILE) + _REFRESH_AGE):

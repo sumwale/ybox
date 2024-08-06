@@ -46,7 +46,7 @@ class _DistributionHelper:
 class DistributionBase:
     """base class to help execute tests on multiple distributions"""
 
-    _resources_dir = f"{os.path.dirname(__file__)}/resources"
+    _resources_dir = f"{os.path.dirname(__file__)}/../resources"
     _home = os.environ["HOME"]
     _docker_cmd = ""
     _helpers: list[_DistributionHelper] = []
@@ -56,8 +56,10 @@ class DistributionBase:
     def distro_setup(self):
         """distribution setup executed before and after each test method in the class"""
         os.environ["YBOX_TESTING"] = "1"
-        if not os.path.exists(f"{self._home}/Downloads"):
+        try:
             os.mkdir(f"{self._home}/Downloads", mode=0o755)
+        except FileExistsError:
+            pass
         args_parser = argparse.ArgumentParser()
         args_parser.add_argument("-d", "--docker-path")
         args = args_parser.parse_args([])

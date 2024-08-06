@@ -260,7 +260,7 @@ def page_output(output: Iterable[bytes], pager: str) -> int:
             page_in.communicate()
             return page_in.returncode
     except BrokenPipeError:
-        return 1  # this can happen if pager ends (e.g. using 'q' in less)
+        return 0  # this can happen if pager ends (e.g. using 'q' in less)
     except OSError as err:
         print_error(f"FAILURE invoking pager '{pager}': {err}")
         return err.errno

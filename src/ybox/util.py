@@ -189,7 +189,7 @@ def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: Con
         # finally copy the ybox python module which may be used by distribution scripts
         src_dir = files("ybox")
         dest_dir = f"{conf.scripts_dir}/ybox"
-        os.makedirs(dest_dir, exist_ok=True)
+        os.makedirs(dest_dir, mode=Consts.default_directory_mode(), exist_ok=True)
         for resource in src_dir.iterdir():
             if resource.is_file():
                 copy_file(resource, f"{dest_dir}/{resource.name}")

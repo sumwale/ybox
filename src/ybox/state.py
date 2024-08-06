@@ -4,6 +4,7 @@ installed on each container explicitly.
 """
 
 import json
+import os
 import re
 import sqlite3
 from configparser import ConfigParser
@@ -21,7 +22,7 @@ from packaging.version import parse as parse_version
 
 from ybox import __version__ as product_version
 
-from .config import StaticConfiguration
+from .config import Consts, StaticConfiguration
 from .env import Environ, PathName
 from .print import print_color, print_warn
 from .util import ini_file_reader, resolve_inc_path, write_ybox_version
@@ -126,6 +127,7 @@ class YboxStateManagement:
         """
         # explicitly control transaction begin (in exclusive mode) since SERIALIZABLE isolation
         # level is required while sqlite3 module will not start transactions before reads
+        os.makedirs(env.data_dir, mode=Consts.default_directory_mode(), exist_ok=True)
         self._conn = sqlite3.connect(f"{env.data_dir}/state.db", timeout=60,
                                      isolation_level=None)
         self._explicit_transaction = False
@@ -354,8 +356,8 @@ class YboxStateManagement:
         write_ybox_version(conf)
 
     def register_container(self, container_name: str, distribution: str, shared_root: str,
-                           parser: ConfigParser,
-                           force_own_orphans: bool) -> dict[str, tuple[CopyType, dict[str, str]]]:
+                           parser: ConfigParser, force_own_orphans: bool = True) -> \
+            dict[str, tuple[CopyType, dict[str, str]]]:
         """
         Register information of a ybox container including its name, distribution and
         configuration. In addition to the registration, this will also check for orphaned packages
@@ -548,7 +550,10 @@ class YboxStateManagement:
         """
         if shared_root:
             shared_containers = self.get_containers(shared_root=shared_root)
-            shared_containers.remove(container_name)
+            try:
+                shared_containers.remove(container_name)
+            except ValueError:
+                pass
             return shared_containers
         return []
 
@@ -793,8 +798,9 @@ class YboxStateManagement:
     def _remove_local_copies(local_copies: list[str]) -> None:
         """remove the files created locally to run container executables"""
         for file in local_copies:
-            print_warn(f"Removing local wrapper/link {file}")
-            Path(file).unlink(missing_ok=True)
+            if os.path.exists(file):
+                print_warn(f"Removing local wrapper/link {file}")
+                Path(file).unlink(missing_ok=True)
 
     def get_packages(self, container_name: str, regex: str = ".*",
                      dependency_type: str = ".*") -> list[str]:
