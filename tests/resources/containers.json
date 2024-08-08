@@ -3,24 +3,30 @@
         "distribution": "arch",
         "shared_root": "$HOME/.local/share/ybox/ROOTS/arch",
         "profile": "profiles/apps.ini",
-        "destroyed": false
+        "destroy": false
     },
     "archbox_games": {
         "distribution": "arch",
         "shared_root": "$HOME/.local/share/ybox/ROOTS/arch",
         "profile": "profiles/games.ini",
-        "destroyed": false
+        "destroy": false
     },
     "ubuntu2204_games": {
         "distribution": "ubuntu2204",
         "shared_root": "",
         "profile": "profiles/games.ini",
-        "destroyed": false
+        "destroy": false
     },
     "ybox-ubuntu2204_apps": {
         "distribution": "ubuntu2204",
-        "shared_root": "",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/arch",
         "profile": "profiles/apps.ini",
-        "destroyed": true
+        "destroy": true
+    },
+    "ybox-ubuntu2204_games": {
+        "distribution": "ubuntu2204",
+        "shared_root": "",
+        "profile": "profiles/games.ini",
+        "destroy": true
     }
 }

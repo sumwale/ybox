@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from enum import Enum, IntFlag, auto
 from importlib.resources import files
 from io import StringIO
-from pathlib import Path
 from typing import Iterable, Iterator, Optional, Union
 from uuid import uuid4
 
@@ -376,6 +375,7 @@ class YboxStateManagement:
         :return: dictionary of previously installed packages (as the key) that got reassigned to
                  this container mapped to the `CopyType` for the wrapper files of those packages
                  (which can be used to recreate wrappers for container desktop/executable files)
+                 and the dictionary of `app_flags`
         """
         packages: dict[str, tuple[CopyType, dict[str, str]]] = {}
         # build the ini string from parser
@@ -521,19 +521,18 @@ class YboxStateManagement:
         :param shared_root: the local shared root directory to search for a package (optional)
         :return: list of containers matching the given criteria
         """
-        predicate = ""
+        predicates = ["NOT destroyed"]
         args: list[str] = []
         if name:
-            predicate = "name = ? AND "
+            predicates.append("name = ?")
             args.append(name)
         if distribution:
-            predicate += "distribution = ? AND "
+            predicates.append("distribution = ?")
             args.append(distribution)
         if shared_root:
-            predicate += "shared_root = ?"
+            predicates.append("shared_root = ?")
             args.append(shared_root)
-        else:
-            predicate += "1=1"
+        predicate = " AND ".join(predicates)
         with closing(cursor := self._conn.execute(
                 f"SELECT name FROM containers WHERE {predicate} ORDER BY name ASC", args)):
             rows = cursor.fetchall()
@@ -548,14 +547,14 @@ class YboxStateManagement:
                             for the container
         :return: list of containers sharing the same shared root with the given container
         """
-        if shared_root:
-            shared_containers = self.get_containers(shared_root=shared_root)
-            try:
-                shared_containers.remove(container_name)
-            except ValueError:
-                pass
-            return shared_containers
-        return []
+        if not shared_root:
+            return []
+        shared_containers = self.get_containers(shared_root=shared_root)
+        try:
+            shared_containers.remove(container_name)
+        except ValueError:
+            pass
+        return shared_containers
 
     def register_package(self, container_name: str, package: str, local_copies: list[str],
                          copy_type: CopyType, app_flags: dict[str, str], shared_root: str,
@@ -798,9 +797,9 @@ class YboxStateManagement:
     def _remove_local_copies(local_copies: list[str]) -> None:
         """remove the files created locally to run container executables"""
         for file in local_copies:
-            if os.path.exists(file):
+            if os.access(file, os.W_OK):
                 print_warn(f"Removing local wrapper/link {file}")
-                Path(file).unlink(missing_ok=True)
+                os.unlink(file)
 
     def get_packages(self, container_name: str, regex: str = ".*",
                      dependency_type: str = ".*") -> list[str]:
@@ -847,6 +846,8 @@ class YboxStateManagement:
                  verification key, additional options, and boolean set to True if source code
                  repository is enabled
         """
+        if not container_or_shared_root:
+            return []
         with closing(cursor := self._conn.cursor()):
             cursor.execute("SELECT name, urls, key, options, with_source_repo FROM package_repos "
                            "WHERE container_or_shared_root = ? ORDER BY name ASC",

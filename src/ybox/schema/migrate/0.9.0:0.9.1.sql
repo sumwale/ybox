@@ -2,11 +2,16 @@
 
 SOURCE '../0.9.1-added.sql';
 
--- add the destroyed column to containers
-ALTER TABLE containers ADD COLUMN destroyed BOOL NOT NULL DEFAULT false;
+-- add the destroyed_containers table
+CREATE TABLE destroyed_containers (
+    name TEXT NOT NULL PRIMARY KEY,
+    distribution TEXT NOT NULL,
+    shared_root TEXT NOT NULL,
+    configuration TEXT NOT NULL
+) WITHOUT ROWID;
 
 -- delete the orphan packages having empty container fields since it is not possible to create
--- corresponding entries in containers due to lack of container configuration information
+-- corresponding entries in destroyed_containers due to lack of container configuration information
 DELETE FROM packages WHERE container = '';
 
 -- change comma-separated local_copies field to json

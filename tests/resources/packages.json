@@ -11,7 +11,10 @@
         "app_flags": {},
         "dep_type": null,
         "dep_of": "",
-        "repeat": false
+        "containers": [
+            "ybox-arch_apps",
+            "ubuntu2204_games"
+        ]
     },
     "chromium": {
         "local_copies": [
@@ -27,7 +30,11 @@
         },
         "dep_type": null,
         "dep_of": "",
-        "repeat": true
+        "containers": [
+            "ybox-arch_apps",
+            "ubuntu2204_games",
+            "archbox_games"
+        ]
     },
     "hunspell-en_us": {
         "local_copies": [],
@@ -35,7 +42,9 @@
         "app_flags": {},
         "dep_type": "OPTIONAL",
         "dep_of": "firefox",
-        "repeat": false
+        "containers": [
+            "ybox-arch_apps"
+        ]
     },
     "zoom": {
         "local_copies": [
@@ -49,6 +58,8 @@
         "app_flags": {},
         "dep_type": null,
         "dep_of": "",
-        "repeat": true
-    }
+        "containers": [
+            "ybox-ubuntu2204_apps"
+        ]
+   }
 }

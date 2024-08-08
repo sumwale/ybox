@@ -1,15 +1,16 @@
 """
-Script to create a test database for migration and other tests for older versions of the product.
+Script to create a test database for migration tests for older versions of the product.
 
-To use this script, checkout the older version of the product, then copy and run this script from
-the top-level directory. Something like:
+To use this script, checkout the older version of the product, then copy and run this
+script from the top-level directory. Something like:
 
 ```
-git checkout v0.9.6
+# for "v0.9.6" substitute the required version below
+git clone -b v0.9.6 https://github.com/sumwale/ybox.git
 /bin/cp -rf <current ybox>/tests .
-/bin/cp -rf <current ybox>/conf/profiles src/ybox/conf/ .
+/bin/cp -rf <current ybox>/src/ybox/conf/profiles src/ybox/conf/
 PYTHONPATH=./src /usr/bin/python3 ./tests/create_migration_db.py \
-    <current ybox>/tests/resources/migration/ -f
+    <current ybox>/tests/resources/migration/
 ```
 Then add the new version in the `@pytest.mark.parametrize` annotation of `test_migration`
 in `test_state.py`
@@ -18,22 +19,19 @@ in `test_state.py`
 import argparse
 import gzip
 import inspect
-import json
-import operator
 import os
 import site
 import tempfile
-from functools import reduce
-from importlib.resources import files
-from typing import Any
+from configparser import ConfigParser
+from itertools import chain
 from uuid import uuid4
 
+from unit.util import read_containers_and_packages
+
 import ybox
-import ybox.state as y_state
 from ybox.env import Environ
 from ybox.print import print_warn
 from ybox.state import YboxStateManagement
-from ybox.util import config_reader
 
 
 def create_temp_ybox_data_dir(temp_dir: str) -> str:
@@ -48,69 +46,56 @@ def populate_db(temp_dir: str) -> None:
     """populate the state with some common data using `YboxStateManagement` API"""
     # pylint: disable=no-value-for-parameter
     env = Environ()
-    resources_dir = f"{os.path.dirname(__file__)}/resources/migration"
-    # load container information from json file
-    with open(f"{resources_dir}/containers.json", encoding="utf-8") as containers_fd:
-        containers: dict[str, dict[str, Any]] = json.load(containers_fd)
+    # check for arguments to `register_package` that are not present in old versions
+    register_pkg_params = inspect.signature(YboxStateManagement.register_package).parameters
+    # load container and packages information from json files
+    fetch_types = bool(register_pkg_params.get("copy_type"))
+    active_containers, destroy_containers, container_pkgs = read_containers_and_packages(
+        env, fetch_types=fetch_types, interpolate=False)
     with YboxStateManagement(env) as state:
         assert os.access(f"{temp_dir}/share/ybox/state.db", os.W_OK)
-        for c_idx, (container, container_info) in enumerate(containers.items()):
-            distribution = container_info["distribution"]
-            shared_root = container_info["shared_root"]
-            profile = files("ybox").joinpath("conf").joinpath(container_info["profile"])
-            # don't use EnvInterpolation since it can change as per the test environment
-            parsed_profile = config_reader(conf_file=profile, interpolation=None)
-            if shared_root:
-                # old versions used hard-coded ".../ROOTS/..." for shared_root so use the same
-                parsed_profile["base"]["shared_root"] = shared_root
-            else:
-                del parsed_profile["base"]["shared_root"]
+        for rt_info in chain(active_containers, destroy_containers.values()):
+            container = rt_info.name
             # first register the container checking for new argument not present in old versions
+            assert isinstance(rt_info.ini_config, ConfigParser)
             if inspect.signature(state.register_container).parameters.get("force_own_orphans"):
-                state.register_container(container_name=container, distribution=distribution,
-                                         shared_root=shared_root, parser=parsed_profile,
-                                         force_own_orphans=True)
+                state.register_container(
+                    container_name=container, distribution=rt_info.distribution,
+                    shared_root=rt_info.shared_root, parser=rt_info.ini_config,
+                    force_own_orphans=True)
             else:
-                state.register_container(container_name=container, distribution=distribution,
-                                         shared_root=shared_root, parser=parsed_profile)
+                state.register_container(
+                    container_name=container, distribution=rt_info.distribution,
+                    shared_root=rt_info.shared_root, parser=rt_info.ini_config)
 
-            # then register packages checking for arguments that are not present in old versions
-            register_pkg_params = inspect.signature(state.register_package).parameters
-            # load package information from json file
-            with open(f"{resources_dir}/pkgs.json", encoding="utf-8") as pkgs_fd:
-                pkgs_json: dict[str, dict[str, Any]] = json.load(pkgs_fd)
-            for pkg, pkg_info in pkgs_json.items():
-                # register packages in all containers only if "repeat" is true
-                if c_idx != 0 and not pkg_info["repeat"]:
-                    continue
-                local_copies = pkg_info["local_copies"]
-                if register_pkg_params.get("copy_type"):
-                    copy_type = reduce(operator.ior,
-                                       [y_state.CopyType[c] for c in pkg_info["copy_type"]],
-                                       y_state.CopyType(0))
-                    dep_type = pkg_info.get("dep_type")
-                    dep_type = y_state.DependencyType[dep_type] if dep_type else None
-                    dep_of = pkg_info["dep_of"]
+            for pkg_details in container_pkgs[container]:
+                pkg = pkg_details.name
+                if fetch_types:
+                    assert pkg_details.copy_type is not None
                     if register_pkg_params.get("app_flags"):
                         state.register_package(
-                            container_name=container, package=pkg, shared_root=shared_root,
-                            local_copies=local_copies, copy_type=copy_type,
-                            app_flags=pkg_info["app_flags"], dep_type=dep_type, dep_of=dep_of)
+                            container_name=container, package=pkg,
+                            shared_root=rt_info.shared_root, local_copies=pkg_details.local_copies,
+                            copy_type=pkg_details.copy_type, app_flags=pkg_details.app_flags,
+                            dep_type=pkg_details.dep_type, dep_of=pkg_details.dep_of)
                     elif register_pkg_params.get("shared_root"):
                         state.register_package(
-                            container_name=container, package=pkg, shared_root=shared_root,
-                            local_copies=local_copies, copy_type=copy_type, dep_type=dep_type,
-                            dep_of=dep_of)  # type: ignore
+                            container_name=container, package=pkg,
+                            shared_root=rt_info.shared_root, local_copies=pkg_details.local_copies,
+                            copy_type=pkg_details.copy_type, dep_type=pkg_details.dep_type,
+                            dep_of=pkg_details.dep_of)  # type: ignore
                     else:
                         state.register_package(
-                            container_name=container, package=pkg, local_copies=local_copies,
-                            copy_type=copy_type, dep_type=dep_type, dep_of=dep_of)  # type: ignore
+                            container_name=container, package=pkg,
+                            local_copies=pkg_details.local_copies, copy_type=pkg_details.copy_type,
+                            dep_type=pkg_details.dep_type,
+                            dep_of=pkg_details.dep_of)  # type: ignore
                 else:
                     state.register_package(
-                        container_name=container, package=pkg, shared_root=shared_root,
-                        local_copies=local_copies)  # type: ignore
+                        container_name=container, package=pkg, shared_root=rt_info.shared_root,
+                        local_copies=pkg_details.local_copies)  # type: ignore
 
-            if container_info["destroyed"]:
+            if container in destroy_containers:
                 state.unregister_container(container)
 
 

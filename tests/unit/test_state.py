@@ -8,35 +8,27 @@ General guideline: use mock **only if absolutely necessary** (e.g. for unexpecte
 """
 
 import gzip
-import json
 import os
 import shutil
 import site
 import stat
 from configparser import ConfigParser
-from importlib.resources import files
 from io import StringIO
+from itertools import chain
 from pathlib import Path
-from typing import Any
+from typing import Iterable
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from unit.util import read_containers_and_packages
 
 from ybox.config import Consts
 from ybox.env import Environ
 from ybox.state import CopyType, RuntimeConfiguration, YboxStateManagement
-from ybox.util import config_reader
 
 _USER_BASE = f"/tmp/ybox-test-local-{uuid4()}"
 _USER_DATA_DIR = f"{_USER_BASE}/share/ybox"
-_TEST_DISTRIBUTION = "ybox-distro"
-_TEST_DISTRIBUTION2 = "ybox-distro2"
-_TEST_CONTAINER = "ybox-test"
-_TEST_CONTAINER2 = "ybox-test2"
-_TEST_CONTAINER_ROOT = f"/tmp/ybox-test-root-{uuid4()}"
-
-_resources_dir = f"{os.path.dirname(__file__)}/../resources/migration"
 
 
 @pytest.fixture(name="env")
@@ -66,12 +58,16 @@ def test_initialization(env: Environ, state: YboxStateManagement):
     assert stat.S_IMODE(os.stat(env.data_dir).st_mode) == Consts.default_directory_mode()
     assert os.access(f"{_USER_DATA_DIR}/state.db", os.R_OK)
     # check empty state
+    container = "ybox-container"
+    shared_root = "/non-existent"
     assert state.get_containers() == []
-    assert state.get_container_configuration(_TEST_CONTAINER) is None
-    assert state.get_other_shared_containers(_TEST_CONTAINER, _TEST_CONTAINER_ROOT) == []
-    assert state.get_repositories(_TEST_CONTAINER) == []
-    assert state.get_repositories(_TEST_CONTAINER_ROOT) == []
-    assert state.get_packages(_TEST_CONTAINER) == []
+    assert state.get_container_configuration(container) is None
+    assert state.get_other_shared_containers(container, shared_root) == []
+    assert state.get_other_shared_containers(container, "") == []
+    assert state.get_repositories(container) == []
+    assert state.get_repositories(shared_root) == []
+    assert state.get_repositories("") == []
+    assert state.get_packages(container) == []
 
 
 @pytest.mark.parametrize("old_version", ["0.9.0", "0.9.1", "0.9.2", "0.9.5", "0.9.6"])
@@ -86,65 +82,103 @@ def test_migration(env: Environ, old_version: str):
     Path(state_db).unlink(missing_ok=True)
     # copy with decompression
     block_size = 4 * 1024 * 1024
-    with gzip.open(f"{_resources_dir}/{old_version}.db.gz", mode="rb") as gz_in, open(
-            state_db, "wb") as db_out:
+    with gzip.open(f"{os.path.dirname(__file__)}/../resources/migration/{old_version}.db.gz",
+                   mode="rb") as gz_in, open(state_db, "wb") as db_out:
         while data := gz_in.read(block_size):
             db_out.write(data)
     # load container and packages data
-    with open(f"{_resources_dir}/containers.json", "r", encoding="utf-8") as containers_fd:
-        containers: dict[str, dict[str, Any]] = json.load(containers_fd)
-    with open(f"{_resources_dir}/pkgs.json", "r", encoding="utf-8") as pkgs_fd:
-        pkgs: dict[str, dict[str, Any]] = json.load(pkgs_fd)
-    # create a mapping of container to the corresponding packages installed on it
-    container_pkgs = {cnt: sorted([pkg for pkg, pkg_info in pkgs.items()
-                                   if idx == 0 or pkg_info["repeat"]])
-                      for idx, cnt in enumerate(containers)}
+    active_containers, destroy_containers, container_pkgs = read_containers_and_packages(
+        env, fetch_types=True, interpolate=False)
     with YboxStateManagement(env) as state:
         assert os.access(state_db, os.W_OK)
         # check expected state for test data files
-        active_containers = sorted([name for name, info in containers.items()
-                                    if not info["destroyed"]])
-        destroyed_containers = [name for name, info in containers.items() if info["destroyed"]]
-        assert state.get_containers() == active_containers
-        for name in active_containers:
-            info = containers[name]
-            shared_root = info["shared_root"]
-            profile = files("ybox").joinpath("conf").joinpath(info["profile"])
-            parsed_profile = config_reader(profile, interpolation=None)
-            if shared_root:
-                parsed_profile["base"]["shared_root"] = shared_root
-            else:
-                del parsed_profile["base"]["shared_root"]
+        assert state.get_containers() == sorted([c.name for c in active_containers])
+        for rt_info in active_containers:
+            name = rt_info.name
+            shared_root = rt_info.shared_root
+            assert isinstance(rt_info.ini_config, ConfigParser)
             with StringIO() as config:
-                parsed_profile.write(config)
+                rt_info.ini_config.write(config)
                 config.flush()
                 profile_str = config.getvalue()
             assert state.get_container_configuration(name) == RuntimeConfiguration(
-                name, info["distribution"], shared_root, profile_str)
+                name, rt_info.distribution, shared_root, profile_str)
             assert state.get_other_shared_containers(name, shared_root) == \
-                [c for c in active_containers
-                 if shared_root and c != name and shared_root == containers[c]["shared_root"]]
+                sorted([cnt.name for cnt in active_containers
+                        if shared_root and cnt.name != name and shared_root == cnt.shared_root])
             assert state.get_repositories(name) == []
             assert state.get_repositories(shared_root) == []
-            assert state.get_packages(name) == container_pkgs.get(name)
-        for name in destroyed_containers:
-            shared_root = containers[name]["shared_root"]
+            assert state.get_packages(name) == [pkg.name for pkg in container_pkgs[name]]
+        for name, rt_info in destroy_containers.items():
+            shared_root = rt_info.shared_root
             assert state.get_container_configuration(name) is None
-            assert state.get_other_shared_containers(name, shared_root) == []
+            assert state.get_other_shared_containers(name, shared_root) == \
+                sorted([cnt.name for cnt in active_containers
+                        if shared_root and cnt.name != name and shared_root == cnt.shared_root])
             assert state.get_repositories(name) == []
             assert state.get_repositories(shared_root) == []
             assert state.get_packages(name) == []
 
 
-def test_register_container(state: YboxStateManagement):
-    """test the registration of a new container"""
-    mock_parser = MagicMock(spec=ConfigParser)
-    shared_root = "/mock/shared_root"
+def test_register_container(env: Environ, state: YboxStateManagement):
+    """test the registration of new containers"""
+    active_containers, destroy_containers, container_pkgs = read_containers_and_packages(
+        env, fetch_types=True, interpolate=True)
+    # register the containers and packages, then destroy the ones marked for "destroy"
 
-    packages = state.register_container(
-        _TEST_CONTAINER, _TEST_DISTRIBUTION, shared_root, mock_parser)
+    def register_containers_and_packages(containers: Iterable[RuntimeConfiguration]) -> None:
+        for cnt in containers:
+            assert isinstance(cnt.ini_config, ConfigParser)
+            assert state.register_container(cnt.name, cnt.distribution, cnt.shared_root,
+                                            cnt.ini_config, force_own_orphans=False) == {}
+            for pkg in container_pkgs[cnt.name]:
+                assert pkg.copy_type is not None
+                state.register_package(cnt.name, pkg.name, pkg.local_copies, pkg.copy_type,
+                                       pkg.app_flags, pkg.shared_root, pkg.dep_type, pkg.dep_of)
+                if pkg.dep_type:
+                    assert pkg.dep_of
+                    state.register_dependency(cnt.name, pkg.dep_of, pkg.name, pkg.dep_type)
 
-    assert packages == {}
+    def check_containers(containers: Iterable[RuntimeConfiguration]) -> None:
+        assert state.get_containers() == sorted([c.name for c in containers])
+
+    def check_container_details(containers: Iterable[RuntimeConfiguration],
+                                destroyed: bool) -> None:
+        for cnt in containers:
+            assert state.get_packages(cnt.name) == \
+                ([] if destroyed else [pkg.name for pkg in container_pkgs[cnt.name]])
+            assert state.get_other_shared_containers(cnt.name, cnt.shared_root) == \
+                ([] if destroyed else sorted(
+                    [c.name for c in all_containers if c.shared_root and cnt.name != c.name and
+                     cnt.shared_root == c.shared_root]))
+            assert state.get_repositories(cnt.name) == []
+            assert state.get_repositories(cnt.shared_root) == []
+
+    all_containers = list(chain(active_containers, destroy_containers.values()))
+    register_containers_and_packages(all_containers)
+    check_containers(all_containers)
+    check_container_details(all_containers, destroyed=False)
+    # unregister the containers marked for destroy, then register again with some profile changes
+    # which should not affect equivalence of containers so packages should get automatically
+    # assigned to the new containers (for shared_root case)
+    for cnt in destroy_containers.values():
+        assert state.unregister_container(cnt.name)
+        config = cnt.ini_config
+        assert isinstance(config, ConfigParser)
+        config["base"]["home"] = "/non-existent"
+        config.remove_option("base", "log_opts")
+        config.remove_section("env")
+        if cnt.shared_root:
+            expected_packages = {pkg.name: (pkg.copy_type, pkg.app_flags)
+                                 for pkg in container_pkgs[cnt.name]}
+            assert state.register_container(cnt.name, cnt.distribution, cnt.shared_root,
+                                            config, force_own_orphans=False) == expected_packages
+            check_container_details((cnt,), destroyed=False)
+        else:
+            register_containers_and_packages((cnt,))
+
+    check_containers(all_containers)
+    check_container_details(all_containers, destroyed=False)
 
 
 def test_unregister_container(state: YboxStateManagement):
