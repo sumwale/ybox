@@ -133,12 +133,14 @@ def check_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str],
             state = result[len(primary_ybox):]
             if expected_states:
                 if not (exists := state in expected_states) and exit_on_error:
+                    print_error(f"Unexpected state for ybox container '{box_name}': {state}")
                     sys.exit(1)
                 else:
                     return exists
             else:
                 return True
     if exit_on_error:
+        print_error(f"Container '{box_name}' not a ybox container!!")
         sys.exit(1)
     return False
 

@@ -797,9 +797,11 @@ class YboxStateManagement:
     def _remove_local_copies(local_copies: list[str]) -> None:
         """remove the files created locally to run container executables"""
         for file in local_copies:
-            if os.access(file, os.W_OK):
-                print_warn(f"Removing local wrapper/link {file}")
+            try:
                 os.unlink(file)
+                print_warn(f"Removed local wrapper/link {file}")
+            except OSError:
+                pass
 
     def get_packages(self, container_name: str, regex: str = ".*",
                      dependency_type: str = ".*") -> list[str]:

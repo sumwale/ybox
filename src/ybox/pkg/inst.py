@@ -234,7 +234,8 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
             if output == "\n":
                 continue
             name, level, installed, desc = output[len(pkg_prefix):].split(pkg_sep, maxsplit=3)
-            if installed.rstrip().lower() == "true":
+            desc = desc.rstrip()
+            if installed.strip().lower() == "true":
                 installed_optional_deps.add(name)
             else:
                 optional_deps.append((name, desc, int(level)))

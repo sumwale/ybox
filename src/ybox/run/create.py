@@ -162,6 +162,9 @@ def main_argv(argv: list[str]) -> None:
                                           shared_root_dirs, conf, args.quiet)
                 remove_container(docker_cmd, conf)
     else:
+        # for no shared_root case, its best to refresh the local image
+        run_command([docker_cmd, "pull", base_image_name],
+                    error_msg="fetching container base image")
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
         run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
