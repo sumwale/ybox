@@ -42,13 +42,14 @@ def create_env():
 
     del os.environ["PYTHONUSERBASE"]
     shutil.rmtree(_USER_BASE)
+    site.USER_BASE = None
 
 
 @pytest.fixture(name="state")
 def create_state(env: Environ):
     """Fixture to create an instance of YboxStateManagement."""
-    with YboxStateManagement(env) as ybox:
-        yield ybox
+    with YboxStateManagement(env) as state:
+        yield state
 
 
 def test_initialization(env: Environ, state: YboxStateManagement):
@@ -81,7 +82,7 @@ def test_migration(env: Environ, old_version: str):
     state_db = f"{_USER_DATA_DIR}/state.db"
     Path(state_db).unlink(missing_ok=True)
     # copy with decompression
-    block_size = 4 * 1024 * 1024
+    block_size = 1024 * 1024
     with gzip.open(f"{os.path.dirname(__file__)}/../resources/migration/{old_version}.db.gz",
                    mode="rb") as gz_in, open(state_db, "wb") as db_out:
         while data := gz_in.read(block_size):
@@ -173,6 +174,28 @@ def test_register_container(env: Environ, state: YboxStateManagement):
                                  for pkg in container_pkgs[cnt.name]}
             assert state.register_container(cnt.name, cnt.distribution, cnt.shared_root,
                                             config, force_own_orphans=False) == expected_packages
+            check_container_details((cnt,), destroyed=False)
+        else:
+            register_containers_and_packages((cnt,))
+    # unregister the containers marked for destroy, then register again with some profile changes
+    # which will affect equivalence of containers so packages should remain as orphans, then
+    # re-register with "force_own_orphans=True" which should remove the orphans
+    for cnt in destroy_containers.values():
+        assert state.unregister_container(cnt.name)
+        config = cnt.ini_config
+        assert isinstance(config, ConfigParser)
+        config["base"]["x11"] = "false"
+        if cnt.shared_root:
+            assert state.register_container(cnt.name, cnt.distribution, cnt.shared_root,
+                                            config, force_own_orphans=False) == {}
+            pkgs_orig = container_pkgs[cnt.name]
+            container_pkgs[cnt.name] = []
+            check_container_details((cnt,), destroyed=False)
+            assert state.unregister_container(cnt.name)
+            container_pkgs[cnt.name] = pkgs_orig
+            expected_packages = {pkg.name: (pkg.copy_type, pkg.app_flags) for pkg in pkgs_orig}
+            assert state.register_container(cnt.name, cnt.distribution, cnt.shared_root,
+                                            config, force_own_orphans=True) == expected_packages
             check_container_details((cnt,), destroyed=False)
         else:
             register_containers_and_packages((cnt,))

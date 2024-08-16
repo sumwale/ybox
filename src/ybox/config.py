@@ -197,6 +197,11 @@ class Consts:
         return ["init-base.sh", "init.sh", "init-user.sh"]
 
     @staticmethod
+    def entrypoint_init_done_file() -> str:
+        """file that indicates completion of first run initialization by entrypoint.sh script"""
+        return "ybox-init.done"
+
+    @staticmethod
     def container_desktop_dirs() -> list[str]:
         """directories on the container that has desktop files that may need to be wrapped"""
         return ["/usr/share/applications"]

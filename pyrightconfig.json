@@ -14,7 +14,9 @@
   "executionEnvironments": [
     {
       "root": "tests",
-      "reportUnknownMemberType": "none"
+      "extraPaths": [
+        "src"
+      ]
     },
     {
       "root": "src"

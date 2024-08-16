@@ -187,8 +187,7 @@ def main_argv(argv: list[str]) -> None:
 
     # remove distribution specific scripts and restart container the final time
     print_info(f"Restarting the final container '{box_name}'")
-    for script in Consts.distribution_scripts():
-        os.unlink(f"{conf.scripts_dir}/{script}")
+    Path(f"{conf.scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o640)
     restart_container(docker_cmd, conf)
     print_info("Waiting for the container to be ready (see "
                f"'ybox-logs -f {box_name}' for detailed progress)")

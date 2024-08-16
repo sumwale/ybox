@@ -162,7 +162,7 @@ fi
 sudo bash "$SCRIPT_DIR/entrypoint-root.sh"
 
 # run the distribution specific initialization scripts
-if [ -r "$SCRIPT_DIR/init.sh" ]; then
+if [ ! -e "$SCRIPT_DIR/ybox-init.done" ]; then
   echo_color "$fg_orange" "Running distribution's system initialization script" >> $status_file
   sudo -E bash "$SCRIPT_DIR/init.sh"
   if [ -r "$SCRIPT_DIR/init-user.sh" ]; then

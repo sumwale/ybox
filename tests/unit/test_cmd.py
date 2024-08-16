@@ -63,11 +63,23 @@ def test_get_docker_command():
     args = parser.parse_args(["-d", "/bin/true"])
     docker_cmd = get_docker_command(args, "-d")
     assert docker_cmd == "/bin/true"
-    # try with explicit -d option for a non-existing program or a non-executable
+    # try with explicit -d option for a non-existent program or a non-executable
     args = parser.parse_args(["-d", "/etc/passwd"])
     pytest.raises(PermissionError, get_docker_command, args, "-d")
-    args = parser.parse_args(["-d", "/non-existing"])
+    args = parser.parse_args(["-d", "/non-existent"])
     pytest.raises(PermissionError, get_docker_command, args, "-d")
+
+    # mock for different docker/podman executables including none available
+    def os_access(prog: str, mode: int) -> bool:
+        return prog == check_prog and mode == os.X_OK
+    args = parser.parse_args([])
+    with patch("ybox.cmd.os.access", side_effect=os_access):
+        check_prog = "/usr/bin/podman"
+        assert get_docker_command(args, "-d") == check_prog
+        check_prog = "/usr/bin/docker"
+        assert get_docker_command(args, "-d") == check_prog
+        check_prog = "/bin/true"
+        pytest.raises(FileNotFoundError, get_docker_command, args, "-d")
 
 
 def test_check_ybox_state(capsys: pytest.CaptureFixture[str]):

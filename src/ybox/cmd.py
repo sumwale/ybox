@@ -95,10 +95,10 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
             f"Cannot execute '{args.docker_path}' provided in '{option_name}' option")
     if os.access("/usr/bin/podman", os.X_OK):
         return "/usr/bin/podman"
-    if os.access("/usr/bin/docker", os.X_OK):  # pragma: no cover
+    if os.access("/usr/bin/docker", os.X_OK):
         return "/usr/bin/docker"
     raise FileNotFoundError(
-        f"No podman/docker found or '{option_name}' specified")  # pragma: no cover
+        f"No podman/docker found or '{option_name}' specified")
 
 
 def check_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str],
