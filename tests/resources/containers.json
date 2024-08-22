@@ -13,13 +13,13 @@
     },
     "ubuntu2204_games": {
         "distribution": "ubuntu2204",
-        "shared_root": "",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/ub2204",
         "profile": "profiles/games.ini",
         "destroy": false
     },
     "ybox-ubuntu2204_apps": {
         "distribution": "ubuntu2204",
-        "shared_root": "$HOME/.local/share/ybox/ROOTS/arch",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/ub2204",
         "profile": "profiles/apps.ini",
         "destroy": true
     },

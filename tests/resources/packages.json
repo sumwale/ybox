@@ -2,7 +2,7 @@
     "firefox": {
         "local_copies": [
             "/usr/bin/firefox",
-            "/usr/share/applications/firefox.desktop"
+            "/tmp/ybox-test-firefox.desktop"
         ],
         "copy_type": [
             "EXECUTABLE",
@@ -48,7 +48,7 @@
     },
     "zoom": {
         "local_copies": [
-            "/usr/bin/zoom",
+            "/tmp/ybox-test-zoom",
             "/usr/share/applications/zoom.desktop"
         ],
         "copy_type": [
@@ -61,5 +61,5 @@
         "containers": [
             "ybox-ubuntu2204_apps"
         ]
-   }
+    }
 }

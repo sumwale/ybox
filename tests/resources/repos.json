@@ -1,0 +1,39 @@
+{
+    "archzfs": {
+        "urls": [
+            "http://archzfs.com/$repo/$arch",
+            "http://mirror.sunred.org/archzfs/$repo/$arch",
+            "https://mirror.in.themindsmaze.com/archzfs/$repo/$arch"
+        ],
+        "key": "DDF7DB817396A49B2A2723F7403BD972F75D9D76",
+        "options": "",
+        "with_source_repo": false,
+        "containers": [
+            "ybox-arch_apps"
+        ]
+    },
+    "linux-nitrous": {
+        "urls": [
+            "https://github.com/xdevs23/linux-nitrous/releases/latest/download"
+        ],
+        "key": "E9C2DECAC962CB3AF1376D44148A9E3C9C3E3BF0",
+        "options": "",
+        "with_source_repo": false,
+        "containers": [
+            "ybox-arch_apps",
+            "archbox_games"
+        ]
+    },
+    "apt-fast": {
+        "urls": [
+            "https://ppa.launchpadcontent.net/apt-fast/stable/ubuntu/"
+        ],
+        "key": "A2166B8DE8BDC3367D1901C11EE2FF37CA8DA16B",
+        "options": "jammy main",
+        "with_source_repo": true,
+        "containers": [
+            "ybox-ubuntu2204_apps",
+            "ybox-ubuntu2204_games"
+        ]
+    }
+}

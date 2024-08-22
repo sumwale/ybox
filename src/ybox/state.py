@@ -116,18 +116,19 @@ class YboxStateManagement:
                                        "nvidia", "nvidia_ctk", "shm_size", "pids_limit",
                                        "log_driver", "log_opts"]
 
-    def __init__(self, env: Environ):
+    def __init__(self, env: Environ, connect_timeout: float = 60.0):
         """
         Initialize connection to database and create tables+indexes if not present. If the
         product version has upgraded that needs updated schema, then also run the required
         schema migration scripts.
 
         :param env: an instance of the current :class:`Environ`
+        :param connect_timeout: database connection timeout in seconds as a `float`, default = 60.0
         """
         # explicitly control transaction begin (in exclusive mode) since SERIALIZABLE isolation
         # level is required while sqlite3 module will not start transactions before reads
         os.makedirs(env.data_dir, mode=Consts.default_directory_mode(), exist_ok=True)
-        self._conn = sqlite3.connect(f"{env.data_dir}/state.db", timeout=60,
+        self._conn = sqlite3.connect(f"{env.data_dir}/state.db", timeout=connect_timeout,
                                      isolation_level=None)
         self._explicit_transaction = False
         # create the initial tables
@@ -142,7 +143,7 @@ class YboxStateManagement:
             self._internal_commit()
 
     @staticmethod
-    def regexp(pattern: str, val: str) -> int:
+    def regexp(val: str, pattern: str) -> int:
         """callable for the user-defined SQL REGEXP function"""
         # rely on python regex caching for efficient repeated calls
         return 1 if re.fullmatch(pattern, val) else 0
@@ -834,27 +835,8 @@ class YboxStateManagement:
             args.append(dependency_type)
         with closing(cursor := self._conn.cursor()):
             cursor.execute(
-                f"SELECT name FROM packages WHERE {predicate} ORDER BY name ASC", args)
+                f"SELECT DISTINCT(name) FROM packages WHERE {predicate} ORDER BY name ASC", args)
             return [str(row[0]) for row in cursor.fetchall()]
-
-    def get_repositories(self,
-                         container_or_shared_root: str) -> list[tuple[str, str, str, str, bool]]:
-        """
-        Get the list of externally registered repositories using :meth:`register_repository`
-
-        :param container_or_shared_root: if container uses shared root, then the shared root path
-                                         else name of the container to search for repositories
-        :return: list of tuples having: name of repository, comma-separated list of server URLs,
-                 verification key, additional options, and boolean set to True if source code
-                 repository is enabled
-        """
-        if not container_or_shared_root:
-            return []
-        with closing(cursor := self._conn.cursor()):
-            cursor.execute("SELECT name, urls, key, options, with_source_repo FROM package_repos "
-                           "WHERE container_or_shared_root = ? ORDER BY name ASC",
-                           (container_or_shared_root,))
-            return [(row[0], row[1], row[2], row[3], bool(row[4])) for row in cursor.fetchall()]
 
     def check_packages(self, container_name: str, packages: Iterable[str]) -> list[str]:
         """
@@ -875,6 +857,25 @@ class YboxStateManagement:
             cursor.execute("SELECT name FROM packages pkgs "
                            f"WHERE pkgs.container = ? AND pkgs.name IN ({in_list})", args)
             return [str(row[0]) for row in cursor.fetchall()]
+
+    def get_repositories(self,
+                         container_or_shared_root: str) -> list[tuple[str, str, str, str, bool]]:
+        """
+        Get the list of externally registered repositories using :meth:`register_repository`
+
+        :param container_or_shared_root: if container uses shared root, then the shared root path
+                                         else name of the container to search for repositories
+        :return: list of tuples having: name of repository, comma-separated list of server URLs,
+                 verification key, additional options, and boolean set to True if source code
+                 repository is enabled
+        """
+        if not container_or_shared_root:
+            return []
+        with closing(cursor := self._conn.cursor()):
+            cursor.execute("SELECT name, urls, key, options, with_source_repo FROM package_repos "
+                           "WHERE container_or_shared_root = ? ORDER BY name ASC",
+                           (container_or_shared_root,))
+            return [(row[0], row[1], row[2], row[3], bool(row[4])) for row in cursor.fetchall()]
 
     def commit(self) -> None:
         """
@@ -898,13 +899,17 @@ class YboxStateManagement:
         self._conn.rollback()
         self._explicit_transaction = False
 
-    def close(self) -> None:
+    def clear_database(self) -> None:
         """
-        Close the underlying connection to the database. This will first roll back any pending
-        transaction on the connection.
+        Clear all the tables in the state database.
         """
-        self.rollback()  # rollback any pending transactions
-        self._conn.close()
+        with closing(cursor := self._conn.cursor()):
+            self._begin_transaction(cursor)
+            cursor.execute("DELETE FROM package_repos")
+            cursor.execute("DELETE FROM package_deps")
+            cursor.execute("DELETE FROM packages")
+            cursor.execute("DELETE FROM containers")
+            self._internal_commit()
 
     def __enter__(self):
         return self

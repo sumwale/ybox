@@ -381,9 +381,9 @@ pyenv/install.sh
 it only if you have never installed `pyenv` before.
 
 The script will try to handle installation of required packages on most modern Linux
-distributions (Ubuntu/Debian, Fedora, Arch Linux, OpenSUSE, macOS with homebrew), but if
-yours is a different one, then check [pyenv wiki](https://github.com/pyenv/pyenv/wiki) or
-your distribution docs/forums.
+distributions (Ubuntu/Debian, Fedora, Arch Linux, OpenSUSE, homebrew), but if yours is a
+different one, then check [pyenv wiki](https://github.com/pyenv/pyenv/wiki) or your
+distribution docs/forums.
 
 Next you can install the required python versions and venv environment:
 
@@ -420,16 +420,42 @@ additional extensions are installed: autopep8, Flake8, isort, audoDocstring and
 Python Environment Manager. The open the checkout directory and you should be good to go.
 
 
+### Notes on writing tests
+
+Tests have been categorized into two:
+- in `tests/unit` directory: these have module/function/class level tests; convention is to
+  use a separate test module for corresponding source module e.g. `test_state.py` for
+  `ybox/state.py` module
+- in `tests/functional` directory: these are end-to-end tests that invoke and check the
+  top-level `ybox-*` utilities
+
+All the existing tests use the `pytest` framework and new ones should do the same.
+After adding new tests to the appropriate test directory run `code-check.sh` and
+`tests-coverage.sh` scripts which should succeed and also see coverage report from latter.
+
+**NOTE:** use mock only if absolutely necessary (e.g. for unexpected error
+conditions that are difficult to simulate in tests or will cause other trouble).
+For example the state database used is sqlite, but that is an internal detail and could
+potentially change so mocking sqlite3 objects in tests for `ybox.state` module is a really
+bad idea and one should just test for public API of `ybox.state`. On the other hand
+checking for exceptions like `KeyboardInterrupt` can use mock since simulating them
+otherwise is error-prone and can cause unwanted side-effects for other tests.
+
+
 ### Running the test suite
 
 Once pyenv+venv set up is working, you can run the entire test suite and other checks
 using `tox` in the checkout directory, or `tox -p` for parallel run. It will run with
-all supported python versions (i.e. from 3.9 onwards).
+all supported python versions (i.e. from 3.9 onwards). Tests are written using the `pytest`
+test framework which will be installed along with other requirements by the `setup-venv.sh`
+script (or you can explicitly use `requirements.txt` and install `tox` separately).
 
 There is also a simple script `tests-coverage.sh` in the top-level directory which can be
 used to run just the tests with the current python version and produce coverage report.
-This will skip other stuff like `pyright`, for example, which is invoked by `tox`.
-The lint and other related tools can be run explicitly using the `code-check.sh` script
-in the top-level directory.
+It accepts a single argument `-f` to run functional tests in addition to the unit tests,
+else only unit tests are run with coverage. Any arguments afterwards are passed as such
+to `pytest`. This will skip other stuff like `pyright`, for example, which is invoked by
+`tox`. The lint and other related tools can be run explicitly using the `code-check.sh`
+script in the top-level directory.
 
 See `tox` and `pytest` documentation for more details like running individual tests.

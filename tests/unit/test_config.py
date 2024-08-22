@@ -94,6 +94,7 @@ def test_consts():
     assert Consts.shared_root_mount_dir() == "/ybox-root"
     assert Consts.status_target_file() == "/usr/local/ybox-status"
     assert Consts.distribution_scripts() == ["init-base.sh", "init.sh", "init-user.sh"]
+    assert Consts.entrypoint_init_done_file() == "ybox-init.done"
     assert Consts.container_desktop_dirs() == ["/usr/share/applications"]
     expected_exec_dirs = ["/usr/bin", "/usr/sbin", "/bin", "/sbin",
                           "/usr/local/bin", "/usr/local/sbin"]

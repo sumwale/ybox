@@ -7,10 +7,11 @@ script from the top-level directory. Something like:
 ```
 # for "v0.9.6" substitute the required version below
 git clone -b v0.9.6 https://github.com/sumwale/ybox.git
-/bin/cp -rf <current ybox>/tests .
-/bin/cp -rf <current ybox>/src/ybox/conf/profiles src/ybox/conf/
+cd ybox
+/bin/cp -rf <latest ybox>/tests .
+/bin/cp -rf <latest ybox>/src/ybox/conf/profiles src/ybox/conf/
 PYTHONPATH=./src /usr/bin/python3 ./tests/create_migration_db.py \
-    <current ybox>/tests/resources/migration/
+    <latest ybox>/tests/resources/migration/
 ```
 Then add the new version in the `@pytest.mark.parametrize` annotation of `test_migration`
 in `test_state.py`

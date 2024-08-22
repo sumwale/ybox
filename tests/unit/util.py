@@ -14,7 +14,7 @@ from ybox.env import Environ
 from ybox.state import RuntimeConfiguration
 from ybox.util import EnvInterpolation, config_reader
 
-_resources_dir = f"{os.path.dirname(__file__)}/../resources"
+resources_dir = f"{os.path.dirname(__file__)}/../resources"
 
 
 @dataclass(frozen=True)
@@ -29,10 +29,13 @@ class PackageDetails:
     dep_of: str
 
 
+# short name for return type of `read_containers_and_packages`
+ContainerDetails = tuple[list[RuntimeConfiguration], dict[str, RuntimeConfiguration],
+                         dict[str, list[PackageDetails]]]
+
+
 def read_containers_and_packages(env: Environ, fetch_types: bool,
-                                 interpolate: bool) -> tuple[list[RuntimeConfiguration],
-                                                             dict[str, RuntimeConfiguration],
-                                                             dict[str, list[PackageDetails]]]:
+                                 interpolate: bool) -> ContainerDetails:
     """
     Read and parse container and package specification from the test json files.
     See `tests/resources/containers.json` and `tests/resources/packages.json` for the expected
@@ -48,13 +51,15 @@ def read_containers_and_packages(env: Environ, fetch_types: bool,
                map of name to :class:`RuntimeConfiguration` of containers to be destroyed,
                map of containers to their :class:`PackageDetails`)
     """
-    with open(f"{_resources_dir}/containers.json", "r", encoding="utf-8") as containers_fd:
+    with open(f"{resources_dir}/containers.json", "r", encoding="utf-8") as containers_fd:
         containers: dict[str, dict[str, Any]] = json.load(containers_fd)
-    with open(f"{_resources_dir}/packages.json", "r", encoding="utf-8") as pkgs_fd:
+    with open(f"{resources_dir}/packages.json", "r", encoding="utf-8") as pkgs_fd:
         pkgs: dict[str, dict[str, Any]] = json.load(pkgs_fd)
 
     def build_runtime_config(name: str, info: dict[str, Any]) -> RuntimeConfiguration:
         shared_root = info["shared_root"]
+        if interpolate:
+            shared_root = os.path.expandvars(shared_root)
         profile = files("ybox").joinpath("conf").joinpath(info["profile"])
         # don't use EnvInterpolation since it can change as per the test environment
         interpolation = EnvInterpolation(env, ["configs"]) if interpolate else None
