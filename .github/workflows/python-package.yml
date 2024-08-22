@@ -5,8 +5,13 @@
 name: Python package
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+  pull_request:
+    types: [review_requested]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
   build:

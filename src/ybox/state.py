@@ -513,16 +513,18 @@ class YboxStateManagement:
                                         ini_config=row[2]) if row else None
 
     def get_containers(self, name: Optional[str] = None, distribution: Optional[str] = None,
-                       shared_root: Optional[str] = None) -> list[str]:
+                       shared_root: Optional[str] = None,
+                       include_destroyed: bool = False) -> list[str]:
         """
         Get the containers matching the given name, distribution and/or shared root location.
 
         :param name: name of the container (optional)
         :param distribution: the Linux distribution used when creating the container (optional)
         :param shared_root: the local shared root directory to search for a package (optional)
+        :param include_destroyed: if True then include `destroyed` containers else skip them
         :return: list of containers matching the given criteria
         """
-        predicates = ["NOT destroyed"]
+        predicates = ["1=1"] if include_destroyed else ["NOT destroyed"]
         args: list[str] = []
         if name:
             predicates.append("name = ?")
@@ -898,18 +900,6 @@ class YboxStateManagement:
         """
         self._conn.rollback()
         self._explicit_transaction = False
-
-    def clear_database(self) -> None:
-        """
-        Clear all the tables in the state database.
-        """
-        with closing(cursor := self._conn.cursor()):
-            self._begin_transaction(cursor)
-            cursor.execute("DELETE FROM package_repos")
-            cursor.execute("DELETE FROM package_deps")
-            cursor.execute("DELETE FROM packages")
-            cursor.execute("DELETE FROM containers")
-            self._internal_commit()
 
     def __enter__(self):
         return self

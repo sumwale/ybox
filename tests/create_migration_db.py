@@ -51,6 +51,8 @@ def populate_db(temp_dir: str) -> None:
     register_pkg_params = inspect.signature(YboxStateManagement.register_package).parameters
     # load container and packages information from json files
     fetch_types = bool(register_pkg_params.get("copy_type"))
+    # do not interpolate the data since environment can change between the one used to create
+    # the database and the one used to run the tests
     active_containers, destroy_containers, container_pkgs = read_containers_and_packages(
         env, fetch_types=fetch_types, interpolate=False)
     with YboxStateManagement(env) as state:

@@ -24,25 +24,35 @@ from ybox.config import Consts
 from ybox.env import Environ
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 
-
-@pytest.fixture(name="user_base", scope="module")
-def tmp_user_base() -> str:
-    """return a random path in /tmp to use as user base directory having data files"""
-    return f"/tmp/ybox-test-local-{uuid4()}"
+_USER_BASE = f"/tmp/ybox-test-local-{uuid4()}"
 
 
 @pytest.fixture(name="g_env", scope="module")
-def create_env(user_base: str):
+def create_env():
     """create an instance of :class:`Environ` used by the tests"""
     # use a custom PYTHONUSERBASE so that database and other files do not overwrite user's location
     site.USER_BASE = None
-    os.makedirs(user_base)
-    os.environ["PYTHONUSERBASE"] = user_base
+    os.makedirs(_USER_BASE)
+    os.environ["PYTHONUSERBASE"] = _USER_BASE
     yield Environ()
 
     del os.environ["PYTHONUSERBASE"]
-    shutil.rmtree(user_base)
+    shutil.rmtree(_USER_BASE)
     site.USER_BASE = None
+
+
+def clear_database(state: YboxStateManagement) -> None:
+    """clear all objects in the `state` database"""
+    for cnt in state.get_containers(include_destroyed=True):
+        conf = state.get_container_configuration(cnt)
+        assert conf is not None
+        assert conf.name == cnt
+        cnt_or_shared_root = conf.shared_root or cnt
+        for repo_info in state.get_repositories(cnt_or_shared_root):
+            assert state.unregister_repository(repo_info[0], cnt_or_shared_root) is not None
+        for pkg in state.get_packages(cnt):
+            state.unregister_package(cnt, pkg, conf.shared_root)
+        state.unregister_container(cnt)
 
 
 @pytest.fixture(name="state")
@@ -51,9 +61,7 @@ def create_state(g_env: Environ):
     with YboxStateManagement(g_env) as state:
         yield state
         # clean slate at the end of a test
-        for cnt in state.get_containers():
-            state.unregister_container(cnt)
-        state.clear_database()
+        clear_database(state)
 
 
 @pytest.fixture(name="container_details", scope="module")
@@ -64,10 +72,10 @@ def read_container_details(g_env: Environ) -> ContainerDetails:
     return read_containers_and_packages(g_env, fetch_types=True, interpolate=True)
 
 
-def test_initialization(user_base: str, g_env: Environ, state: YboxStateManagement):
+def test_initialization(g_env: Environ, state: YboxStateManagement):
     """test the initialization of :class:`YboxStateManagement`"""
     assert isinstance(state, YboxStateManagement)
-    assert g_env.data_dir == f"{user_base}/share/ybox"
+    assert g_env.data_dir == f"{_USER_BASE}/share/ybox"
     assert stat.S_IMODE(os.stat(g_env.data_dir).st_mode) == Consts.default_directory_mode()
     assert os.access(f"{g_env.data_dir}/state.db", os.R_OK)
     # check empty state
@@ -99,7 +107,7 @@ def test_migration(g_env: Environ, old_version: str):
                    mode="rb") as gz_in, open(state_db, "wb") as db_out:
         while data := gz_in.read(block_size):
             db_out.write(data)
-    # load container and packages data
+    # load container and packages data without interpolation like in create_migration_db.py
     active_containers, destroy_containers, container_pkgs = read_containers_and_packages(
         g_env, fetch_types=True, interpolate=False)
     with YboxStateManagement(g_env) as state:
@@ -131,6 +139,7 @@ def test_migration(g_env: Environ, old_version: str):
             assert state.get_repositories(name) == []
             assert state.get_repositories(shared_root) == []
             assert state.get_packages(name) == []
+        clear_database(state)
 
 
 def register_containers_and_packages(state: YboxStateManagement,
@@ -155,9 +164,6 @@ def register_containers_and_packages(state: YboxStateManagement,
                     Path(local_copy).touch(mode=0o750, exist_ok=True)
             state.register_package(cnt.name, pkg.name, pkg.local_copies, pkg.copy_type,
                                    pkg.app_flags, pkg.shared_root, pkg.dep_type, pkg.dep_of)
-            if pkg.dep_type:
-                assert pkg.dep_of
-                state.register_dependency(cnt.name, pkg.dep_of, pkg.name, pkg.dep_type)
 
 
 def check_containers(state: YboxStateManagement,
@@ -207,6 +213,12 @@ def test_register_unregister_container(state: YboxStateManagement,
         assert isinstance(cnt.ini_config, ConfigParser)
         assert state.register_container(cnt.name, cnt.distribution, cnt.shared_root,
                                         cnt.ini_config, force_own_orphans=False) == {}
+        with StringIO() as config:
+            cnt.ini_config.write(config)
+            config.flush()
+            profile_str = config.getvalue()
+        assert state.get_container_configuration(cnt.name) == RuntimeConfiguration(
+            cnt.name, cnt.distribution, cnt.shared_root, profile_str)
     check_containers(state, all_containers)
     for name in destroy_containers:
         assert state.unregister_container(name) is True
@@ -414,7 +426,6 @@ def test_transaction_rollback(g_env: Environ, container_details: ContainerDetail
     """test explicit transaction begin and rollback on an exception or on explicit rollback"""
     active_containers, _, _ = container_details
     with YboxStateManagement(g_env, connect_timeout=2.0) as state:
-        state.clear_database()
         try:
             with YboxStateManagement(g_env) as state2:
                 # check with explicit transaction and rollback
