@@ -117,7 +117,7 @@ usermod --lock $user
 
 # run the distribution specific initialization scripts
 if [ -r "$SCRIPT_DIR/init-base.sh" ]; then
-  /bin/bash "$SCRIPT_DIR/init-base.sh" $user > /dev/null
+  /bin/bash "$SCRIPT_DIR/init-base.sh" $user >/dev/null
 fi
 
 # add the given user for sudoers with NOPASSWD
@@ -127,9 +127,9 @@ chmod 0440 $sudoers_file
 echo_color "$fg_purple" "Added admin user '$user' to sudoers with NOPASSWD"
 
 # generate /etc/machine-id which is required by some apps
-if ! "/usr/bin/dbus-uuidgen --get=/etc/machine-id " 2>/dev/null; then
-  rm /etc/machine-id
-  /usr/bin/dbus-uuidgen --ensure=/etc/machine-id
+if ! dbus-uuidgen --get=/etc/machine-id 2>/dev/null >/dev/null; then
+  rm -f /etc/machine-id
+  dbus-uuidgen --ensure=/etc/machine-id
 fi
 
 # change ownership of user's /run/user/<uid> tree which may have root ownership due to the
