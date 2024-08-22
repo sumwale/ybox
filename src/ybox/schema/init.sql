@@ -34,3 +34,6 @@ CREATE INDEX package_containers ON packages(container);
 
 -- include the new tables and indexes added in version 0.9.1
 SOURCE '0.9.1-added.sql';
+
+-- include the new 'package_repos' table added in version 0.9.6
+SOURCE '0.9.6-added.sql';

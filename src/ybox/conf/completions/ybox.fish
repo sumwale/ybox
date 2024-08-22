@@ -11,14 +11,11 @@ end
 function __fish_ybox_complete_distributions
   set user_supported ~/.config/ybox/distros/supported.list
   set sys_supported ~/.local/lib/python3*/site-packages/ybox/conf/distros/supported.list
-  set conda_supported conda/.conda/envs/ybox/lib/python3*/site-packages/ybox/conf/distros/supported.list
   set local_supported src/ybox/conf/distros/supported.list
   if test -r "$user_supported"
     /usr/bin/cat $user_supported
   else if test -r "$sys_supported" 2>/dev/null
     /usr/bin/cat $sys_supported
-  else if test -r "$conda_supported" 2>/dev/null
-    /usr/bin/cat $conda_supported
   else if test -r "$local_supported" 2>/dev/null
     /usr/bin/cat $local_supported
   end
@@ -57,10 +54,15 @@ complete -c ybox-cmd -s d -l docker-path -d "path of docker/podman if not in /us
 complete -f -c ybox-cmd -n "not __fish_seen_subcommand_from (__fish_ybox_complete_containers)" -a "(__fish_ybox_complete_containers)"
 
 
-set -l pkg_commands install uninstall update list info search mark clean repair
+set -l pkg_commands install uninstall update list list-files info search mark clean repair
 
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a install -d "install a package with dependencies"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a uninstall -d "uninstall a package and optionally its dependencies"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a update -d "update some or all packages"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a list -d "list installed packages"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a list-files -d "list files of an installed package"
 complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a search -d "search repositories"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a info -d "show detailed information of package(s)"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a clean -d "clean package cache"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a mark -d "mark package as dependency or explicitly installed"
+complete -f -c ybox-pkg -n "not __fish_seen_subcommand_from $pkg_commands" -a repair -d "try to repair package state"

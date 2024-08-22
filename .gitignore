@@ -1,9 +1,10 @@
 **/__pycache__/
-**/.mypy_cache/
 dist/
 src/ybox.egg-info
 .python-version
 .tox
 .venv
-conda/.conda
 build/
+.coverage
+coverage-report.txt
+coverage.xml

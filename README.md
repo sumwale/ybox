@@ -71,7 +71,7 @@ As of now the following is required:
 
 - clone the repo: `git clone https://github.com/sumwale/ybox.git`
 - rootless podman or docker
-  * for podman this only needs installation of `podman`, `slirp4netns` and `buildah` packages,
+  * for podman this needs installation of `podman` and `slirp4netns` packages (`buildah` optional),
     then setup /etc/subuid and /etc/subgid as noted here:
     [/etc/subuid and /etc/subgid configuration](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md#etcsubuid-and-etcsubgid-configuration)
     (ubuntu, for example will also set up subuid/subgid for current user automatically;
@@ -79,14 +79,12 @@ As of now the following is required:
   * for docker follow the instructions in the official [docs](https://docs.docker.com/engine/security/rootless/)
 - python version 3.9 or higher -- all fairly recent Linux distributions should satisfy this
   but still confirm with `python3 --version`
-- install [simple-term-menu](https://pypi.org/project/simple-term-menu/) either from your
-  distribution repository, if available, else: `pip install simple-term-menu` (obviously
-      you will need `pip` itself to be installed which should be in your distribution
-      repositories e.g. ubuntu/debian have it as `python3-pip`)
-- (optional) NVIDIA acceleration: if you intend to run games/video editors/... that need
-  access to NVIDIA GPU acceleration, then you need to install
-  [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html); for example on ubuntu with podman configure the apt repository
-  and install the package as noted in the link, then run `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` (this will need to be repeated if nvidia driver version is upgraded)
+- install [simple-term-menu](https://pypi.org/project/simple-term-menu/),
+  [tabulate](https://pypi.org/project/tabulate/) and
+  [packaging](https://pypi.org/project/packaging/),  either from your distribution
+  repository, if available, else: `pip install simple-term-menu packaging tabulate`
+  (obviously you will need `pip` itself to be installed which should be in your
+   distribution repositories e.g. ubuntu/debian have it as `python3-pip`)
 
 In the future, installer will take care of setting all of these up.
 
@@ -132,7 +130,7 @@ all the available options with detailed comments. There are a few more detailed 
 in the `src/ybox/conf/profiles/examples` directory.
 
 
-### Install/uninstall/list/search packages
+### Package management: install/uninstall/list/search/...
 
 Install a new package with `ybox-pkg` like firefox below:
 
@@ -146,8 +144,9 @@ the optional dependencies of the installed package (only till second level) and 
 to choose from among them which may add additional features to the package.
 
 The installation will also create wrapper desktop files in `~/.local/share/applications`
-and executables in `~/.local/bin` so you can execute the newly install application binaries
-from your desktop environment's application menu and/or from command-line.
+and executables in `~/.local/bin` with man pages linked in `~/.local/share/man` so you can execute
+the newly install application binaries from your desktop environment's application menu and/or
+from command-line having corresponding man pages.
 
 Likewise, you can uninstall all the changes (including the optional packages chosen before):
 
@@ -155,29 +154,32 @@ Likewise, you can uninstall all the changes (including the optional packages cho
 ybox-pkg uninstall firefox
 ```
 
-List the installed packages:
+List the explicitly installed packages using `ybox-pkg`:
 
 ```sh
 ybox-pkg list
 ```
-This will list all the packages explicitly installed using `ybox-pkg`.
-
-```sh
-ybox-pkg list -s
-```
-This will show the dependent packages chosen in addition to the main packages.
+This will show the chosen dependent packages in addition to the explicitly installed ones.
 
 ```sh
 ybox-pkg list -a
 ```
-Will list all the distribution packages in the container including those not installed by
-`ybox-pkg` (either installed in the base image, or installed later using the distribution
-    package manager directly)
+This will list all the distribution packages in the container including those not installed
+by `ybox-pkg` (either installed in the base image, or installed later using the distribution
+    package manager directly) -- combine with `-a` to also list all dependent packages.
 
 ```sh
-ybox-pkg list -v
+ybox-pkg list -o
 ```
-Will show more details of the packages (combine with -a/-s as required)
+To show more details of the packages (combine with -a/-o as required):
+```sh
+ybox-pkg list -o
+```
+
+List all the files installed by the package:
+```sh
+ybox-pkg list-files firefox
+```
 
 Search the repositories for packages with names matching search terms:
 
@@ -188,14 +190,52 @@ ybox-pkg search intellij
 Search the repositories for packages with names or descriptions matching search terms:
 
 ```sh
-ybox-pkg search intellij -f
+ybox-pkg search intellij -a
 ```
 
-You can also restrict the search to full word matches (can be combined with -f if required):
+You can also restrict the search to full word matches (can be combined with `-a`):
 
 ```sh
 ybox-pkg search intellij -w
 ```
+
+Show detailed information for an installed package:
+```sh
+ybox-pkg info firefox
+```
+
+Show detailed information for any package in the available repositories:
+```sh
+ybox-pkg info firefox -a
+```
+
+Clean package cache, temporary downloads etc:
+```sh
+ybox-pkg clean
+```
+
+Mark a package as explicitly installed (also registers with `ybox-pkg` if not present):
+```sh
+ybox-pkg mark firefox -e
+```
+
+Mark a package as a dependency of another (also registers with `ybox-pkg` if not present):
+```sh
+ybox-pkg mark qt5ct -D zoom  # mark qt5ct as an optional dependency of zoom
+```
+
+Repair package installation after a failure or interrupt:
+```sh
+ybox-pkg repair
+```
+
+More extensive repair of package installation including reinstallation of all packages:
+```sh
+ybox-pkg repair --extensive
+```
+
+All the `ybox-pkg` subcommands will show detailed help with `-h/--help` option e.g.
+`ybox-pkg list --help`.
 
 
 ### List the available containers
@@ -244,8 +284,8 @@ The `ybox-cmd` runs `/bin/bash` in the container by default:
 ybox-cmd ybox-arch_apps
 ```
 
-You can run other commands instead of bash shell, but if those commands require options starting
-with a hyphen, then first end the options to `ybox-cmd` with a double hyphen:
+You can run other commands instead of bash shell, but if those commands require options
+starting with a hyphen, then first end the options to `ybox-cmd` with a double hyphen:
 
 ```sh
 ybox-cmd ybox-arch_apps -- ls -l
@@ -287,30 +327,49 @@ You can delete old log files there safely if they start taking a lot of disk spa
 ### Restart a container
 
 A container may get stopped after a reboot if systemd/... is not configured to auto-start
-the docker/podman containers. You can check using `ybox-ls -a` and restart any stopped
-containers as below:
+the docker/podman containers. Or you can explicitly stop a container using docker/podman.
+You can check using `ybox-ls -a` and restart a stopped or running container as below:
 
 ```sh
 ybox-restart ybox-arch_apps
 ```
 
 
+### Auto-starting containers
+
+Containers can be auto-started as per the usual way for rootless docker/podman services.
+This is triggered by systemd on user login which is exactly what we want for ybox
+containers so that the container applications are available on login and are stopped on
+session logout. For docker the following should suffice:
+
+```sh
+systemctl --user enable docker
+```
+
+See [docker docs](https://docs.docker.com/engine/security/rootless/#daemon) for details.
+
+For podman you will need to explicitly generate systemd service file for each container and
+copy to your systemd configuration directory since podman does not use a background daemon.
+For the `ybox-arch_apps` container in the examples before:
+
+```sh
+mkdir -p ~/.config/systemd/user/
+podman generate systemd --name ybox-arch_apps > ~/.config/systemd/user/container-ybox-arch_apps.service
+systemctl --user enable container-ybox-arch_apps.service
+```
+
+
 ## Development
 
-Virtual environment setups have been provided for consistent development, test and build
+Virtual environment setup have been provided for consistent development, test and build
 with multiple python versions. The minimum python version required is 3.9 and tests are
 run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12 and others
 in future).
 
-As of now pyenv with venv is the actively maintained one which can be used for development
-with IDEA/PyCharm, running tests against all supported python versions using `tox` etc.
-While conda environment setup scripts are still provided, they are no longer maintained.
-
-### pyenv with venv
-
-Scripts to set up a pyenv with venv environment for a consistent development and build have
-been provided in the `pyenv` directory which creates a `venv` environment in `.venv` directory
-of the checkout.
+The setup uses pyenv with venv which can be used for development with IDEA/PyCharm/VSCode
+or in terminal, running tests against all supported python versions using `tox` etc.
+Scripts to set up a pyenv with venv environment have been provided in the `pyenv` directory
+which creates a `venv` environment in `.venv` directory of the checkout.
 
 If you do not have `pyenv` installed and configured, then you can install it using:
 
@@ -322,9 +381,9 @@ pyenv/install.sh
 it only if you have never installed `pyenv` before.
 
 The script will try to handle installation of required packages on most modern Linux
-distributions (Ubuntu/Debian, Fedora, Arch Linux, OpenSUSE, macOS with homebrew), but if
-yours is a different one, then check [pyenv wiki](https://github.com/pyenv/pyenv/wiki) or
-your distribution docs/forums.
+distributions (Ubuntu/Debian, Fedora, Arch Linux, OpenSUSE, homebrew), but if yours is a
+different one, then check [pyenv wiki](https://github.com/pyenv/pyenv/wiki) or your
+distribution docs/forums.
 
 Next you can install the required python versions and venv environment:
 
@@ -347,60 +406,56 @@ source .venv/bin/activate.fish
 ```
 
 **NOTE:** while the pyenv installation and venv set up needs to be done only once, the last
-step of `source` of the two files will need to be done for every shell. Hence, you can consider
+steps of `source` of the two files will need to be done for every shell. Hence, you can consider
 placing those in your bashrc/zshrc or fish conf.d so that they get applied in every interactive
 shell automatically.
 
-You can open the checkout directory as an existing project in Intellij IDEA and then
+You can open the checkout directory as an existing project in Intellij IDEA/PyCharm and then
 add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
 Choose an existing environment in Virtualenv environment and select the
 `<checkout dir>/.venv/bin/python3` for the interpreter.
 
+For using VSCode, ensure that the python extension from Microsoft and preferably the following
+additional extensions are installed: autopep8, Flake8, isort, audoDocstring and
+Python Environment Manager. The open the checkout directory and you should be good to go.
 
-### Conda
 
-**NOTE:** this set up is no longer actively maintained.
+### Notes on writing tests
 
-Scripts to set up a conda environment appropriate for the project have been provided
-in the 'conda' directory which creates an environment in 'conda/.conda' directory
-of the checkout. To set it up run:
+Tests have been categorized into two:
+- in `tests/unit` directory: these have module/function/class level tests; convention is to
+  use a separate test module for corresponding source module e.g. `test_state.py` for
+  `ybox/state.py` module
+- in `tests/functional` directory: these are end-to-end tests that invoke and check the
+  top-level `ybox-*` utilities
 
-```sh
-conda/setup-conda.sh
-```
+All the existing tests use the `pytest` framework and new ones should do the same.
+After adding new tests to the appropriate test directory run `code-check.sh` and
+`tests-coverage.sh` scripts which should succeed and also see coverage report from latter.
 
-Then you can activate it in bash:
+**NOTE:** use mock only if absolutely necessary (e.g. for unexpected error
+conditions that are difficult to simulate in tests or will cause other trouble).
+For example the state database used is sqlite, but that is an internal detail and could
+potentially change so mocking sqlite3 objects in tests for `ybox.state` module is a really
+bad idea and one should just test for public API of `ybox.state`. On the other hand
+checking for exceptions like `KeyboardInterrupt` can use mock since simulating them
+otherwise is error-prone and can cause unwanted side-effects for other tests.
 
-```sh
-source conda/activate-conda.bash
-```
-
-Or in fish shell:
-
-```
-source conda/activate-conda.fish
-```
-
-Script for zsh has also been provided:
-
-```
-source conda/activate-conda.zsh
-```
-
-You can open the checkout directory as an existing project in Intellij IDEA and then
-add Python SDK (File -> Project Settings -> Project -> SDK -> Add Python SDK...).
-Choose an existing environment in Conda environment where the path to conda should already
-be selected correctly (`<checkout dir>/conda/.conda/bin/conda`) while for interpreter
-choose `<checkout dir>/conda/.conda/envs/ybox/bin/python3`.
 
 ### Running the test suite
 
 Once pyenv+venv set up is working, you can run the entire test suite and other checks
 using `tox` in the checkout directory, or `tox -p` for parallel run. It will run with
-all supported python versions (i.e. from 3.9 onwards).
+all supported python versions (i.e. from 3.9 onwards). Tests are written using the `pytest`
+test framework which will be installed along with other requirements by the `setup-venv.sh`
+script (or you can explicitly use `requirements.txt` and install `tox` separately).
 
-There is also a simple script `run-tests.sh` in the top-level directory which can be used
-to run just the tests with the current python version. This will skip other stuff like
-`mypy`, for example, which is invoked by `tox`.
+There is also a simple script `tests-coverage.sh` in the top-level directory which can be
+used to run just the tests with the current python version and produce coverage report.
+It accepts a single argument `-f` to run functional tests in addition to the unit tests,
+else only unit tests are run with coverage. Any arguments afterwards are passed as such
+to `pytest`. This will skip other stuff like `pyright`, for example, which is invoked by
+`tox`. The lint and other related tools can be run explicitly using the `code-check.sh`
+script in the top-level directory.
 
-See `tox` and `unittest` documentation for more details like running individual tests.
+See `tox` and `pytest` documentation for more details like running individual tests.

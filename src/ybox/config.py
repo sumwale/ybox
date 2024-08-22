@@ -3,6 +3,7 @@ Configuration locations, distribution and box name of ybox container.
 """
 
 import os
+import re
 from typing import Optional
 
 from .env import Environ
@@ -32,16 +33,17 @@ class StaticConfiguration:
         if os.path.exists("/etc/timezone"):
             with open("/etc/timezone", "r", encoding="utf-8") as timezone:
                 self._timezone = timezone.read().rstrip("\n")
+        self._pager = os.environ.get("YBOX_PAGER", Consts.default_pager())
         container_dir = f"{env.data_dir}/{box_name}"
         os.environ["YBOX_CONTAINER_DIR"] = container_dir
         self._configs_dir = f"{container_dir}/configs"
         self._target_configs_dir = f"{env.target_data_dir}/{box_name}/configs"
         self._scripts_dir = f"{container_dir}/ybox-scripts"
         self._target_scripts_dir = "/usr/local/ybox"
-        os.environ["YBOX_TARGET_SCRIPTS_DIR"] = self.target_scripts_dir
+        os.environ["YBOX_TARGET_SCRIPTS_DIR"] = self._target_scripts_dir
         self._status_file = f"{container_dir}/status"
-        self._config_list = f"{self.scripts_dir}/config.list"
-        self._app_list = f"{self.scripts_dir}/app.list"
+        self._config_list = f"{self._scripts_dir}/config.list"
+        self._app_list = f"{self._scripts_dir}/app.list"
 
     @property
     def env(self) -> Environ:
@@ -54,9 +56,15 @@ class StaticConfiguration:
         return self._distribution
 
     @staticmethod
-    def distribution_config(distribution: str) -> str:
-        """relative configuration file path for the linux distribution being used"""
-        return f"distros/{distribution}/distro.ini"
+    def distribution_config(distribution: str, config_file: str = "distro.ini") -> str:
+        """
+        Relative configuration file path for the Linux distribution being used.
+
+        :param distribution: name of the Linux distribution
+        :param config_file: name of the configuration file, defaults to "distro.ini"
+        :return: relative path of the configuration file
+        """
+        return f"distros/{distribution}/{config_file}"
 
     @property
     def box_name(self) -> str:
@@ -66,9 +74,10 @@ class StaticConfiguration:
     def box_image(self, has_shared_root: bool) -> str:
         """
         Container image created with basic required user configuration from base image.
-        This can either be container specific, or if 'base.shared_root' is enabled, then
+        This can either be container specific, or if `base.shared_root` is provided, then
         it will be common for all such images for the same distribution.
-        :param has_shared_root: whether 'base.shared_root' is enabled in configuration file
+
+        :param has_shared_root: whether `base.shared_root` is provided in configuration file
         :return: the docker/podman image to be created and used for the ybox
         """
         return self._shared_box_image if has_shared_root else self._box_image
@@ -82,6 +91,11 @@ class StaticConfiguration:
     def timezone(self) -> Optional[str]:
         """the contents of /etc/timezone"""
         return self._timezone
+
+    @property
+    def pager(self) -> str:
+        """pager command to show output one screenful at a time on the terminal"""
+        return self._pager
 
     @property
     def configs_dir(self) -> str:
@@ -128,6 +142,8 @@ class Consts:
     Defines fixed file/path and other names used by ybox that are not configurable.
     """
 
+    _MAN_DIRS_PATTERN = re.compile(r"/usr(/local)?(/share)?/man(/[^/]*)?/man[0-9][a-zA-Z_]*")
+
     @staticmethod
     def image_prefix() -> str:
         """prefix used for the non-shared root images"""
@@ -137,6 +153,11 @@ class Consts:
     def shared_image_prefix() -> str:
         """prefix used for the shared root images"""
         return "ybox-shared-local"
+
+    @staticmethod
+    def default_directory_mode() -> int:
+        """return the default mode to use for new directories"""
+        return 0o750
 
     @staticmethod
     def entrypoint_base() -> str:
@@ -176,11 +197,47 @@ class Consts:
         return ["init-base.sh", "init.sh", "init-user.sh"]
 
     @staticmethod
-    def container_desktop_dirs() -> set[str]:
-        """directories on the container that has desktop files that may need to be wrapped"""
-        return {"/usr/share/applications"}
+    def entrypoint_init_done_file() -> str:
+        """file that indicates completion of first run initialization by entrypoint.sh script"""
+        return "ybox-init.done"
 
     @staticmethod
-    def container_executable_dirs() -> set[str]:
+    def container_desktop_dirs() -> list[str]:
+        """directories on the container that has desktop files that may need to be wrapped"""
+        return ["/usr/share/applications"]
+
+    @staticmethod
+    def container_executable_dirs() -> list[str]:
         """directories on the container that has executables that may need to be wrapped"""
-        return {"/usr/bin", "/usr/sbin", "/bin", "/sbin"}
+        return ["/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
+
+    @staticmethod
+    def container_man_dir_pattern() -> re.Pattern[str]:
+        """directory regex pattern on the container having man-pages that may need to be linked"""
+        return Consts._MAN_DIRS_PATTERN
+
+    @staticmethod
+    def nvidia_target_base_dir() -> str:
+        """base directory path where NVIDIA libs/data are linked in the container"""
+        return "/usr/local/nvidia"
+
+    @staticmethod
+    def nvidia_setup_script() -> str:
+        """
+        name of the NVIDIA setup script in the container
+        (location is `StaticConfiguration.target_scripts_dir`)
+        """
+        return "nvidia-setup.sh"
+
+    @staticmethod
+    def default_pager() -> str:
+        """
+        default pager to show output one screenful at a time on the terminal when YBOX_PAGER
+        environment variable is not set
+        """
+        return "/usr/bin/less -RLFXK"
+
+    @staticmethod
+    def default_field_separator() -> str:
+        """default separator used between the fields in output of docker/podman exec commands"""
+        return "::::"

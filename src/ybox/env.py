@@ -11,7 +11,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Union
 
-from ybox.print import print_error
+from .print import print_error, print_notice
 
 PathName = Union[Path, Traversable]
 
@@ -36,39 +36,47 @@ class Environ:
         self._xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
         self._now = datetime.now()
         os.environ["NOW"] = str(self._now)
-        pkg_dir = files("ybox")
-        os.environ["YBOX_PKG_DIR"] = str(pkg_dir)
-        # for tests, only the bundled configurations should be tested
+        sys_conf_dir = files("ybox").joinpath("conf")
+        os.environ["YBOX_SYS_CONF_DIR"] = str(sys_conf_dir)
+        self._sys_conf_dirs = [sys_conf_dir]
+        self._root_dir = [Path("/")]
         self._configuration_dirs: list[PathName] = []
+        # for tests, only the bundled configurations should be tested
         if os.environ.get("YBOX_TESTING"):
-            self._configuration_dirs = [pkg_dir.joinpath("conf")]
+            print_notice("Running with YBOX_TESTING enabled")
+            self._configuration_dirs = self._sys_conf_dirs
         else:
             self._configuration_dirs = [Path(f"{self._home_dir}/.config/ybox"),
-                                        pkg_dir.joinpath("conf")]
+                                        sys_conf_dir]
         self._user_applications_dir = f"{user_base}/share/applications"
         self._user_executables_dir = f"{user_base}/bin"
+        self._user_man_dir = f"{user_base}/share/man"
 
-    def search_config_path(self, conf_path: str, quiet: bool = False) -> PathName:
+    def search_config_path(self, conf_path: str, only_sys_conf: bool = False,
+                           quiet: bool = False) -> PathName:
         """
         Search for given configuration path in user and system configuration directories
         (in that order). The path may refer to a file or a subdirectory.
 
         :param conf_path: the configuration file to search (expected to be a relative path)
+        :param only_sys_conf: if True then search only system configuration directory else
+                              search for user configuration directory first then the system one
         :param quiet: if False then prints an error message on standard output on failure
         :return: the path of the configuration file as `Path` or resource file from
-                 importlib (`Traversable`)
+                 importlib (i.e. `Traversable`)
         """
         if os.path.isabs(conf_path):
-            return Path(conf_path)
-        # order is first search in user's config directory, and then the system config directory
-        for config_dir in self._configuration_dirs:
+            conf_dirs = self._root_dir
+        else:
+            conf_dirs = self._sys_conf_dirs if only_sys_conf else self._configuration_dirs
+        for config_dir in conf_dirs:
             path = config_dir.joinpath(conf_path)
             if os.access(path, os.R_OK):  # type: ignore
                 return path
-        search_dirs = ', '.join([str(file) for file in self._configuration_dirs])
+        search_dirs = ', '.join([str(file) for file in conf_dirs])
         if not quiet:
             print_error(f"Configuration file '{conf_path}' not found in [{search_dirs}]")
-        raise FileNotFoundError
+        raise FileNotFoundError(f"Missing configuration file '{conf_path}'")
 
     @property
     def home(self) -> str:
@@ -114,3 +122,8 @@ class Environ:
     def user_executables_dir(self) -> str:
         """User's local executables directory which should be in the $PATH"""
         return self._user_executables_dir
+
+    @property
+    def user_man_dir(self) -> str:
+        """User's local man pages directory which should be in the path returned by `manpath`"""
+        return self._user_man_dir

@@ -1,13 +1,30 @@
 """
-Utility `namedtuple`s and methods to print in color on terminal/console.
+Utility classes and methods to print in color on terminal/console.
 """
 
-from collections import namedtuple
-from typing import Optional
+import os
+import shutil
+import sys
+from dataclasses import dataclass
+from typing import IO, Optional
+
 
 # define color names for printing in terminal
-TermColors = namedtuple("TermColors",
-                        "black red green orange blue purple cyan lightgray reset bold disable")
+@dataclass(frozen=True)
+class TermColors:
+    """basic ASCII color strings for terminals"""
+    black: str
+    red: str
+    green: str
+    orange: str
+    blue: str
+    purple: str
+    cyan: str
+    lightgray: str
+    reset: str
+    bold: str
+    disable: str
+
 
 # foreground colors in the terminal
 fgcolor = TermColors(
@@ -19,9 +36,20 @@ bgcolor = TermColors(
     "\033[47m", "\033[00m", "\033[01m", "\033[02m")
 
 
+def get_terminal_width() -> int:
+    """
+    Get the best estimate of the width of the current terminal.
+    This may not work well if the output is piped, for example.
+    """
+    # Use stderr for the terminal width since stdout can be piped to pager.
+    try:
+        return os.get_terminal_size(sys.stderr.fileno()).columns
+    except OSError:
+        return shutil.get_terminal_size().columns
+
+
 def print_color(msg: str, fg: Optional[str] = None,
-                bg: Optional[str] = None, end: str = "\n", file=None) -> None:
-    # pylint: disable=invalid-name
+                bg: Optional[str] = None, end: str = "\n", file: Optional[IO[str]] = None) -> None:
     """
     Display given string to standard output with foreground and background colors, if provided.
     The colors will show up as expected on most known Linux terminals and console though
@@ -47,7 +75,7 @@ def print_color(msg: str, fg: Optional[str] = None,
     print(full_msg, end=end, file=file, flush=end != "\n")
 
 
-def print_error(msg: str, end: str = "\n", file=None) -> None:
+def print_error(msg: str, end: str = "\n", file: Optional[IO[str]] = None) -> None:
     """
     Display an error string in red foreground (and no background change).
 
@@ -58,7 +86,7 @@ def print_error(msg: str, end: str = "\n", file=None) -> None:
     print_color(msg, fg=fgcolor.red, end=end, file=file)
 
 
-def print_warn(msg: str, end: str = "\n", file=None):
+def print_warn(msg: str, end: str = "\n", file: Optional[IO[str]] = None):
     """
     Display a warning string in purple foreground (and no background change).
 
@@ -69,7 +97,7 @@ def print_warn(msg: str, end: str = "\n", file=None):
     print_color(msg, fg=fgcolor.purple, end=end, file=file)
 
 
-def print_notice(msg: str, end: str = "\n", file=None):
+def print_notice(msg: str, end: str = "\n", file: Optional[IO[str]] = None):
     """
     Display a string in orange foreground (and no background change).
 
@@ -80,7 +108,7 @@ def print_notice(msg: str, end: str = "\n", file=None):
     print_color(msg, fg=fgcolor.orange, end=end, file=file)
 
 
-def print_info(msg: str, end: str = "\n", file=None):
+def print_info(msg: str, end: str = "\n", file: Optional[IO[str]] = None):
     """
     Display an informational string in blue foreground (and no background change).
 

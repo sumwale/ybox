@@ -1,3 +1,7 @@
+"""
+Show the optional dependencies for a package that may be in a pacman repository or the AUR.
+"""
+
 import argparse
 import gzip
 import os
@@ -7,11 +11,12 @@ import time
 import zlib
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import ijson  # type: ignore
 
 from ybox.cmd import run_command
+from ybox.config import Consts
 from ybox.print import print_error, print_notice, print_warn
 
 _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
@@ -25,14 +30,22 @@ _DEFAULT_SEP = "::::"  # something that does not appear in descriptions (at leas
 _PACKAGE_NAME_RE = re.compile(r"^[\w@.+-]+")  # used to strip out version comparisons
 
 # fields: name of original package, description, required dependencies, optional dependencies
-PackageAlternate = Tuple[str, str, list[str], list[str]]
+PackageAlternate = tuple[str, str, list[str], list[str]]
 
 
 def main() -> None:
+    """main function for `pkgdeps.py` script"""
     main_argv(sys.argv[1:])
 
 
 def main_argv(argv: list[str]) -> None:
+    """
+    Main entrypoint of `pkgdeps.py` that takes a list of arguments which are usually the
+    command-line arguments of the `main()` function. Pass ["-h"]/["--help"] to see all the
+    available arguments with help message for each.
+
+    :param argv: arguments to the function (main function passes `sys.argv[1:]`)
+    """
     parser = argparse.ArgumentParser(
         description="Recursively find optional dependencies of a package")
     parser.add_argument("-s", "--separator", type=str, default=_DEFAULT_SEP,
@@ -58,11 +71,10 @@ def main_argv(argv: list[str]) -> None:
     # next build a map of all packages in pacman database from their provides, dependencies and
     # optional dependencies; the map key will be original package name and their provides mapped
     # to a tuple having the name, description with list of required and optional dependencies
-    all_packages = defaultdict[str, list[PackageAlternate]](list[PackageAlternate])
-    sep = args.separator
-    build_pacman_db_map(all_packages, sep)
+    sep: str = args.separator
+    all_packages = build_pacman_db_map(sep)
 
-    opt_deps: dict[str, Tuple[str, int, bool]] = {}
+    opt_deps: dict[str, tuple[str, int, bool]] = {}
     find_opt_deps(args.package, installed_packages, all_packages, opt_deps, args.level)
     # columns below are expected by ybox-pkg
     if opt_deps:
@@ -71,15 +83,26 @@ def main_argv(argv: list[str]) -> None:
         prefix = args.prefix
         for key, val in opt_deps.items():
             desc, level, installed = val
-            print(f"{prefix}{key}{sep}{desc}{sep}{level}{sep}{installed}")
+            print(f"{prefix}{key}{sep}{level}{sep}{installed}{sep}{desc}")
 
 
-def build_pacman_db_map(arch_packages: defaultdict[str, list[PackageAlternate]], sep: str) -> None:
-    for package_list in str(run_command(f"/usr/bin/expac -S %n{sep}%d{sep}%S{sep}%E{sep}%o",
+def build_pacman_db_map(sep: str) -> defaultdict[str, list[PackageAlternate]]:
+    """
+    Build a map of all packages in pacman repositories returning a `defaultdict` having name of
+    package as the key with a list of `PackageAlternate` objects as values which captures
+    the name, description, required depedencies and optional dependencies in the tuple.
+    The first element element in the list is always the package itself while subsequent ones
+    are all packages that provide the same package, if any.
+
+    :param sep: the separator string to use between the output fields of `expac`
+    :return: a `defaultdict` having package names as keys with list of `PackageAlternate` values
+    """
+    arch_packages = defaultdict[str, list[PackageAlternate]](list[PackageAlternate])
+    for package_list in str(run_command(f"/usr/bin/expac -S %n{sep}%S{sep}%E{sep}%o{sep}%d",
                                         capture_output=True)).splitlines():
         if not package_list:
             continue
-        name, desc, provides, required, optional = package_list.split(sep)
+        name, provides, required, optional, desc = package_list.split(sep)
         deps = _process_pkg_names(required.split()) if required else []
         opt_deps = _process_pkg_names(optional.split()) if optional else []
         # arch linux packages are always lower case which is enforced below for the map
@@ -87,14 +110,20 @@ def build_pacman_db_map(arch_packages: defaultdict[str, list[PackageAlternate]],
         arch_packages[map_val[0]].append(map_val)
         for provide in _process_pkg_names(provides.split()):
             arch_packages[provide].append(map_val)
+    return arch_packages
 
 
 def _process_pkg_names(pkgs: Optional[list[str]]) -> list[str]:
+    """internal method to strip out versions from each package name of a list of package names"""
     return [m.group(0) for pkg in pkgs if (m := _PACKAGE_NAME_RE.match(pkg))] if pkgs else []
 
 
 def refresh_aur_metadata() -> None:
-    os.makedirs(_AUR_META_CACHE_DIR, mode=0o750, exist_ok=True)
+    """
+    refresh AUR metadata having details on all available AUR packages which is refreshed if it
+    is missing or older than 24 hours
+    """
+    os.makedirs(_AUR_META_CACHE_DIR, mode=Consts.default_directory_mode(), exist_ok=True)
     # fetch AUR metadata if not present or older than a day
     if (not os.access(_AUR_META_FILE, os.R_OK) or
             time.time() > os.path.getctime(_AUR_META_FILE) + _REFRESH_AGE):
@@ -106,10 +135,24 @@ def refresh_aur_metadata() -> None:
             sys.exit(code)
 
 
-# using ijson instead of the standard json because latter always loads the entire
-# JSON in memory whereas here only a few fields are required
+# using ijson instead of the standard json because latter always loads the entire JSON in memory
+# whereas only a few fields are required for the map, and hence using ijson is a bit faster as
+# well as far less memory consuming
 def build_aur_db_map(aur_packages: defaultdict[str, list[PackageAlternate]],
                      raise_error: bool) -> bool:
+    """
+    Like :func:`build_pacman_db_map` this will build a map of package names to a list of
+    `PackageAlternate` objects which contains the name, description, required dependencies and
+    optional dependencies of the package as well as any packages that provide this package.
+    The result is added to the passed `aur_packages` argument which should be a `defaultdict`.
+
+    :param aur_packages: a `defaultdict` which will be populated wih the package names as keys
+                         and list of `PackageAlternate` objects as the values
+    :param raise_error: if True, then raise an error if there was one while reading the AUR
+                        metadata else the method will return a boolean indicating success/failure
+    :return: True if `aur_packages` was successfully populated and False if there was an error
+             in reading the fetched AUR metadata
+    """
     try:
         with gzip.open(_AUR_META_FILE, mode="rt", encoding="utf-8") as aur_meta:
             for package in ijson.items(aur_meta, "item"):
@@ -132,8 +175,30 @@ def build_aur_db_map(aur_packages: defaultdict[str, list[PackageAlternate]],
 
 def find_opt_deps(package: str, installed: set[str],
                   all_packages: defaultdict[str, list[PackageAlternate]],
-                  opt_deps: dict[str, Tuple[str, int, bool]], max_level: int,
+                  opt_deps: dict[str, tuple[str, int, bool]], max_level: int,
                   level: int = 1) -> None:
+    """
+    Find and populate optional dependencies of a package till the given `level`. This will
+    recursively keep finding optional dependencies of all required and optional dependencies till
+    the `max_level` is not reached. For example, max_level=1 will obtain just the immediate
+    optional dependencies, max_level=2 will go one level down and also obtain any optional
+    dependencies of those as well as the required dependencies of the package, and so on.
+
+    The result is populated in the given `opt_deps` argument which is a dictionary having
+    package name as the key with a tuple having its description, the level it was found and
+    a boolean indicating whether the package is already installed or not.
+
+    :param package: name of the package whose optional dependencies have to be searched
+    :param installed: a set of all installed packages in the system
+    :param all_packages: a dictionary having all the available packages which includes those
+                         in pacman as well as AUR repositories
+    :param opt_deps: a dictionary which will be populated with the result having dependency name
+                     as the key with a tuple of description, level and whether package is installed
+    :param max_level: the maximum level to which the search will extend
+    :param level: the current level of search which will terminate if it exceed the `max_level`,
+                  defaults to 1 which should be what external callers should use while it will
+                  be incremented in recursive calls
+    """
     if level > max_level:
         return
     # arch linux names are always lower case though sometimes upper case parts can appear
@@ -164,20 +229,32 @@ def find_opt_deps(package: str, installed: set[str],
 
     if opts:
         for pkg in opts:
-            if pkg not in opt_deps:  # don't recurse on already encountered optional dependencies
-                # lookup description
-                dep_desc = ""
-                pkg = pkg.lower()
-                if opt_dep := all_packages.get(pkg):
-                    dep_desc = search_alternates(pkg, opt_dep)[1]
-                opt_deps[pkg] = (dep_desc, level, pkg in installed)
-    if required:
-        for pkg in required:
-            if pkg not in installed:
-                find_opt_deps(pkg, installed, all_packages, opt_deps, max_level, level + 1)
+            pkg = pkg.lower()
+            if pkg in opt_deps:  # don't recurse on already encountered optional dependencies
+                continue
+            # lookup description
+            dep_desc = ""
+            if opt_dep := all_packages.get(pkg):
+                dep_desc = search_alternates(pkg, opt_dep)[1]
+            opt_deps[pkg] = (dep_desc, level, pkg in installed)
+    if not required:
+        return
+    for pkg in required:
+        if pkg not in installed:
+            find_opt_deps(pkg, installed, all_packages, opt_deps, max_level, level + 1)
 
 
 def search_alternates(package_name: str, alternates: list[PackageAlternate]) -> PackageAlternate:
+    """
+    Search for a package in the given list of `PackageAlternate` objects, else if the package
+    is not found then the first element from the list is returned (which is the original package
+      name as populated by :func:`build_pacman_db_map` and :func:`build_aur_db_map`)
+
+    :param package_name: the package name to search
+    :param alternates: the list of `PackageAlternate` objects which is to be searched
+    :return: the `PackageAlternate` with matching package name or the first element in the
+             `alternates` list if the package was not found
+    """
     # choose the alternative with the same name else the first one
     for alternate in alternates:
         if alternate[0] == package_name:

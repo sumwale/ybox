@@ -1,0 +1,65 @@
+{
+    "firefox": {
+        "local_copies": [
+            "/usr/bin/firefox",
+            "/tmp/ybox-test-firefox.desktop"
+        ],
+        "copy_type": [
+            "EXECUTABLE",
+            "DESKTOP"
+        ],
+        "app_flags": {},
+        "dep_type": null,
+        "dep_of": "",
+        "containers": [
+            "ybox-arch_apps",
+            "ubuntu2204_games"
+        ]
+    },
+    "chromium": {
+        "local_copies": [
+            "/usr/bin/chromium",
+            "/usr/share/applications/chromium.desktop"
+        ],
+        "copy_type": [
+            "EXECUTABLE",
+            "DESKTOP"
+        ],
+        "app_flags": {
+            "chromium": "!p --disable-dev-shm-usage !a"
+        },
+        "dep_type": null,
+        "dep_of": "",
+        "containers": [
+            "ybox-arch_apps",
+            "ubuntu2204_games",
+            "archbox_games"
+        ]
+    },
+    "hunspell-en_us": {
+        "local_copies": [],
+        "copy_type": [],
+        "app_flags": {},
+        "dep_type": "OPTIONAL",
+        "dep_of": "firefox",
+        "containers": [
+            "ybox-arch_apps"
+        ]
+    },
+    "zoom": {
+        "local_copies": [
+            "/tmp/ybox-test-zoom",
+            "/usr/share/applications/zoom.desktop"
+        ],
+        "copy_type": [
+            "EXECUTABLE",
+            "DESKTOP"
+        ],
+        "app_flags": {},
+        "dep_type": null,
+        "dep_of": "",
+        "containers": [
+            "ybox-ubuntu2204_apps"
+        ]
+    }
+}

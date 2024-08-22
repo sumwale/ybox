@@ -1,7 +1,9 @@
-#!/bin/bash -e
+#!/bin/bash
 
-SCRIPT=$(basename "${BASH_SOURCE[0]}")
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+set -e
+
+SCRIPT="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
@@ -48,7 +50,7 @@ function link_config_files() {
         if [ -L "$home_file" ]; then
           rm -f "$home_file"
         fi
-        home_filedir=$(dirname "$home_file")
+        home_filedir="$(dirname "$home_file")"
         if [ ! -e "$home_filedir" ]; then
           mkdir -p "$home_filedir"
         fi
@@ -66,8 +68,8 @@ function link_config_files() {
 function install_apps() {
   # source PKGMGR_* variables from the configuration file created by 'ybox-create'
   source "$pkgmgr_conf"
-  if [ -z "$PKGMGR_INSTALL" -o -z "$PKGMGR_CLEANUP" ]; then
-    echo_color "$fg_red" "$pkgmgr_conf should define PKGMGR_INSTALL and PKGMGR_CLEANUP" >> $status_file
+  if [ -z "$PKGMGR_INSTALL" -o -z "$PKGMGR_CLEAN" ]; then
+    echo_color "$fg_red" "$pkgmgr_conf should define PKGMGR_INSTALL and PKGMGR_CLEAN" >> $status_file
     exit 1
   fi
   # install packages line by line
@@ -77,7 +79,7 @@ function install_apps() {
     echo_color "$fg_green" "Done." >> $status_file
   done < "$app_list"
   echo_color "$fg_green" "Cleaning up." >> $status_file
-  eval $PKGMGR_CLEANUP
+  eval $PKGMGR_CLEAN
 }
 
 # invoke the startup apps as listed in the container configuration file
@@ -131,7 +133,7 @@ if [ -n "$config_list" -a -z "$config_dir" ]; then
 fi
 
 # handle positional arguments
-if [ $(($# - $OPTIND)) -ne 0 ]; then
+if [ $(("$#" - "$OPTIND")) -ne 0 ]; then
   echo "$0: incorrect number of required arguments"
   show_usage
   exit 1
@@ -141,8 +143,8 @@ box_name="${@:$OPTIND:1}"
 # create/update some common directories that are mounted and may have root permissions
 dir_init=".cache .cache/fontconfig .config .config/pulse .local .local/share"
 dir_init+=" .local/share/ybox .local/share/ybox/$box_name Downloads"
-uid=$(id -u)
-gid=$(id -g)
+uid="$(id -u)"
+gid="$(id -g)"
 echo_color "$fg_orange" "Ensuring proper permissions for user directories" >> $status_file
 for d in $dir_init; do
   dir=$HOME/$d
@@ -160,7 +162,7 @@ fi
 sudo bash "$SCRIPT_DIR/entrypoint-root.sh"
 
 # run the distribution specific initialization scripts
-if [ -r "$SCRIPT_DIR/init.sh" ]; then
+if [ ! -e "$SCRIPT_DIR/ybox-init.done" ]; then
   echo_color "$fg_orange" "Running distribution's system initialization script" >> $status_file
   sudo -E bash "$SCRIPT_DIR/init.sh"
   if [ -r "$SCRIPT_DIR/init-user.sh" ]; then
@@ -195,7 +197,7 @@ function cleanup() {
   # clear status file first just in case other operations do not finish before SIGKILL comes
   echo -n > $status_file
   # first send SIGTERM to all "docker exec" processes that will have parent PID as 0
-  exec_pids=$(ps -e -o ppid=,pid= | awk '{ if ($1 == 0 && $2 != 1) print $2 }')
+  exec_pids="$(ps -e -o ppid=,pid= | awk '{ if ($1 == 0 && $2 != 1) print $2 }')"
   for pid in $exec_pids; do
     echo "Sending SIGTERM to $pid"
     kill -TERM $pid

@@ -1,0 +1,25 @@
+{
+  "include": [
+    "src",
+    "tests"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "src/ybox/conf",
+    "src/ybox/schema"
+  ],
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.9",
+  "pythonPlatform": "Linux",
+  "executionEnvironments": [
+    {
+      "root": "tests",
+      "extraPaths": [
+        "src"
+      ]
+    },
+    {
+      "root": "src"
+    }
+  ]
+}

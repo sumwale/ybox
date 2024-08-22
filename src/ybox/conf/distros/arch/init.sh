@@ -1,6 +1,8 @@
-#!/bin/bash -e
+#!/bin/bash
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
@@ -48,10 +50,8 @@ if [ -n "$CONFIGURE_FASTEST_MIRRORS" ] && ! pacman -Qq reflector 2>/dev/null >/d
   sed -i 's/^--latest.*/--latest 30\n--number 5\n--threads 5/' /etc/xdg/reflector/reflector.conf
   sed -i 's/^--sort.*/--sort rate/' /etc/xdg/reflector/reflector.conf
   reflector @/etc/xdg/reflector/reflector.conf 2>/dev/null
-  $PAC -Syu
-else
-  $PAC -Sy
 fi
+$PAC -Syu
 
 # for some reason TERMINFO_DIRS does not work for root user, so explicitly installing terminfo
 # packages for other terminal emulators available in arch which occupy only a tiny space

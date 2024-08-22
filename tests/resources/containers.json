@@ -1,0 +1,32 @@
+{
+    "ybox-arch_apps": {
+        "distribution": "arch",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/arch",
+        "profile": "profiles/apps.ini",
+        "destroy": false
+    },
+    "archbox_games": {
+        "distribution": "arch",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/arch",
+        "profile": "profiles/games.ini",
+        "destroy": false
+    },
+    "ubuntu2204_games": {
+        "distribution": "ubuntu2204",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/ub2204",
+        "profile": "profiles/games.ini",
+        "destroy": false
+    },
+    "ybox-ubuntu2204_apps": {
+        "distribution": "ubuntu2204",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/ub2204",
+        "profile": "profiles/apps.ini",
+        "destroy": true
+    },
+    "ybox-ubuntu2204_games": {
+        "distribution": "ubuntu2204",
+        "shared_root": "",
+        "profile": "profiles/games.ini",
+        "destroy": true
+    }
+}
