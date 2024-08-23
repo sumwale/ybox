@@ -43,7 +43,8 @@ def update_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     if packages:
         update_meta_cmd = pkgmgr[PkgMgr.UPDATE_META.value]
         update_pkgs_cmd = pkgmgr[PkgMgr.UPDATE.value].format(quiet=quiet_flag)
-        update_cmd = f"{{ {update_meta_cmd}; }} && {{ {update_pkgs_cmd} {' '.join(packages)}; }}"
+        update_cmd = (f"{{ {update_meta_cmd}; }} && "
+                      f"{{ {update_pkgs_cmd.format(packages=' '.join(packages))}; }}")
     else:
         update_cmd = pkgmgr[PkgMgr.UPDATE_ALL.value].format(quiet=quiet_flag)
     if shared_containers := state.get_other_shared_containers(conf.box_name,

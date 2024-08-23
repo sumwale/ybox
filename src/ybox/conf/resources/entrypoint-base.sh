@@ -93,6 +93,11 @@ while getopts "u:U:n:g:G:s:l:z:h" opt; do
   esac
 done
 
+# run the distribution specific initialization scripts
+if [ -r "$SCRIPT_DIR/init-base.sh" ]; then
+  /bin/bash "$SCRIPT_DIR/init-base.sh" >/dev/null
+fi
+
 # setup timezone
 if [ -n "$localtime" ]; then
   echo_color "$fg_blue" "Setting up timezone to $localtime"
@@ -115,11 +120,6 @@ useradd -m -g $group -G $secondary_groups \
   -u $uid -d /home/$user -s /bin/bash -c "$name" $user
 usermod --lock $user
 
-# run the distribution specific initialization scripts
-if [ -r "$SCRIPT_DIR/init-base.sh" ]; then
-  /bin/bash "$SCRIPT_DIR/init-base.sh" $user >/dev/null
-fi
-
 # add the given user for sudoers with NOPASSWD
 sudoers_file=/etc/sudoers.d/$user
 echo "$user ALL=(ALL:ALL) NOPASSWD: ALL" > $sudoers_file
@@ -127,10 +127,9 @@ chmod 0440 $sudoers_file
 echo_color "$fg_purple" "Added admin user '$user' to sudoers with NOPASSWD"
 
 # generate /etc/machine-id which is required by some apps
-if ! dbus-uuidgen --get=/etc/machine-id 2>/dev/null >/dev/null; then
-  rm -f /etc/machine-id
-  dbus-uuidgen --ensure=/etc/machine-id
-fi
+rm -f /etc/machine-id /var/lib/dbus/machine-id
+dbus-uuidgen --ensure=/etc/machine-id
+dbus-uuidgen --ensure
 
 # change ownership of user's /run/user/<uid> tree which may have root ownership due to the
 # docker bind mounts

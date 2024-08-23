@@ -70,8 +70,8 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
         package = inst_package
         print_info(f"Uninstalling {dep_msg}'{package}' from '{conf.box_name}'")
         code = int(run_command(build_bash_command(
-            docker_cmd, conf.box_name, f"{uninstall_cmd} {package}"), exit_on_error=False,
-            error_msg=f"uninstalling '{package}'"))
+            docker_cmd, conf.box_name, uninstall_cmd.format(package=package)),
+            exit_on_error=False, error_msg=f"uninstalling '{package}'"))
     else:
         print_error(f"Package '{package}' is not installed in container '{conf.box_name}'")
     # go ahead with removal from local state and wrappers, even if package was not installed

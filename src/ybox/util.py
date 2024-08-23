@@ -229,7 +229,8 @@ def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
     :param check_cmd: the command used to check the existence of the package
     :param package: name of the package to check
     :param container_name: name of the container
-    :return: exit code of the `check_cmd` which should be 0 if the package exists
+    :return: tuple of exit code of the `check_cmd` which should be 0 if the package exists,
+             and name of matching package name which can be different for a virtual package
     """
     check_result = subprocess.run(build_bash_command(
         docker_cmd, container_name, check_cmd.format(package=package), enable_pty=False),

@@ -9,7 +9,7 @@ on:
   push:
     branches: ['main']
   pull_request:
-    types: [review_requested]
+    types: [ready_for_review, review_requested]
   issue_comment:
     types: [created]
 
@@ -29,18 +29,18 @@ jobs:
     - name: Use Docker in rootless mode
       uses: ScribeMD/rootless-docker@0.2.2
     - uses: actions/checkout@v4
-    - name: Checkout branch for PR comment and get SHA
+    - name: Checkout branch for PR and output SHA
       id: 'get-sha'
       if: ${{ github.event_name == 'issue_comment' }}
       run: |
-        gh pr checkout $PR_NO --repo $REPO >/dev/null 2>/dev/null
-        echo ::set-output name=sha::$(gh pr view $PR_NO --repo $REPO --json headRefOid --jq '.headRefOid')
+        gh pr checkout $PR_NO --repo $REPO
+        echo "sha=$(gh pr view $PR_NO --repo $REPO --json headRefOid --jq '.headRefOid')" >> $GITHUB_OUTPUT
       env:
         REPO: ${{ github.repository }}
         PR_NO: ${{ github.event.issue.number }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Set status as pending
-      if: ${{ github.event_name == 'issue_comment' }}
+      if: ${{ github.event_name == 'issue_comment' && matrix.python-version == '3.9' }}
       uses: myrotvorets/set-commit-status-action@master
       with:
         sha: ${{ steps.get-sha.outputs.sha }}
@@ -57,7 +57,7 @@ jobs:
     - name: Run tox actions
       run: tox -- -s
     - name: Set status as ${{ job.status }}
-      if: ${{ github.event_name == 'issue_comment' }}
+      if: ${{ github.event_name == 'issue_comment' && matrix.python-version == '3.9' }}
       uses: myrotvorets/set-commit-status-action@master
       with:
         sha: ${{ steps.get-sha.outputs.sha }}

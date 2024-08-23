@@ -123,8 +123,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         if not quiet:
             print_info(f"Installing '{package}' in '{conf.box_name}'")
         code = int(run_command(build_bash_command(
-            docker_cmd, conf.box_name, f"{resolved_install_cmd} {package}"), exit_on_error=False,
-            error_msg=f"installing '{package}'"))
+            docker_cmd, conf.box_name, resolved_install_cmd.format(package=package)),
+            exit_on_error=False, error_msg=f"installing '{package}'"))
         # actual installed package name can be different due to package being virtual and/or
         # having multiple choices
         if code == 0:
