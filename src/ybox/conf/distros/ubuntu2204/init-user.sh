@@ -12,3 +12,10 @@ user_home="$(eval echo "~$current_user")"
 mkdir -p "$user_home/.gnupg"
 echo "keyserver $DEFAULT_GPG_KEY_SERVER" > "$user_home/.gnupg/dirmngr.conf"
 rm -f "$user_home"/.gnupg/*/*.lock
+
+echo_color "$fg_cyan" "Enabling python pip installation for $current_user" >> $status_file
+mkdir -p "$user_home/.config/pip"
+cat > "$user_home/.config/pip/pip.conf" << EOF
+[global]
+break-system-packages = true
+EOF
