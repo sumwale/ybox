@@ -272,7 +272,9 @@ def add_list(subparser: argparse.ArgumentParser) -> None:
                            help="show the output in 'plain' format rather than as a table with "
                                 "the fields separated by the given string; ; disables default "
                                 "pager so use explicit -P/--pager for pagination; it will also "
-                                "skip any truncation of the 'Dependency Of' column")
+                                "skip any truncation of the 'Dependency Of' column; DO NOT USE "
+                                "a single comma or similar as separator as they can be in output "
+                                "fields and will break parsing of the output")
     subparser.add_argument("-v", "--verbose", action="store_true",
                            help="show some package details including version, description and "
                                 "whether it is a dependency or a top-level package")
@@ -370,7 +372,9 @@ def add_repair(subparser: argparse.ArgumentParser) -> None:
     :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
     """
     subparser.add_argument("--extensive", action="store_true",
-                           help="repair thoroughly by reinstalling all packages")
+                           help="repair thoroughly by reinstalling all packages; CAUTION: use "
+                           "this only if the normal repair fails and the system cannot be "
+                           "recovered otherwise")
     subparser.set_defaults(func=repair_package_state)
 
 

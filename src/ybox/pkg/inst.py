@@ -61,6 +61,7 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     selected_deps = args.with_opt_deps.split(",") if args.with_opt_deps else None
     opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS.value]
     # TODO: use this flag for -w option only if get_optional_deps returned the package/provides;
+    #       when this is done, then the opt_dep_flag in distro.ini can have proper values
     #       also allow for re-installation of packages using a flag
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
     check_cmd = pkgmgr[PkgMgr.CHECK_INSTALL.value]

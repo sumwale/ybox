@@ -289,4 +289,5 @@ class FormatTable:
         """return formatted table as a string appropriate for display in the current terminal"""
         table = ((f"{c}{v}{fg.reset}" for v, c in zip(line, self.colors)) for line in self.table)
         headers = [f"{c}{h}{fg.reset}" for h, c in zip(self.headers, self.colors)]
-        return tabulate(table, headers, tablefmt=self.fmt, maxcolwidths=self.max_col_widths)
+        return tabulate(table, headers, tablefmt=self.fmt, disable_numparse=True,
+                        maxcolwidths=self.max_col_widths)

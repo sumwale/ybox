@@ -1,88 +1,74 @@
 """
 Format output of `pacman -Qi ...` as a table having four columns (Name, Version, Dependency Of,
-  Description) string-separated fields using provided separator.
+  Description) string-separated fields using a user provided separator.
 """
 
 import argparse
 import re
 import sys
+from collections import defaultdict
 
-_VAL_RE = re.compile(r"^\s*[^:]*:\s*")
-_WS_RE = re.compile(r"\s\s+")
+_VAL_RE = re.compile(r"\s*([^:]+?)\s*:\s*(.*?)\s*")
+_WS_RE = re.compile(r"\s{2,}")
 
 
 def parse_separator() -> str:
     """expect a single argument which will be used as the separator between the fields"""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Format output of 'pacman -Qi ...' into a table.")
     parser.add_argument("separator", type=str,
-                        help="use the given separator between the fields of the output")
+                        help="separator to use between the fields of the output")
     args = parser.parse_args()
     return args.separator
 
 
-def format_dep_of(req_by: str, opt_for: str) -> str:
+def format_dep_of(req_by: list[str], opt_for: list[str]) -> str:
     """format the `Dependency Of` column to include the required and optional dependencies"""
-    dep_of_total_width = 0
-    if req_by == "None":
-        req_by = ""
-    elif req_by:
-        req_by = _WS_RE.sub(" ", req_by)
-        dep_of_total_width += len(req_by) + 6  # +6 due to being surrounded by 'req()'
-    if opt_for == "None":
-        opt_for = ""
-    elif opt_for:
-        opt_for = _WS_RE.sub(" ", opt_for)
-        dep_of_total_width += len(opt_for) + 6  # +6 due to being surrounded by 'opt()'
+    if req_by:
+        req_by = [] if req_by[0] == "None" else [_WS_RE.sub(" ", req) for req in req_by]
+    if opt_for:
+        opt_for = [] if opt_for[0] == "None" else [_WS_RE.sub(" ", opt) for opt in opt_for]
 
     dep_of_parts: list[str] = []
     if req_by:
-        dep_of_parts.extend(("req(", req_by, ")"))
+        dep_of_parts.extend(("req(", *req_by, ")"))
     if opt_for:
         if req_by:
             dep_of_parts.append(",")
-        dep_of_parts.extend(("opt(", opt_for, ")"))
+        dep_of_parts.extend(("opt(", *opt_for, ")"))
     return "".join(dep_of_parts)
 
 
 def process() -> None:
-    """process pacman output on stdin to create a table or plain output"""
-    plain_sep = parse_separator()
-    name = version = description = req_by = opt_for = ""
-    req_by_start = opt_for_start = False
+    """process pacman output on stdin to create fields separated by a given separator"""
+    sep = parse_separator()
+    pkg_map: defaultdict[str, list[str]] = defaultdict(list[str])
+    key = ""
+
+    def k_val(key: str) -> str:
+        """return the value of the key in `pkg_map` as a single string"""
+        return "".join(pkg_map[key])
 
     def format_package() -> None:
         """format details of a package as a table or a plain line with given separator"""
-        dep_of = format_dep_of(req_by, opt_for)
-        print(f"{name}{plain_sep}{version}{plain_sep}{dep_of}{plain_sep}{description}")
+        dep_of = format_dep_of(pkg_map["Required By"], pkg_map["Optional For"])
+        print(f"{k_val('Name')}{sep}{k_val('Version')}{sep}{dep_of}{sep}{k_val('Description')}")
 
     for line in sys.stdin:
-        if line.startswith("Name"):
-            if name:
+        if (match := _VAL_RE.fullmatch(line)):
+            key, value = match.groups()
+            if key == "Name" and pkg_map:
+                # indicates start of fields of a new package, so output previous one and clear
                 format_package()
-                req_by = opt_for = ""
-            name = _VAL_RE.sub("", line).rstrip()
-        elif line.startswith("Version"):
-            version = _VAL_RE.sub("", line).rstrip()
-        elif line.startswith("Description"):
-            description = _VAL_RE.sub("", line).rstrip()
-        elif line.startswith("Required By"):
-            req_by = _VAL_RE.sub("", line).rstrip()
-            req_by_start = True
-            opt_for_start = False
-        elif line.startswith("Optional For"):
-            opt_for = _VAL_RE.sub("", line).rstrip()
-            opt_for_start = True
-            req_by_start = False
+                pkg_map.clear()
+            pkg_map[key].append(value)
         elif line and line[0].isspace():
-            # "Required By" and "Optional For" can have multiline output
-            if req_by_start:
-                req_by += line.rstrip()
-            elif opt_for_start:
-                opt_for += line.rstrip()
-        elif req_by_start or opt_for_start:
-            req_by_start = opt_for_start = False
-    # add the last one
-    if name:
+            # "Description", "Required By" and "Optional For" can have multiline output
+            val_list = pkg_map[key]
+            # add space separately to avoid adding it separately in `format_dep_of``
+            val_list.append(" ")
+            val_list.append(line.strip())
+    # output the last package
+    if pkg_map:
         format_package()
 
 

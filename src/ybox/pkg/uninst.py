@@ -34,8 +34,8 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value] if args.quiet else ""
     purge_flag = "" if args.keep_config_files else pkgmgr[PkgMgr.PURGE_FLAG.value]
     remove_deps_flag = "" if args.skip_deps else pkgmgr[PkgMgr.REMOVE_DEPS_FLAG.value]
-    uninstall_cmd = pkgmgr[PkgMgr.UNINSTALL.value].format(quiet=quiet_flag, purge=purge_flag,
-                                                          remove_deps=remove_deps_flag)
+    uninstall_cmd = pkgmgr[PkgMgr.UNINSTALL.value].format(
+        quiet=quiet_flag, purge=purge_flag, remove_deps=remove_deps_flag, package="{package}")
     check_cmd = pkgmgr[PkgMgr.CHECK_INSTALL.value]
     return _uninstall_package(package, args.skip_deps, uninstall_cmd, check_cmd, docker_cmd, conf,
                               runtime_conf, state)

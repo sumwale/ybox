@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
 echo_color "$fg_cyan" "Configuring apt" >> $status_file
+export HOME=/root
 export DEBIAN_FRONTEND=noninteractive
 # don't install recommended and suggested packages by default
 cat > /etc/apt/apt.conf.d/10-ybox << EOF
@@ -16,32 +17,58 @@ APT::Install-Recommends "0";
 APT::Install-Suggests "0";
 EOF
 
+if [ -f /etc/dpkg/dpkg.cfg.d/excludes ]; then
+  echo_color "$fg_cyan" "Removing dpkg excludes" >> $status_file
+  mv /etc/dpkg/dpkg.cfg.d/excludes /etc/dpkg/dpkg.cfg.d/excludes.dpkg-tmp
+elif [ -f /etc/dpkg/dpkg.cfg.d/docker ]; then
+  echo_color "$fg_cyan" "Removing dpkg docker excludes" >> $status_file
+  mv /etc/dpkg/dpkg.cfg.d/docker /etc/dpkg/dpkg.cfg.d/docker.dpkg-tmp
+fi
+
 apt-get update
 apt-get install -y lsb-release
-rel_name=$(lsb_release -cs)
 
-mv /etc/apt/sources.list /etc/apt/sources.list.bak
-cat > /etc/apt/sources.list << EOF
-deb http://us.archive.ubuntu.com/ubuntu/ $rel_name main restricted universe multiverse
-deb http://us.archive.ubuntu.com/ubuntu/ $rel_name-updates main restricted universe multiverse
-deb http://us.archive.ubuntu.com/ubuntu/ $rel_name-backports main restricted universe multiverse
-deb http://us.archive.ubuntu.com/ubuntu/ $rel_name-security main restricted universe multiverse
-EOF
+if [ "$(lsb_release -is 2>/dev/null)" = "Ubuntu" ]; then
+  rel_name="$(lsb_release -cs 2>/dev/null)"
+  # switch to the US mirror because fastest mirrors determined automatically occasionally break
+  for f in /etc/apt/sources.list.d/ubuntu.sources \
+           /etc/apt/sources.list.d/offical-package-repositories.list \
+           /etc/apt/sources.list; do
+    if [ -f $f ]; then
+      source_file=$f
+      break
+    fi
+  done
+  if [ -n "$source_file" ]; then
+    cp $source_file ${source_file}.bak
+    sed -i 's,https\?://[^[:space:]]*ubuntu.com[^[:space:]]*,http://us.archive.ubuntu.com/ubuntu/,' $source_file
+  fi
+else
+  rel_name=jammy # use jammy for apt-get install which works on all recent Debian releases
+fi
 
 echo_color "$fg_cyan" "Setting up apt-fast" >> $status_file
 apt-get update
 apt-get install --install-recommends -y curl gnupg
 echo -e "deb [signed-by=/etc/apt/keyrings/apt-fast.gpg] http://ppa.launchpad.net/apt-fast/stable/ubuntu $rel_name main" \
     > /etc/apt/sources.list.d/apt-fast.list
-mkdir -p /etc/apt/keyrings
-curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xA2166B8DE8BDC3367D1901C11EE2FF37CA8DA16B" | \
-    gpg --dearmor -o /etc/apt/keyrings/apt-fast.gpg
+mkdir -p /etc/apt/keyrings $HOME/.gnupg && chmod 0700 $HOME/.gnupg
+GPG_CMD="gpg --no-default-keyring --keyring /tmp/apt-fast-keyring.gpg"
+$GPG_CMD --keyserver $DEFAULT_GPG_KEY_SERVER --recv-key 0xBC5934FD3DEBD4DAEA544F791E2824A7F22B44BD
+$GPG_CMD --output /etc/apt/keyrings/apt-fast.gpg --export && rm -f /tmp/apt-fast-keyring.gpg
 apt-get update
 apt-get install -y apt-fast
+# update couple of apt-fast defaults (both conf file and debconf selection need to be changed)
+sed -i 's/^_APTMGR=.*/_APTMGR=apt/' /etc/apt-fast.conf
+sed -i 's/^_MAXNUM=.*/_MAXNUM=8/' /etc/apt-fast.conf
+echo "apt-fast apt-fast/aptmanager select apt" | debconf-set-selections
+echo "apt-fast apt-fast/maxdownloads select 8" | debconf-set-selections
 DOWNLOADBEFORE=true apt-fast full-upgrade -y
 
-echo_color "$fg_cyan" "Running unminimize" >> $status_file
-yes | unminimize
+if type unminimize 2>/dev/null >/dev/null; then
+  echo_color "$fg_cyan" "Running unminimize" >> $status_file
+  yes | unminimize
+fi
 
 # generate the configured locale and assume it is UTF-8
 echo_color "$fg_cyan" "Configuring locale" >> $status_file

@@ -99,7 +99,7 @@ def _build_table_transform(args: argparse.Namespace, separator: str,
         # outline formats like 'rounded_outline' would be preferable, but unfortunately they
         # are broken for multiline values, hence using the relatively better looking format
         # from the non-broken ones
-        return FormatTable(table, headers, colors, "psql", (2.0, 1.0)).show()
+        return FormatTable(table, headers, colors, "psql", (1.0, 1.0)).show()
 
     def as_long_table(s: str) -> str:
         """
@@ -138,7 +138,9 @@ def _format_long_line(line: str, separator: str, dep_of_width: int,
     :return: tuple of formatted (<name>, <version>, <dependency of>, <description>) fields
     """
     name, version, dep_of, description = line.split(separator, maxsplit=3)
-    if dep_of and (dep_of_match := _DEP_OF_RE.match(dep_of)):
+    # replace literal "\n" with newline
+    description = description.replace(r"\n", "\n")
+    if dep_of and (dep_of_match := _DEP_OF_RE.fullmatch(dep_of)):
         dep_of_dict = dep_of_match.groupdict()
         req_by = dep_of_dict.get("req") or ""
         opt_for = dep_of_dict.get("opt") or ""

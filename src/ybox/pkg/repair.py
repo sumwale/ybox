@@ -132,18 +132,18 @@ def _remove_locks(pkgmgr: SectionProxy, docker_cmd: str, containers: list[str],
     :param quiet: if True then skip user confirmation before removing any lock files
     """
     locks_pattern = pkgmgr[PkgMgr.LOCKS_PATTERN.value]
-    ls_cmd = f"/bin/ls {locks_pattern.replace(',', ' ')}"
+    ls_cmd = f"/bin/ls {locks_pattern.replace(',', ' ')} 2>/dev/null"
     for container in containers:
-        print_info(f"Checking for dangling locks in container '{container}'")
+        print_info(f"Checking for lock files in container '{container}'")
         ls_result = subprocess.run(build_bash_command(docker_cmd, container, ls_cmd),
                                    check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         # confirm with user before removing locks
-        if not (locks := ls_result.stdout.decode("utf-8").splitlines()):
+        if not (locks := ls_result.stdout.decode("utf-8").split()):
             continue
-        print_color(f"Found dangling lock file(s) {locks} in container '{container}'",
+        print_color(f"Found existing lock file(s) {locks} in container '{container}'",
                     fgcolor.cyan)
         resp = "y" if quiet else input("Remove the above lock file(s)? (y/N) ")
         if resp.strip().lower() == "y":
-            docker_args = [docker_cmd, "exec", container, "/usr/bin/sudo", "/bin/rm", "-f"]
+            docker_args = [docker_cmd, "exec", container, "/usr/bin/sudo", "/bin/rm"]
             docker_args.extend(locks)
             run_command(docker_args, exit_on_error=False, error_msg="removing lock files")

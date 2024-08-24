@@ -6,7 +6,6 @@ import argparse
 import subprocess
 import sys
 from configparser import SectionProxy
-from itertools import chain
 from typing import Iterable, Sequence
 
 from ybox.cmd import (PkgMgr, RepoCmd, build_bash_command, page_output,
@@ -203,8 +202,7 @@ def repo_list(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy
     separator: str = args.plain_separator or ""
 
     def plain_output(tbl: Iterable[Iterable[str]], hdr: Sequence[str]) -> str:
-        return "\n".join(chain((separator.join(hdr),),
-                               (separator.join(line) for line in tbl)))
+        return "\n".join((separator.join(hdr), *(separator.join(line) for line in tbl)))
 
     repos = state.get_repositories(runtime_conf.shared_root or conf.box_name)
     if not repos:
