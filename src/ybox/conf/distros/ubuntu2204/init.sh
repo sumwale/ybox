@@ -27,19 +27,6 @@ EOF
 
 if [ "$(sed -n 's/^ID=//p' /etc/os-release)" = "ubuntu" ]; then
   rel_name="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)"
-  # switch to the US mirror because fastest mirrors determined automatically occasionally break
-  for f in /etc/apt/sources.list.d/ubuntu.sources \
-           /etc/apt/sources.list.d/offical-package-repositories.list \
-           /etc/apt/sources.list; do
-    if [ -f $f ]; then
-      source_file=$f
-      break
-    fi
-  done
-  if [ -n "$source_file" ]; then
-    cp $source_file ${source_file}.bak
-    sed -i 's,https\?://[^[:space:]]*ubuntu.com[^[:space:]]*,http://us.archive.ubuntu.com/ubuntu/,' $source_file
-  fi
 else
   rel_name=jammy # use jammy for apt-fast install which works on all recent Debian releases
 fi
@@ -51,10 +38,10 @@ keyring_file=/etc/apt/keyrings/apt-fast.gpg
 rm -f $keyring_file
 echo -e "deb [signed-by=$keyring_file] http://ppa.launchpad.net/apt-fast/stable/ubuntu $rel_name main" \
     > /etc/apt/sources.list.d/apt-fast.list
-mkdir -p /etc/apt/keyrings $HOME/.gnupg && chmod 0700 $HOME/.gnupg
-GPG_CMD="gpg --no-default-keyring --keyring /tmp/apt-fast-keyring.gpg"
-$GPG_CMD --keyserver $DEFAULT_GPG_KEY_SERVER --recv-key 0xBC5934FD3DEBD4DAEA544F791E2824A7F22B44BD
-$GPG_CMD --output $keyring_file --export && rm -f /tmp/apt-fast-keyring.gpg*
+mkdir -p /etc/apt/keyrings
+bash "$SCRIPT_DIR/fetch-gpg-key-id.sh" 0xBC5934FD3DEBD4DAEA544F791E2824A7F22B44BD \
+     "$DEFAULT_GPG_KEY_SERVER" $keyring_file
+
 apt-get update
 apt-get install -y apt-fast
 # update couple of apt-fast defaults (both conf file and debconf selection need to be changed)
@@ -65,17 +52,21 @@ echo "apt-fast apt-fast/maxdownloads select 6" | debconf-set-selections
 
 echo_color "$fg_cyan" "Upgrading all packages" >> $status_file
 export DOWNLOADBEFORE=true
-apt-fast full-upgrade -y
+apt-fast full-upgrade -y --autoremove
 
 # skip unminimize if not installing any recommended packages which should happen only in testing
 if [ -n "$RECOMMENDED_PKGS" ]; then
-  unminimize_path=$(type -p unminimize 2>/dev/null)
+  unminimize_path="$(type -p unminimize 2>/dev/null)"
   if [ -n "$unminimize_path" ]; then
     echo_color "$fg_cyan" "Running unminimize" >> $status_file
-    sed -i 's/apt-get/apt-fast/g' $unminimize_path
-    yes | $unminimize_path
+    sed -i 's/apt-get/apt-fast/g' "$unminimize_path"
+    yes | "$unminimize_path"
   fi
 fi
+
+# packages can be marked as manually installed in the base image, so mark most of them as auto
+apt-mark auto $(apt-mark showinstall) >/dev/null
+apt-mark manual procps sudo curl gnupg lsb-release apt-fast
 
 # generate the configured locale and assume it is UTF-8
 echo_color "$fg_cyan" "Configuring locale" >> $status_file
@@ -119,7 +110,10 @@ if ! grep -q '^export LANG=' /etc/bash.bashrc && [ -n "$LANG" -a "$LANG" != "C.U
   fi
 fi
 
-echo_color "$fg_cyan" "Installing starship for fancy bash prompt" >> $status_file
-curl -sSL https://starship.rs/install.sh -o starship-install.sh && \
-  /bin/sh starship-install.sh -y && rm -f starship-install.sh /tmp/tmp.*
-echo -e 'eval "$(starship init bash)"' >> /etc/bash.bashrc
+# skip starship if not installing any recommended packages which should happen only in testing
+if [ -n "$RECOMMENDED_PKGS" ]; then
+  echo_color "$fg_cyan" "Installing starship for fancy bash prompt" >> $status_file
+  curl -sSL https://starship.rs/install.sh -o starship-install.sh && \
+    /bin/sh starship-install.sh -y && rm -f starship-install.sh /tmp/tmp.*
+  echo -e 'eval "$(starship init bash)"' >> /etc/bash.bashrc
+fi

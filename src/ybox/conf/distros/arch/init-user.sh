@@ -9,7 +9,7 @@ source "$SCRIPT_DIR/entrypoint-common.sh"
 current_user="$(id -un)"
 user_home="$(eval echo "~$current_user")"
 # set gpg keyserver to an available one
-mkdir -p "$user_home/.gnupg"
+mkdir -p "$user_home/.gnupg" && chmod 0700 "$user_home/.gnupg"
 echo "keyserver $DEFAULT_GPG_KEY_SERVER" > "$user_home/.gnupg/dirmngr.conf"
 rm -f "$user_home"/.gnupg/*/*.lock
 

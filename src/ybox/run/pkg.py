@@ -390,7 +390,7 @@ def add_repo_add(subparser: argparse.ArgumentParser) -> None:
                                 "a GPG/PGP signing key); this can be a URL to the key file or a "
                                 "key ID that can be retrieved from default key server as "
                                 "configured in the distribution's configuration file or the one "
-                                "mentioned by the -s/--key-server option")
+                                "provided by the -s/--key-server option")
     subparser.add_argument("-s", "--key-server", type=str,
                            help="URL of the key server to be used for retrieving a key by ID "
                                 "which will override the default key server configured in the "
@@ -404,9 +404,12 @@ def add_repo_add(subparser: argparse.ArgumentParser) -> None:
                            help="for distributions like debian/ubuntu, this specifies that the "
                                 "repository for package sources (deb-src) should also be added "
                                 "using the same specification as the package repository")
-    subparser.add_argument("name", type=str, help="name for the package repository to be added")
+    subparser.add_argument("name", type=str,
+                           help="unique name for the package repository to be added")
     subparser.add_argument("urls", nargs="+",
-                           help="one or more server URLs of the package repository")
+                           help="one or more server URLs of the package repository; "
+                           "note that the current distribution may only support a single URL "
+                           "(e.g. Ubuntu/Debian), so providing multiple URLs can fail")
     subparser.set_defaults(is_repo_cmd=True)
     subparser.set_defaults(func=repo_add)
 
@@ -418,6 +421,9 @@ def add_repo_remove(subparser: argparse.ArgumentParser) -> None:
 
     :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
     """
+    subparser.add_argument("-f", "--force", action="store_true",
+                           help="force remove repository registeration even on failure of "
+                           "removal of key and/or repository details")
     subparser.add_argument("name", type=str, help="name of the package repository to be removed")
     subparser.set_defaults(is_repo_cmd=True)
     subparser.set_defaults(func=repo_remove)

@@ -3,6 +3,7 @@ Methods for repository management including adding, removing and listing reposit
 """
 
 import argparse
+import re
 import subprocess
 import sys
 from configparser import SectionProxy
@@ -51,32 +52,47 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
                     f"'{conf.box_name}'{shared_root_msg}")
         return 1
 
+    exists_cmd = repo[RepoCmd.EXISTS.value].format(name=name)
+    if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, exists_cmd),
+                    exit_on_error=False, error_msg="SKIP"))) == 0:
+        print_error(f"Repository with name '{name}' already present in the package manager "
+                    f"for the container '{conf.box_name}' [distribution: {conf.distribution}]")
+        return 1
+
     # first fetch and register the key if specified
     if key:
         print_info(f"Fetching and registering key '{key}'")
         key_server: str = args.key_server or repo.get(RepoCmd.DEFAULT_GPG_KEY_SERVER.value,
                                                       fallback="")
-        add_key_cmd = repo[RepoCmd.ADD_KEY.value].format(key=key, server=key_server)
-        with subprocess.Popen(build_bash_command(docker_cmd, conf.box_name, add_key_cmd),
-                              stdout=subprocess.PIPE) as key_result:
-            # check if actual registered key is different from the provided one (e.g. the provided
-            #   one can be a file URL while registered one can be a GPG/PGP key fingerprint)
-            keyid_tag = "KEYID="
-            assert key_result.stdout is not None
-            while line := key_result.stdout.readline():
-                key_out = line.decode("utf-8").strip()
-                if key_out.startswith(keyid_tag):
-                    if (keyid := key_out[len(keyid_tag):]) != key:
-                        key = keyid
-                        print_info(f"Registered key '{key}'")
-                        state.register_repository(name, container_or_shared_root, urls, key,
-                                                  options, with_source_repo, update=True)
-                else:
-                    sys.stdout.buffer.write(line)
-                    sys.stdout.flush()
-            if (code := key_result.wait(60)) != 0:
-                print_error(f"FAILED to register key '{key}' for repository '{name}' -- "
-                            "see the output above for details.")
+        if re.match(r"^\S*?://", key):
+            add_key_cmd = repo[RepoCmd.ADD_KEY.value].format(url=key, name=name)
+            print_info(f"Registering key from URL '{key}'")
+            with subprocess.Popen(build_bash_command(docker_cmd, conf.box_name, add_key_cmd),
+                                  stdout=subprocess.PIPE) as key_result:
+                # fetch the key ID from the output to register it
+                keyid_tag = "KEYID="
+                assert key_result.stdout is not None
+                while line := key_result.stdout.readline():
+                    key_out = line.decode("utf-8").strip()
+                    if key_out.startswith(keyid_tag):
+                        if (keyid := key_out[len(keyid_tag):]) != key:
+                            key = keyid
+                            print_info(f"Registered key '{key}'")
+                            state.register_repository(name, container_or_shared_root, urls, key,
+                                                      options, with_source_repo, update=True)
+                    else:
+                        sys.stdout.buffer.write(line)
+                        sys.stdout.flush()
+                if (code := key_result.wait(60)) != 0:
+                    print_error(f"FAILED to register key '{key}' for repository '{name}' -- "
+                                "see the output above for details.")
+                    return code
+        else:
+            add_key_cmd = repo[RepoCmd.ADD_KEY_ID.value].format(key=key, server=key_server,
+                                                                name=name)
+            print_info(f"Registering key '{key}'")
+            if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, add_key_cmd),
+                            exit_on_error=False, error_msg="registering repository key"))) != 0:
                 return code
 
     # in case of failures, unregister key and/or repository at the end
@@ -115,7 +131,7 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
                             exit_on_error=False, error_msg=f"unregistering repository '{name}'")
             if key:
                 print_info(f"Trying to unregister key for failed repository '{name}'")
-                remove_key_cmd = repo[RepoCmd.REMOVE_KEY.value].format(key=key)
+                remove_key_cmd = repo[RepoCmd.REMOVE_KEY.value].format(key=key, name=name)
                 run_command(build_bash_command(docker_cmd, conf.box_name, remove_key_cmd),
                             exit_on_error=False, error_msg=f"unregistering key '{key}'")
 
@@ -150,20 +166,21 @@ def repo_remove(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionPro
     # first unregister the repository key, if any
     if key:
         print_info(f"Unregistering repository key '{key}'")
-        remove_key_cmd = repo[RepoCmd.REMOVE_KEY.value].format(key=key)
-        if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, remove_key_cmd),
-                                    exit_on_error=False,
-                                    error_msg=f"unregistering key '{key}'"))) != 0:
+        remove_key_cmd = repo[RepoCmd.REMOVE_KEY.value].format(key=key, name=name)
+        if (code := int(run_command(build_bash_command(
+                docker_cmd, conf.box_name, remove_key_cmd), exit_on_error=False,
+                error_msg=f"unregistering key '{key}'"))) != 0 and not args.force:
             return code
     # next remove the repository
     print_info(f"Unregistering repository '{name}'")
     remove_cmd = repo[RepoCmd.REMOVE.value].format(name=name, remove_source=with_source_repo)
-    if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, remove_cmd),
-                                exit_on_error=False,
-                                error_msg=f"unregistering repository '{name}'"))) != 0:
+    if (code := int(run_command(build_bash_command(
+            docker_cmd, conf.box_name, remove_cmd), exit_on_error=False,
+            error_msg=f"unregistering repository '{name}'"))) != 0 and not args.force:
         return code
     # finally update package metadata
-    return _refresh_package_metadata(pkgmgr, docker_cmd, conf)
+    code = _refresh_package_metadata(pkgmgr, docker_cmd, conf)
+    return 0 if args.force else code
 
 
 def _refresh_package_metadata(pkgmgr: SectionProxy, docker_cmd: str,

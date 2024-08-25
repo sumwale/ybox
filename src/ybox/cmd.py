@@ -58,6 +58,7 @@ class RepoCmd(str, Enum):
     EXISTS = "exists"
     DEFAULT_GPG_KEY_SERVER = "default_gpg_key_server"
     ADD_KEY = "add_key"
+    ADD_KEY_ID = "add_key_id"
     ADD = "add"
     ADD_SOURCE = "add_source"
     REMOVE_KEY = "remove_key"
@@ -295,6 +296,8 @@ def page_command(cmd: Union[str, list[str]], pager: str, error_msg: Optional[str
     result = run_command(cmd, capture_output=True, exit_on_error=False, error_msg=error_msg)
     if isinstance(result, int):
         return result
+    if not result:
+        return 0
     result_bytes = transform(result).encode("utf-8") if transform else result.encode("utf-8")
     output = (header.encode("utf-8"), result_bytes) if header else (result_bytes,)
     return page_output(output, pager)
