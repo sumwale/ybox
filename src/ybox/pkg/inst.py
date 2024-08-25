@@ -298,7 +298,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
         return []
     wrapper_files: list[str] = []
     desktop_dirs = Consts.container_desktop_dirs()
-    executable_dirs = Consts.container_executable_dirs()
+    executable_dirs = Consts.container_bin_dirs()
     man_dir_pattern = Consts.container_man_dir_pattern()
     # get the parsed container configuration
     parsed_box_conf = _get_parsed_box_conf(box_conf)

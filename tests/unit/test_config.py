@@ -93,12 +93,11 @@ def test_consts():
     assert Consts.resource_scripts() == expected_scripts
     assert Consts.shared_root_mount_dir() == "/ybox-root"
     assert Consts.status_target_file() == "/usr/local/ybox-status"
-    assert Consts.distribution_scripts() == ["init-base.sh", "init.sh", "init-user.sh"]
     assert Consts.entrypoint_init_done_file() == "ybox-init.done"
     assert Consts.container_desktop_dirs() == ["/usr/share/applications"]
     expected_exec_dirs = ["/usr/bin", "/usr/sbin", "/bin", "/sbin",
                           "/usr/local/bin", "/usr/local/sbin"]
-    assert Consts.container_executable_dirs() == expected_exec_dirs
+    assert Consts.container_bin_dirs() == expected_exec_dirs
     for man_dir in ("/usr/share/man", "/usr/man", "/usr/local/share/man", "/usr/local/man"):
         for sub_dir in (f"man{idx}" for idx in range(10)):
             assert Consts.container_man_dir_pattern().match(f"{man_dir}/{sub_dir}")

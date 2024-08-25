@@ -179,16 +179,13 @@ def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: Con
         path = env.search_config_path(f"resources/{script}", only_sys_conf=True)
         copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
     # also copy distribution specific scripts
-    for script in Consts.distribution_scripts():
-        path = env.search_config_path(conf.distribution_config(conf.distribution, script),
-                                      only_sys_conf=True)
-        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
     base_section = distro_config["base"]
     if scripts := base_section.get("scripts"):
         for script in scripts.split(","):
+            script = script.strip()
             path = env.search_config_path(conf.distribution_config(conf.distribution, script),
                                           only_sys_conf=True)
-            copy_file(path, f"{conf.scripts_dir}/{script}")
+            copy_file(path, f"{conf.scripts_dir}/{os.path.basename(script)}")
         # finally copy the ybox python module which may be used by distribution scripts
         src_dir = files("ybox")
         dest_dir = f"{conf.scripts_dir}/ybox"

@@ -274,7 +274,7 @@ def test_page_command(capfd: pytest.CaptureFixture[str]):
     """check various cases for `page_command` function"""
     # first check normal output with or without pager
     check_str = "test page_command"
-    cmd = f"/usr/bin/echo -n '{check_str}'"
+    cmd = f"/bin/echo -n '{check_str}'"
     pager = "/usr/bin/less -RL"
     assert page_command(cmd, "") == 0
     captured = capfd.readouterr()
@@ -292,6 +292,8 @@ def test_page_command(capfd: pytest.CaptureFixture[str]):
     assert page_command(cmd, "/non-existent") == 2
     captured = capfd.readouterr()
     assert "FAILURE invoking pager '/non-existent'" in captured.out
+    # check empty output from command
+    assert page_command("/bin/echo -n ''", pager) == 0
     # check output transform
     assert page_command(cmd, pager, transform=lambda s: s.upper()) == 0
     captured = capfd.readouterr()

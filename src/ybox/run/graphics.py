@@ -141,7 +141,7 @@ def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
     nvidia_setup = _create_nvidia_setup(docker_args, mount_lib_dirs)
 
     # mount nvidia binary directories and add code to script to link to them in container
-    nvidia_bin_dirs = _filter_nvidia_dirs({realpath(d) for d in _STD_BIN_DIRS},
+    nvidia_bin_dirs = _filter_nvidia_dirs({realpath(d) for d in Consts.container_bin_dirs()},
                                           _NVIDIA_BIN_PATTERNS)
     mount_bin_dirs = _prepare_mount_dirs(nvidia_bin_dirs, docker_args,
                                          f"{mount_nvidia_subdir}/mnt_bin")
