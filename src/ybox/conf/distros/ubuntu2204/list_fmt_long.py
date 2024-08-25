@@ -24,7 +24,7 @@ def parse_separator():
     return args.separator
 
 
-def format_dep_of(req_parts: Iterable[str], opt_parts: Iterable[str] = []) -> str:
+def format_dep_of(req_parts: Iterable[str], opt_parts: Iterable[str]) -> str:
     """format the `Dependency Of` column to include the required and optional dependencies"""
     dep_of_parts = [f"req({' '.join(req_parts)})"] if req_parts else []
     if opt_parts:

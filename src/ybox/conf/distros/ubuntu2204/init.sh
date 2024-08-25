@@ -6,7 +6,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
-echo_color "$fg_cyan" "Configuring apt" >> $status_file
+if [ -f /etc/dpkg/dpkg.cfg.d/excludes ]; then
+  echo_color "$fg_cyan" "Removing dpkg excludes" >> $status_file
+  mv /etc/dpkg/dpkg.cfg.d/excludes /etc/dpkg/dpkg.cfg.d/excludes.dpkg-tmp
+elif [ -f /etc/dpkg/dpkg.cfg.d/docker ]; then
+  echo_color "$fg_cyan" "Removing dpkg docker excludes" >> $status_file
+  mv /etc/dpkg/dpkg.cfg.d/docker /etc/dpkg/dpkg.cfg.d/docker.dpkg-tmp
+fi
+
+echo_color "$fg_cyan" "Configuring apt and updating package list" >> $status_file
 export HOME=/root
 export DEBIAN_FRONTEND=noninteractive
 # don't install recommended and suggested packages by default
@@ -17,19 +25,8 @@ APT::Install-Recommends "0";
 APT::Install-Suggests "0";
 EOF
 
-if [ -f /etc/dpkg/dpkg.cfg.d/excludes ]; then
-  echo_color "$fg_cyan" "Removing dpkg excludes" >> $status_file
-  mv /etc/dpkg/dpkg.cfg.d/excludes /etc/dpkg/dpkg.cfg.d/excludes.dpkg-tmp
-elif [ -f /etc/dpkg/dpkg.cfg.d/docker ]; then
-  echo_color "$fg_cyan" "Removing dpkg docker excludes" >> $status_file
-  mv /etc/dpkg/dpkg.cfg.d/docker /etc/dpkg/dpkg.cfg.d/docker.dpkg-tmp
-fi
-
-apt-get update
-apt-get install -y lsb-release
-
-if [ "$(lsb_release -is 2>/dev/null)" = "Ubuntu" ]; then
-  rel_name="$(lsb_release -cs 2>/dev/null)"
+if [ "$(sed -n 's/^ID=//p' /etc/os-release)" = "ubuntu" ]; then
+  rel_name="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)"
   # switch to the US mirror because fastest mirrors determined automatically occasionally break
   for f in /etc/apt/sources.list.d/ubuntu.sources \
            /etc/apt/sources.list.d/offical-package-repositories.list \
@@ -44,35 +41,45 @@ if [ "$(lsb_release -is 2>/dev/null)" = "Ubuntu" ]; then
     sed -i 's,https\?://[^[:space:]]*ubuntu.com[^[:space:]]*,http://us.archive.ubuntu.com/ubuntu/,' $source_file
   fi
 else
-  rel_name=jammy # use jammy for apt-get install which works on all recent Debian releases
+  rel_name=jammy # use jammy for apt-fast install which works on all recent Debian releases
 fi
+apt-get update
 
 echo_color "$fg_cyan" "Setting up apt-fast" >> $status_file
-apt-get update
-apt-get install --install-recommends -y curl gnupg
-echo -e "deb [signed-by=/etc/apt/keyrings/apt-fast.gpg] http://ppa.launchpad.net/apt-fast/stable/ubuntu $rel_name main" \
+apt-get install --install-recommends -y curl gnupg lsb-release
+keyring_file=/etc/apt/keyrings/apt-fast.gpg
+rm -f $keyring_file
+echo -e "deb [signed-by=$keyring_file] http://ppa.launchpad.net/apt-fast/stable/ubuntu $rel_name main" \
     > /etc/apt/sources.list.d/apt-fast.list
 mkdir -p /etc/apt/keyrings $HOME/.gnupg && chmod 0700 $HOME/.gnupg
 GPG_CMD="gpg --no-default-keyring --keyring /tmp/apt-fast-keyring.gpg"
 $GPG_CMD --keyserver $DEFAULT_GPG_KEY_SERVER --recv-key 0xBC5934FD3DEBD4DAEA544F791E2824A7F22B44BD
-$GPG_CMD --output /etc/apt/keyrings/apt-fast.gpg --export && rm -f /tmp/apt-fast-keyring.gpg
+$GPG_CMD --output $keyring_file --export && rm -f /tmp/apt-fast-keyring.gpg*
 apt-get update
 apt-get install -y apt-fast
 # update couple of apt-fast defaults (both conf file and debconf selection need to be changed)
 sed -i 's/^_APTMGR=.*/_APTMGR=apt/' /etc/apt-fast.conf
-sed -i 's/^_MAXNUM=.*/_MAXNUM=8/' /etc/apt-fast.conf
+sed -i 's/^_MAXNUM=.*/_MAXNUM=6/' /etc/apt-fast.conf
 echo "apt-fast apt-fast/aptmanager select apt" | debconf-set-selections
-echo "apt-fast apt-fast/maxdownloads select 8" | debconf-set-selections
-DOWNLOADBEFORE=true apt-fast full-upgrade -y
+echo "apt-fast apt-fast/maxdownloads select 6" | debconf-set-selections
 
-if type unminimize 2>/dev/null >/dev/null; then
-  echo_color "$fg_cyan" "Running unminimize" >> $status_file
-  yes | unminimize
+echo_color "$fg_cyan" "Upgrading all packages" >> $status_file
+export DOWNLOADBEFORE=true
+apt-fast full-upgrade -y
+
+# skip unminimize if not installing any recommended packages which should happen only in testing
+if [ -n "$RECOMMENDED_PKGS" ]; then
+  unminimize_path=$(type -p unminimize 2>/dev/null)
+  if [ -n "$unminimize_path" ]; then
+    echo_color "$fg_cyan" "Running unminimize" >> $status_file
+    sed -i 's/apt-get/apt-fast/g' $unminimize_path
+    yes | $unminimize_path
+  fi
 fi
 
 # generate the configured locale and assume it is UTF-8
 echo_color "$fg_cyan" "Configuring locale" >> $status_file
-DOWNLOADBEFORE=true apt-fast install -y locales
+apt-fast install -y locales
 if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/locale.gen; then
   echo "$LANG UTF-8" >> /etc/locale.gen
   # always add en_US.UTF-8 regardless since some apps seem to depend on it
@@ -91,11 +98,11 @@ if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/local
 fi
 
 echo_color "$fg_cyan" "Installing base set of packages" >> $status_file
-DOWNLOADBEFORE=true apt-fast install -y $REQUIRED_PKGS $RECOMMENDED_PKGS $SUGGESTED_PKGS \
-                                        $REQUIRED_DEPS $RECOMMENDED_DEPS $SUGGESTED_DEPS
+apt-fast install -y $REQUIRED_PKGS $RECOMMENDED_PKGS $SUGGESTED_PKGS \
+                    $REQUIRED_DEPS $RECOMMENDED_DEPS $SUGGESTED_DEPS
 apt-mark auto $REQUIRED_DEPS $RECOMMENDED_DEPS $SUGGESTED_DEPS
 apt-fast clean
-apt-get clean
+apt clean
 
 # common environment variables
 if ! grep -q '^export EDITOR=' /etc/bash.bashrc && dpkg --no-pager -l neovim 2>/dev/null >/dev/null; then
@@ -114,5 +121,5 @@ fi
 
 echo_color "$fg_cyan" "Installing starship for fancy bash prompt" >> $status_file
 curl -sSL https://starship.rs/install.sh -o starship-install.sh && \
-  /bin/sh starship-install.sh -y && rm -f starship-install.sh
+  /bin/sh starship-install.sh -y && rm -f starship-install.sh /tmp/tmp.*
 echo -e 'eval "$(starship init bash)"' >> /etc/bash.bashrc

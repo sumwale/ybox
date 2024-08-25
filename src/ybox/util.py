@@ -85,7 +85,7 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
     :param interpolation: if provided then used for value interpolation
     :param top_level: the top-level configuration file; don't pass this when calling
                       externally (or set it the same as `conf_file` argument)
-    :return: instance of `configparser.ConfigParser` built after parsing the given file as
+    :return: instance of `ConfigParser` built after parsing the given file as
              well as any includes recursively
     """
     if not conf_file.is_file():
@@ -106,6 +106,9 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
         # to the including file and not the top-level parent
         inc_file = resolve_inc_path(include, conf_file)
         inc_conf = config_reader(inc_file, interpolation, top_level)
+        # disable interpolation for inc_conf after read else it can apply again when assigning
+        # pylint: disable=protected-access
+        inc_conf._interpolation = Interpolation()  # type: ignore
         for section in inc_conf.sections():
             if not config.has_section(section):
                 config[section] = inc_conf[section]
@@ -128,7 +131,7 @@ def ini_file_reader(fd: Iterable[str], interpolation: Optional[Interpolation],
     :param fd: file handle for the INI format data
     :param interpolation: if provided then used for value interpolation
     :param case_sensitive: if True then keys are case-sensitive (default) else case-insensitive
-    :return: instance of `configparser.ConfigParser` built after parsing the given file
+    :return: instance of `ConfigParser` built after parsing the given file
     """
     config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
     if case_sensitive:
