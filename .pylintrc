@@ -1,7 +1,7 @@
 [DESIGN]
 
 # Maximum number of arguments for function / method.
-max-args = 15 # EDIT: increased from 5 to 15
+max-args = 20 # EDIT: increased from 5 to 15
 
 # Maximum number of locals for function / method body.
 max-locals = 40 # EDIT: increased from 15 to 40

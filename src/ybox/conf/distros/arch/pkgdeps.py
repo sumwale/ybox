@@ -12,7 +12,6 @@ where:
  * <installed>: true if the dependency already installed and false otherwise
 """
 
-import argparse
 import gzip
 import os
 import re
@@ -28,6 +27,7 @@ import ijson  # type: ignore
 from ybox.cmd import run_command
 from ybox.config import Consts
 from ybox.print import print_error, print_notice, print_warn
+from ybox.util import parse_opt_deps_args
 
 _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
 _PKG_CACHE_SUBDIR = os.path.basename(__file__).removesuffix(".py")
@@ -56,18 +56,7 @@ def main_argv(argv: list[str]) -> None:
 
     :param argv: arguments to the function (main function passes `sys.argv[1:]`)
     """
-    parser = argparse.ArgumentParser(
-        description="Recursively find optional dependencies of a package")
-    parser.add_argument("-s", "--separator", type=str, default=_DEFAULT_SEP,
-                        help="separator to use between the columns")
-    parser.add_argument("-p", "--prefix", type=str, default="",
-                        help="prefix string before each line of result")
-    parser.add_argument("-H", "--header", type=str, default="",
-                        help="header line to print before the results (without trailing newline)")
-    parser.add_argument("-l", "--level", type=int, default=2,
-                        help="maximum level to search for optional dependencies")
-    parser.add_argument("package", type=str, help="name of the package")
-    args = parser.parse_args(argv)
+    args = parse_opt_deps_args(argv)
 
     print_notice(f"Searching dependencies of '{args.package}' in base Arch repositories")
     # first get the list of all installed packages to eliminate installed packages

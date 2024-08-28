@@ -91,8 +91,9 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
             add_key_cmd = repo[RepoCmd.ADD_KEY_ID.value].format(key=key, server=key_server,
                                                                 name=name)
             print_info(f"Registering key '{key}'")
-            if (code := int(run_command(build_shell_command(docker_cmd, conf.box_name, add_key_cmd),
-                            exit_on_error=False, error_msg="registering repository key"))) != 0:
+            if (code := int(run_command(build_shell_command(
+                    docker_cmd, conf.box_name, add_key_cmd), exit_on_error=False,
+                    error_msg="registering repository key"))) != 0:
                 return code
 
     # in case of failures, unregister key and/or repository at the end
@@ -111,9 +112,9 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
         if with_source_repo and (add_src_cmd := repo.get(RepoCmd.ADD_SOURCE.value, fallback="")):
             print_info(f"Registering source code repository '{name}'")
             add_src_cmd = add_src_cmd.format(name=name, urls=urls, options=options)
-            if (code := int(run_command(build_shell_command(docker_cmd, conf.box_name, add_src_cmd),
-                                        exit_on_error=False,
-                                        error_msg="adding source repository"))) != 0:
+            if (code := int(run_command(build_shell_command(
+                    docker_cmd, conf.box_name, add_src_cmd), exit_on_error=False,
+                    error_msg="adding source repository"))) != 0:
                 return code
             src_added = True
 
