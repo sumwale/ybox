@@ -36,7 +36,6 @@ _AUR_META_FILE = f"{_AUR_META_CACHE_DIR}/packages-meta-ext-v1.json.gz"
 # parallel download using aria2 is much faster on slower networks
 _FETCH_AUR_META = f"/usr/bin/aria2c -x8 -j8 -s8 -k1M -d{_AUR_META_CACHE_DIR} {_AUR_META_URL}"
 _REFRESH_AGE = 24.0 * 60 * 60  # consider AUR metadata file as stale after a day
-_DEFAULT_SEP = "::::"  # something that does not appear in descriptions (at least so far)
 _PACKAGE_NAME_RE = re.compile(r"^[\w@.+-]+")  # used to strip out version comparisons
 
 # fields: name of original package, description, required dependencies, optional dependencies
