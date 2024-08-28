@@ -1,5 +1,15 @@
 """
 Show the optional dependencies for a package that may be in a pacman repository or the AUR.
+The output is in the format:
+
+{header}
+{prefix}<name>{separator}<level>{separator}<installed>{separator}<description>
+
+where:
+ * <name>: name of the optional dependency
+ * <level>: level of the dependency i.e. 1 for direct dependency, 2 for dependency of dependency
+            and so on; resolution of level > 2 is not required since caller currently ignores those
+ * <installed>: true if the dependency already installed and false otherwise
 """
 
 import argparse
@@ -58,10 +68,6 @@ def main_argv(argv: list[str]) -> None:
                         help="maximum level to search for optional dependencies")
     parser.add_argument("package", type=str, help="name of the package")
     args = parser.parse_args(argv)
-
-    # find optional dependencies of only the new packages that are going to be installed
-    # i.e. the package and its new dependencies skipping the already installed dependencies,
-    # otherwise the list can be too long and become pointless for the end-user
 
     print_notice(f"Searching dependencies of '{args.package}' in base Arch repositories")
     # first get the list of all installed packages to eliminate installed packages

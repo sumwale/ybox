@@ -9,7 +9,7 @@ import sys
 from configparser import SectionProxy
 from typing import Iterable, Sequence
 
-from ybox.cmd import (PkgMgr, RepoCmd, build_bash_command, page_output,
+from ybox.cmd import (PkgMgr, RepoCmd, build_shell_command, page_output,
                       run_command)
 from ybox.config import StaticConfiguration
 from ybox.print import fgcolor as fg
@@ -53,7 +53,7 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
         return 1
 
     exists_cmd = repo[RepoCmd.EXISTS.value].format(name=name)
-    if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, exists_cmd),
+    if (code := int(run_command(build_shell_command(docker_cmd, conf.box_name, exists_cmd),
                     exit_on_error=False, error_msg="SKIP"))) == 0:
         print_error(f"Repository with name '{name}' already present in the package manager "
                     f"for the container '{conf.box_name}' [distribution: {conf.distribution}]")
@@ -67,7 +67,7 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
         if re.match(r"^\S*?://", key):
             add_key_cmd = repo[RepoCmd.ADD_KEY.value].format(url=key, name=name)
             print_info(f"Registering key from URL '{key}'")
-            with subprocess.Popen(build_bash_command(docker_cmd, conf.box_name, add_key_cmd),
+            with subprocess.Popen(build_shell_command(docker_cmd, conf.box_name, add_key_cmd),
                                   stdout=subprocess.PIPE) as key_result:
                 # fetch the key ID from the output to register it
                 keyid_tag = "KEYID="
@@ -91,7 +91,7 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
             add_key_cmd = repo[RepoCmd.ADD_KEY_ID.value].format(key=key, server=key_server,
                                                                 name=name)
             print_info(f"Registering key '{key}'")
-            if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, add_key_cmd),
+            if (code := int(run_command(build_shell_command(docker_cmd, conf.box_name, add_key_cmd),
                             exit_on_error=False, error_msg="registering repository key"))) != 0:
                 return code
 
@@ -103,7 +103,7 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
     try:
         # next add the repository
         print_info(f"Registering repository '{name}'")
-        if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, add_cmd),
+        if (code := int(run_command(build_shell_command(docker_cmd, conf.box_name, add_cmd),
                                     exit_on_error=False, error_msg="adding repository"))) != 0:
             return code
         repo_added = True
@@ -111,7 +111,7 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
         if with_source_repo and (add_src_cmd := repo.get(RepoCmd.ADD_SOURCE.value, fallback="")):
             print_info(f"Registering source code repository '{name}'")
             add_src_cmd = add_src_cmd.format(name=name, urls=urls, options=options)
-            if (code := int(run_command(build_bash_command(docker_cmd, conf.box_name, add_src_cmd),
+            if (code := int(run_command(build_shell_command(docker_cmd, conf.box_name, add_src_cmd),
                                         exit_on_error=False,
                                         error_msg="adding source repository"))) != 0:
                 return code
@@ -127,12 +127,12 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
             if repo_added:
                 print_info(f"Trying to unregister failed repository '{name}'")
                 remove_cmd = repo[RepoCmd.REMOVE.value].format(name=name, remove_source=src_added)
-                run_command(build_bash_command(docker_cmd, conf.box_name, remove_cmd),
+                run_command(build_shell_command(docker_cmd, conf.box_name, remove_cmd),
                             exit_on_error=False, error_msg=f"unregistering repository '{name}'")
             if key:
                 print_info(f"Trying to unregister key for failed repository '{name}'")
                 remove_key_cmd = repo[RepoCmd.REMOVE_KEY.value].format(key=key, name=name)
-                run_command(build_bash_command(docker_cmd, conf.box_name, remove_key_cmd),
+                run_command(build_shell_command(docker_cmd, conf.box_name, remove_key_cmd),
                             exit_on_error=False, error_msg=f"unregistering key '{key}'")
 
 
@@ -167,14 +167,14 @@ def repo_remove(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionPro
     if key:
         print_info(f"Unregistering repository key '{key}'")
         remove_key_cmd = repo[RepoCmd.REMOVE_KEY.value].format(key=key, name=name)
-        if (code := int(run_command(build_bash_command(
+        if (code := int(run_command(build_shell_command(
                 docker_cmd, conf.box_name, remove_key_cmd), exit_on_error=False,
                 error_msg=f"unregistering key '{key}'"))) != 0 and not args.force:
             return code
     # next remove the repository
     print_info(f"Unregistering repository '{name}'")
     remove_cmd = repo[RepoCmd.REMOVE.value].format(name=name, remove_source=with_source_repo)
-    if (code := int(run_command(build_bash_command(
+    if (code := int(run_command(build_shell_command(
             docker_cmd, conf.box_name, remove_cmd), exit_on_error=False,
             error_msg=f"unregistering repository '{name}'"))) != 0 and not args.force:
         return code
@@ -195,7 +195,7 @@ def _refresh_package_metadata(pkgmgr: SectionProxy, docker_cmd: str,
     """
     print_info("Refreshing package metadata")
     update_meta_cmd = pkgmgr[PkgMgr.UPDATE_META.value]
-    return int(run_command(build_bash_command(docker_cmd, conf.box_name, update_meta_cmd),
+    return int(run_command(build_shell_command(docker_cmd, conf.box_name, update_meta_cmd),
                            exit_on_error=False, error_msg="updating package metadata"))
 
 

@@ -5,11 +5,11 @@ Methods for uninstalling package uninstallation on an active ybox container.
 import argparse
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, build_bash_command, run_command
+from ybox.cmd import PkgMgr, build_shell_command, run_command
 from ybox.config import StaticConfiguration
-from ybox.print import print_error, print_info
+from ybox.print import print_error, print_info, print_notice
 from ybox.state import RuntimeConfiguration, YboxStateManagement
-from ybox.util import check_installed_package
+from ybox.util import check_package, select_item_from_menu
 
 
 def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
@@ -64,12 +64,19 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
     :return: exit code of the underlying package manager command run using docker/podman
     """
     installed = False
-    code, inst_package = check_installed_package(docker_cmd, check_cmd, package, conf.box_name)
+    code, inst_packages = check_package(docker_cmd, check_cmd, package, conf.box_name)
     if code == 0:
         installed = True
-        package = inst_package
+        if len(inst_packages) > 1:
+            print_notice(f"Multiple packages found for '{package}', select one to uninstall")
+            if selected_pkg := select_item_from_menu(inst_packages):
+                package = selected_pkg
+            else:
+                return 1
+        else:
+            package = inst_packages[0]
         print_info(f"Uninstalling {dep_msg}'{package}' from '{conf.box_name}'")
-        code = int(run_command(build_bash_command(
+        code = int(run_command(build_shell_command(
             docker_cmd, conf.box_name, uninstall_cmd.format(package=package)),
             exit_on_error=False, error_msg=f"uninstalling '{package}'"))
     else:

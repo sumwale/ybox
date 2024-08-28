@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import pytest
 
-from ybox.cmd import (YboxLabel, build_bash_command, check_active_ybox,
+from ybox.cmd import (YboxLabel, build_shell_command, check_active_ybox,
                       check_ybox_exists, check_ybox_state, get_docker_command,
                       page_command, page_output, run_command)
 from ybox.print import fgcolor
@@ -110,9 +110,9 @@ def test_check_ybox_state(capsys: pytest.CaptureFixture[str]):
         assert proc_run([docker_cmd, "exec", cnt_name, "apk", "add", "bash"]).returncode == 0
         for pty in (None, False, True):
             if pty is None:
-                bash_cmd = build_bash_command(docker_cmd, cnt_name, "uname -s")
+                bash_cmd = build_shell_command(docker_cmd, cnt_name, "uname -s")
             else:
-                bash_cmd = build_bash_command(docker_cmd, cnt_name, "uname -s", enable_pty=pty)
+                bash_cmd = build_shell_command(docker_cmd, cnt_name, "uname -s", enable_pty=pty)
             assert "/bin/bash" in bash_cmd and "-c" in bash_cmd and "uname -s" in bash_cmd
             if pty is False:
                 assert "-it" not in bash_cmd

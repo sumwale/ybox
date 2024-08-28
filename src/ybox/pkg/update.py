@@ -5,7 +5,7 @@ Update some or all packages on an active ybox container.
 import argparse
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, build_bash_command, run_command
+from ybox.cmd import PkgMgr, build_shell_command, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_warn
 from ybox.state import RuntimeConfiguration, YboxStateManagement
@@ -52,5 +52,5 @@ def update_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
         # show all the containers sharing the same shared root
         print_warn("The operation will also update packages in other containers having the same "
                    f"shared root directory: {', '.join(shared_containers)}")
-    return int(run_command(build_bash_command(docker_cmd, conf.box_name, update_cmd),
+    return int(run_command(build_shell_command(docker_cmd, conf.box_name, update_cmd),
                            exit_on_error=False, error_msg="updating packages"))

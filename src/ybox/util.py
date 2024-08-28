@@ -17,7 +17,7 @@ from tabulate import tabulate
 
 from ybox import __version__ as product_version
 
-from .cmd import build_bash_command
+from .cmd import build_shell_command
 from .config import Consts, StaticConfiguration
 from .env import Environ, PathName
 from .print import fgcolor as fg
@@ -220,24 +220,23 @@ def get_ybox_version(conf: StaticConfiguration) -> str:
     return ""
 
 
-def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
-                            container_name: str) -> tuple[int, str]:
+def check_package(docker_cmd: str, check_cmd: str, package: str,
+                  container_name: str) -> tuple[int, list[str]]:
     """
-    Check if a given package is installed in a container.
+    Check if a given package is installed in a container, or available in package repositories
+    and return the list of matching packages.
 
     :param docker_cmd: the docker/podman executable to use
     :param check_cmd: the command used to check the existence of the package
     :param package: name of the package to check
     :param container_name: name of the container
-    :return: tuple of exit code of the `check_cmd` which should be 0 if the package exists,
-             and name of matching package name which can be different for a virtual package
+             and name of matching package names which can be different for a virtual package
     """
-    check_result = subprocess.run(build_bash_command(
+    check_result = subprocess.run(build_shell_command(
         docker_cmd, container_name, check_cmd.format(package=package), enable_pty=False),
         check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     output = check_result.stdout.decode("utf-8").splitlines()
-    first_line = output[0] if len(output) > 0 else ""
-    return check_result.returncode, first_line
+    return check_result.returncode if output else 1, output
 
 
 def select_item_from_menu(items: list[str]) -> Optional[str]:

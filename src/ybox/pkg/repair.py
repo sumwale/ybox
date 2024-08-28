@@ -7,7 +7,8 @@ import subprocess
 import time
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, build_bash_command, check_active_ybox, run_command
+from ybox.cmd import (PkgMgr, build_shell_command, check_active_ybox,
+                      run_command)
 from ybox.config import StaticConfiguration
 from ybox.print import (fgcolor, print_color, print_error, print_info,
                         print_warn)
@@ -50,7 +51,7 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
         resp = "y" if quiet else input("Repair thoroughly by reinstalling packages? (y/N) ")
         if resp.strip().lower() == "y":
             repair_cmd = pkgmgr[PkgMgr.REPAIR_ALL.value]
-    if (code := int(run_command(build_bash_command(
+    if (code := int(run_command(build_shell_command(
             docker_cmd, conf.box_name, repair_cmd.format(quiet=quiet_flag)), exit_on_error=False,
             error_msg="repairing packages"))) != 0:
         return code
@@ -135,7 +136,7 @@ def _remove_locks(pkgmgr: SectionProxy, docker_cmd: str, containers: list[str],
     ls_cmd = f"/bin/ls {locks_pattern.replace(',', ' ')} 2>/dev/null"
     for container in containers:
         print_info(f"Checking for lock files in container '{container}'")
-        ls_result = subprocess.run(build_bash_command(docker_cmd, container, ls_cmd),
+        ls_result = subprocess.run(build_shell_command(docker_cmd, container, ls_cmd),
                                    check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         # confirm with user before removing locks
         if not (locks := ls_result.stdout.decode("utf-8").split()):

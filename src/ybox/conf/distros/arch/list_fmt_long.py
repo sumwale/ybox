@@ -64,7 +64,7 @@ def process() -> None:
         elif line and line[0].isspace():
             # "Description", "Required By" and "Optional For" can have multiline output
             val_list = pkg_map[key]
-            # add space separately to avoid adding it separately in `format_dep_of``
+            # add space separately to avoid adding it in `format_dep_of``
             val_list.append(" ")
             val_list.append(line.strip())
     # output the last package

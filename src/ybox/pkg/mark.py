@@ -5,12 +5,12 @@ Mark a package as a dependency or as explicitly installed.
 import argparse
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, build_bash_command, run_command
+from ybox.cmd import PkgMgr, build_shell_command, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_error, print_info
 from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
                         YboxStateManagement)
-from ybox.util import check_installed_package
+from ybox.util import check_package
 
 
 def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
@@ -39,11 +39,11 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
     if mark_dependency_of:
         all_packages.insert(0, mark_dependency_of)  # keep the non-dependent package at the front
     for idx, package in enumerate(all_packages):
-        code, inst_pkg = check_installed_package(docker_cmd, check_cmd, package, conf.box_name)
+        code, inst_pkgs = check_package(docker_cmd, check_cmd, package, conf.box_name)
         if code != 0:
             print_error(f"Package '{package}' is not installed in container '{conf.box_name}'")
             return 1
-        all_packages[idx] = inst_pkg
+        all_packages[idx] = inst_pkgs[0]
     # make entries in the state database if the packages are not present
     package = all_packages[0]
     state.register_package(conf.box_name, package, [], CopyType(0), {},
@@ -62,7 +62,7 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
         state.unregister_dependency(conf.box_name, "%", package)
         # also mark as explicitly installed using the underlying package manager
         mark_cmd = pkgmgr[PkgMgr.MARK_EXPLICIT.value]
-        return int(run_command(build_bash_command(
+        return int(run_command(build_shell_command(
             docker_cmd, conf.box_name, mark_cmd.format(package=package)), exit_on_error=False,
             error_msg=f"marking '{package}' as explicitly installed"))
     return 0

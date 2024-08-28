@@ -18,6 +18,7 @@ class PkgMgr(str, Enum):
     Package manager actions that are defined for each Linux distribution in its distro.ini file.
     """
     INSTALL = "install"
+    CHECK_AVAIL = "check_avail"
     CHECK_INSTALL = "check_install"
     QUIET_FLAG = "quiet_flag"
     QUIET_DETAILS_FLAG = "quiet_details_flag"
@@ -171,10 +172,11 @@ def check_ybox_exists(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     return check_ybox_state(docker_cmd, box_name, expected_states=[], exit_on_error=exit_on_error)
 
 
-def build_bash_command(docker_cmd: str, box_name: str, cmd: str,
-                       enable_pty: bool = True) -> list[str]:
+def build_shell_command(docker_cmd: str, box_name: str, cmd: str,
+                        enable_pty: bool = True) -> list[str]:
     """
-    Build a docker/podman command (as a list) to be run using `/bin/bash`.
+    Build a docker/podman command (as a list) to be run using `/bin/bash` in the given ybox
+    container, unless the command starts with `/bin/sh` in which case `/bin/sh` is used instead.
 
     :param docker_cmd: the docker/podman executable to use
     :param box_name: name of the ybox container
@@ -183,9 +185,10 @@ def build_bash_command(docker_cmd: str, box_name: str, cmd: str,
                        command and set interactive mode else no pty is allocated, defaults to True
     :return: command to be executed (e.g. in `subprocess`) as a list of strings
     """
+    shell = "/bin/sh" if cmd.startswith("/bin/sh ") else "/bin/bash"
     if enable_pty:
-        return [docker_cmd, "exec", "-it", box_name, "/bin/bash", "-c", cmd]
-    return [docker_cmd, "exec", box_name, "/bin/bash", "-c", cmd]
+        return [docker_cmd, "exec", "-it", box_name, shell, "-c", cmd]
+    return [docker_cmd, "exec", box_name, shell, "-c", cmd]
 
 
 def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
