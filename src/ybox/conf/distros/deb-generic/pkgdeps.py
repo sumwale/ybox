@@ -3,26 +3,30 @@ Show the optional dependencies for a package that may be in deb package reposito
 The output is in the format:
 
 {header}
-{prefix}<name>{separator}<level>{separator}<installed>{separator}<description>
+{prefix}<name>{separator}<level>{separator}<order>{separator}<installed>{separator}<description>
 
 where:
  * <name>: name of the optional dependency
  * <level>: level of the dependency i.e. 1 for direct dependency, 2 for dependency of dependency
             and so on; resolution of level > 2 is not required since caller currently ignores those
+ * <order>: this is a simple counter assigned to the dependencies where the value itself is of no
+            significance but if multiple dependencies have the same value then it means that they
+            are ORed dependencies and only one of them should normlly be selected for installation
  * <installed>: true if the dependency already installed and false otherwise
+ * <description>: detailed description of the dependency; it can contain literal \n to indicate
+                  newlines in the description
 """
 
+import os
 import re
 import sys
-from collections import defaultdict
 from typing import Union
 
-from ybox.cmd import run_command
+from ybox.cmd import parse_opt_deps_args, run_command
 from ybox.print import print_error, print_notice
-from ybox.util import parse_opt_deps_args
 
 # regex pattern for package name in Recommends or Suggests fields
-_PKG_NAME_RE = re.compile(r"\s*([^\s,|(]*)")
+PKG_DEP_RE = re.compile(r"([,|]?)\s*([^\s,|(]+)\s*(\([^)]*\))?\s*")
 
 
 def main() -> None:
@@ -48,48 +52,50 @@ def main_argv(argv: list[str]) -> None:
         if args.header:
             print(args.header)
         prefix = args.prefix
-        for key, val in opt_deps.items():
-            desc, level, installed = val
+        # TODO: SW: handle order in ybox-pkg
+        for pkg, (desc, level, _, installed) in opt_deps.items():
             # columns below are expected by ybox-pkg
-            print(f"{prefix}{key}{sep}{level}{sep}{installed}{sep}{desc}")
+            print(f"{prefix}{pkg}{sep}{level}{sep}{installed}{sep}{desc}")
 
 
-def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, bool]]:
+def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, int, bool]]:
     """
     Find the optional dependencies of a package till the given `level`. Here `Recommends` packages
     are treated as level 1 while `Suggests` are treated as level 2. Higher levels than 2 will fail.
 
     The result is returned as a dictionary having package name as the key with a tuple having its
-    description, the level it was found and a boolean indicating whether the package is already
-    installed or not.
+    description, the level it was found, its `order` and a boolean indicating whether the package
+    is already installed or not.
 
     :param package: name of the package whose optional dependencies have to be searched
     :param max_level: the maximum level to which the search will extend
     :return: a dictionary which will be populated with the result having dependency name
-             as the key with a tuple of description, level and whether package is installed
+             as the key with a tuple of description, level, order and whether package is installed
     """
     # Fetching optional dependencies consists of two steps:
     #  1. find the recomends and suggests fields of the package
     #  2. determine whether those packages are installed or not and obtain their descriptions
     # It also needs to take care of "|" dependencies where either of the two can be present,
-    # so the check for installed packages needs to be done appropriately.
-    line = ""
+    # so the `order` needs to be set appropriately.
+
     # The map below stores all the available package names to their description.
     # This deliberately uses only the first line of the description for a multi-line description
     # since it is used for display of the optional dependencies menu where single line is enough.
-    all_packages: defaultdict[str, str] = defaultdict(str)
+    all_packages: dict[str, str] = {}
     # the map below stores all the virtual packages to the list of the packages that provide them,
     # including the actual package itself which always provides itself
     provides_map: dict[str, Union[str, list[str]]] = {}
-    # dictionary of required optional dependencies for the package to the tuple having
-    # (description, level, installed); note that `Recommends` are level 1 while `Suggests`
-    # are level 2 and recursion for levels is skipped)
-    opt_deps: dict[str, tuple[str, int, bool]] = {}
+    # map of `Recommends` and `Suggests` dependencies to their level and order
+    opt_dep_map: dict[str, tuple[int, int]] = {}
     # dump all available packages, build a map of package name and its description, then pick the
     # package and its dependencies; the total map size with just those fields will be a few MB
     # while using `grep-aptavail` multiple times will be inefficient
     check_optional = False
     current_pkg = ""
+    # this counter is for assigning a counter to the dependencies which has a significance only
+    # for ORed dependencies which will have the same order (and thus indicate to the higher level
+    #   that only one of them should be installed)
+    order = 0
     for line in str(run_command(["/usr/bin/apt-cache", "dumpavail"],
                                 capture_output=True)).splitlines():
         if line.startswith("Package:"):
@@ -100,31 +106,70 @@ def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, boo
                 provides_map[current_pkg] = current_pkg
         elif check_optional:
             if line.startswith("Recommends:"):
-                start_pos = len("Recommends:")
-                while match := _PKG_NAME_RE.match(line, start_pos):
-                    opt_deps[match.group(1)] = ("", 1, False)
-                    start_pos = match.end()
+                for match in PKG_DEP_RE.finditer(line, len("Recommends:")):
+                    if match.group(1) != "|":  # ORed dependencies have the same `order`
+                        order += 1
+                    opt_dep_map[match.group(2)] = (1, order)
             elif max_level > 1 and line.startswith("Suggests:"):
-                start_pos = len("Suggests:")
-                while match := _PKG_NAME_RE.match(line, start_pos):
-                    opt_deps[match.group(1)] = ("", 2, False)
-                    start_pos = match.end()
+                for match in PKG_DEP_RE.finditer(line, len("Suggests:")):
+                    if match.group(1) != "|":  # ORed dependencies have the same `order`
+                        order += 1
+                    opt_dep_map[match.group(2)] = (2, order)
         else:
             if line.startswith("Provides:"):
-                start_pos = len("Provides:")
-                while match := _PKG_NAME_RE.match(line, start_pos):
-                    provide = match.group(1)
+                for match in PKG_DEP_RE.finditer(line, len("Provides:")):
+                    provide = match.group(2)
                     if provides := provides_map.get(provide):
-                        assert isinstance(provides, list)
-                        provides.append(current_pkg)
+                        if isinstance(provides, list):
+                            provides.append(current_pkg)
+                        else:
+                            provides_map[provide] = [provides, current_pkg]
                     else:
                         provides_map[provide] = [current_pkg]
-                    start_pos = match.end()
             elif line.startswith("Description:"):
-                assert all_packages[current_pkg]  # filled up by lambda of its declaration
+                all_packages[current_pkg] = line[len("Description:"):].strip()
 
-    # fields = "-sRecommends,Suggests" if max_level > 1 else "-sRecommends"
-    return opt_deps
+    if not opt_dep_map:
+        return {}
+    # get the system architecture to quickly check for existence of an installed package
+    sys_arch = str(run_command(["/usr/bin/dpkg", "--print-architecture"],
+                               capture_output=True)).strip()
+    # list of required optional dependencies as a tuple (name, (description, level, order,
+    #   installed)); note that `Recommends` are level 1 while `Suggests` are level 2 and recursion
+    # for levels is skipped
+    opt_deps: list[tuple[str, tuple[str, int, int, bool]]] = []
+    # loop through the `opt_deps_map` and look them up in the `provides` map to get the actual
+    # packages which will be inserted in `opt_deps` with their level and order while description
+    # will be looked up from `all_packages` map
+    last_installed_order = 0
+    for dep, (level, order) in opt_dep_map.items():
+        if provides := provides_map.get(dep):
+            if isinstance(provides, str):
+                provides = (provides,)
+            for provide in provides:
+                if provide == package:  # for the possible case of self-recommend/suggest
+                    continue
+                # for each `provide` check if its installed
+                installed = os.path.exists(f"/var/lib/dpkg/info/{provide}.list") or os.path.exists(
+                    f"/var/lib/dpkg/info/{provide}:{sys_arch}.list")
+                # if there is an installed package, then remove the uninstalled packages in the
+                # same order since one of them is already installed (installed ones are required
+                #   for registeration as existing dependency by ybox-pkg, so they are still kept)
+                if installed:
+                    last_installed_order = order
+                    # pop uninstalled ones in the same `order` which will be at the end since
+                    # opt_dep_map iterator will be insertion order which is sorted by `order`;
+                    # previous installed one in same `order` would have removed all uninstalled
+                    # ones in that order that were before it, so don't need to check before it
+                    while opt_deps and opt_deps[-1][1][2] == order and not opt_deps[-1][1][3]:
+                        opt_deps.pop()
+                elif order == last_installed_order:
+                    continue
+                opt_deps.append((provide, (all_packages[provide], level, order, installed)))
+
+    # sort opt_deps by level and order and return
+    opt_deps.sort(key=lambda x: (x[1][1], x[1][2]))
+    return dict(opt_deps)
 
 
 if __name__ == "__main__":

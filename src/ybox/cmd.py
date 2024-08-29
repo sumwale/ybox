@@ -243,6 +243,29 @@ def _print_subprocess_output(result: subprocess.CompletedProcess[bytes]) -> None
         print_warn(result.stderr.decode("utf-8"), file=sys.stderr)
 
 
+def parse_opt_deps_args(argv: list[str]) -> argparse.Namespace:
+    """
+    Common command-line parser for `opt_deps` utilities (see [pkgmgr] section of distro.ini)
+    that parses given arguments for the program and returns the result :class:`argparse.Namespace`.
+
+    :param argv: the list of arguments to be parsed
+    :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
+    """
+    parser = argparse.ArgumentParser(
+        description="Recursively find optional dependencies of a package")
+    # default separator is something that does not appear in descriptions (at least so far)
+    parser.add_argument("-s", "--separator", type=str, default="::::",
+                        help="separator to use between the columns")
+    parser.add_argument("-p", "--prefix", type=str, default="",
+                        help="prefix string before each line of result")
+    parser.add_argument("-H", "--header", type=str, default="",
+                        help="header line to print before the results (without trailing newline)")
+    parser.add_argument("-l", "--level", type=int, default=2,
+                        help="maximum level to search for optional dependencies")
+    parser.add_argument("package", type=str, help="name of the package")
+    return parser.parse_args(argv)
+
+
 def page_output(output: Iterable[bytes], pager: str) -> int:
     """
     Display an `Iterable` of bytes on the terminal one screenful at a time using the given `pager`.

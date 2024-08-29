@@ -24,7 +24,7 @@ export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 
 sys_arch="$(dpkg --print-architecture)"
 # if package name has architecture, remove it for the command and match against the `Architecture`
-# field in its output instead
+# field in its output instead (or allow for `all` architecture)
 echo "$2" | {
   if IFS=':' read -r name expected_arch; then
     pkgs="$($grep_cmd -FPackage,Provides -sPackage,Architecture -n -w "$name")"
@@ -38,8 +38,8 @@ echo "$2" | {
       while read -r pkg; do
         read -r arch
         read -r empty || true
-        if [ "$arch" = "$expected_arch" ]; then
-          if [ "$arch" = "$sys_arch" ]; then
+        if [ "$arch" = "$expected_arch" -o "$arch" = "all" ]; then
+          if [ "$arch" = "$sys_arch" -o "$arch" = "all" ]; then
             pkg_files="/var/lib/dpkg/info/$pkg.list /var/lib/dpkg/info/$pkg:$arch.list"
           else
             pkg_files="/var/lib/dpkg/info/$pkg:$arch.list"

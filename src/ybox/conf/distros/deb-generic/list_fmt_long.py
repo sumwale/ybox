@@ -11,7 +11,8 @@ import sys
 from collections import defaultdict
 from typing import Iterable
 
-_DEP_RE = re.compile(r"([^,|\s]+)\s*(\([^)]*\)\s*)?[,|]?\s*")
+from pkgdeps import PKG_DEP_RE
+
 _DOT_LINE = re.compile(r"\s+\.\s*")
 
 
@@ -76,17 +77,17 @@ def process() -> None:
             # This does not take care of version comparisons in the dependencies but it should
             # not be possible for an installed package to fail version dependency check (assuming
             #   the packages are not broken), while virtual packages don't have versions
-            for match in _DEP_RE.finditer(provides):
+            for match in PKG_DEP_RE.finditer(provides):
                 provides_map[current_pkg].append(match.group(1))
             # fill in reverse mapping of required dependencies
-            for match in _DEP_RE.finditer(pre_depends):
+            for match in PKG_DEP_RE.finditer(pre_depends):
                 req_map[match.group(1)].append(current_pkg)
-            for match in _DEP_RE.finditer(depends):
+            for match in PKG_DEP_RE.finditer(depends):
                 req_map[match.group(1)].append(current_pkg)
             # fill in reverse mapping of optional dependencies
-            for match in _DEP_RE.finditer(recommends):
+            for match in PKG_DEP_RE.finditer(recommends):
                 opt_map[match.group(1)].append(current_pkg)
-            for match in _DEP_RE.finditer(suggests):
+            for match in PKG_DEP_RE.finditer(suggests):
                 opt_map[match.group(1)].append(current_pkg)
             desc.append(desc_s.rstrip())
             desc.append(r"\n")  # literal \n will be replaced by newline in the table display

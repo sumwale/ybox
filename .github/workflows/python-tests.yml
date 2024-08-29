@@ -15,8 +15,6 @@ on:
 
 # There is duplication in the build and build_pr_comment jobs, but avoiding that will need
 # quite a bit of work for reusable workflow or a composite action which is not worth it.
-# Specifically the last task in build_pr_comment which updates the job status in the PR
-# even for failure needs "if: always()" which is hard using either of the two approaches.
 jobs:
   build:
 
@@ -84,7 +82,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install --upgrade tox-gh>=1.3
     - name: Run tox actions
-      run: tox -- -s
+      run: tox -- -s --verbose
     - name: Set status as ${{ job.status }}
       if: always()
       uses: myrotvorets/set-commit-status-action@master

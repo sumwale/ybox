@@ -1,7 +1,7 @@
 [DESIGN]
 
 # Maximum number of arguments for function / method.
-max-args = 20 # EDIT: increased from 5 to 15
+max-args = 20 # EDIT: increased from 5 to 20
 
 # Maximum number of locals for function / method body.
 max-locals = 40 # EDIT: increased from 15 to 40
@@ -38,3 +38,9 @@ notes = FIXME,XXX # EDIT: removed TODO which are present in code to note future 
 
 # Minimum lines number of a similarity.
 min-similarity-lines = 8 # EDIT: increased from 4 to 8
+
+
+[REFACTORING]
+
+# Maximum number of nested blocks for function / method body
+max-nested-blocks = 8 # EDIT: increased from 5 to 8

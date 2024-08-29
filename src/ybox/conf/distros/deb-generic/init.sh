@@ -24,6 +24,10 @@ APT::Get::Install-Suggests "0";
 APT::Install-Recommends "0";
 APT::Install-Suggests "0";
 EOF
+# allow language translations in apt for non english locales
+if [[ ! "$LANG" =~ ^en_.* ]]; then
+  rm -f /etc/apt/apt.conf.d/docker-no-languages
+fi
 
 if [ "$(sed -n 's/^ID=//p' /etc/os-release)" = "ubuntu" ]; then
   rel_name="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)"

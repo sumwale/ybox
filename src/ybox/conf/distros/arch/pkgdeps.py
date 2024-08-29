@@ -3,13 +3,18 @@ Show the optional dependencies for a package that may be in a pacman repository 
 The output is in the format:
 
 {header}
-{prefix}<name>{separator}<level>{separator}<installed>{separator}<description>
+{prefix}<name>{separator}<level>{separator}<order>{separator}<installed>{separator}<description>
 
 where:
  * <name>: name of the optional dependency
  * <level>: level of the dependency i.e. 1 for direct dependency, 2 for dependency of dependency
             and so on; resolution of level > 2 is not required since caller currently ignores those
+ * <order>: this is a simple counter assigned to the dependencies where the value itself is of no
+            significance but if multiple dependencies have the same value then it means that they
+            are ORed dependencies and only one of them should normlly be selected for installation
  * <installed>: true if the dependency already installed and false otherwise
+ * <description>: detailed description of the dependency; it can contain literal \n to indicate
+                  newlines in the description
 """
 
 import gzip
@@ -24,10 +29,9 @@ from typing import Optional
 
 import ijson  # type: ignore
 
-from ybox.cmd import run_command
+from ybox.cmd import parse_opt_deps_args, run_command
 from ybox.config import Consts
 from ybox.print import print_error, print_notice, print_warn
-from ybox.util import parse_opt_deps_args
 
 _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
 _PKG_CACHE_SUBDIR = os.path.basename(__file__).removesuffix(".py")
