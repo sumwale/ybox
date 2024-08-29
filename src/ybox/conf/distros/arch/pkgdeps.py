@@ -1,8 +1,22 @@
 """
 Show the optional dependencies for a package that may be in a pacman repository or the AUR.
+The output is in the format:
+
+{header}
+{prefix}<name>{separator}<level>{separator}<order>{separator}<installed>{separator}<description>
+
+where:
+ * <name>: name of the optional dependency
+ * <level>: level of the dependency i.e. 1 for direct dependency, 2 for dependency of dependency
+            and so on; resolution of level > 2 is not required since caller currently ignores those
+ * <order>: this is a simple counter assigned to the dependencies where the value itself is of no
+            significance but if multiple dependencies have the same value then it means that they
+            are ORed dependencies and only one of them should normlly be selected for installation
+ * <installed>: true if the dependency already installed and false otherwise
+ * <description>: detailed description of the dependency; it can contain literal \n to indicate
+                  newlines in the description
 """
 
-import argparse
 import gzip
 import os
 import re
@@ -15,7 +29,7 @@ from typing import Optional
 
 import ijson  # type: ignore
 
-from ybox.cmd import run_command
+from ybox.cmd import parse_opt_deps_args, run_command
 from ybox.config import Consts
 from ybox.print import print_error, print_notice, print_warn
 
@@ -26,7 +40,6 @@ _AUR_META_FILE = f"{_AUR_META_CACHE_DIR}/packages-meta-ext-v1.json.gz"
 # parallel download using aria2 is much faster on slower networks
 _FETCH_AUR_META = f"/usr/bin/aria2c -x8 -j8 -s8 -k1M -d{_AUR_META_CACHE_DIR} {_AUR_META_URL}"
 _REFRESH_AGE = 24.0 * 60 * 60  # consider AUR metadata file as stale after a day
-_DEFAULT_SEP = "::::"  # something that does not appear in descriptions (at least so far)
 _PACKAGE_NAME_RE = re.compile(r"^[\w@.+-]+")  # used to strip out version comparisons
 
 # fields: name of original package, description, required dependencies, optional dependencies
@@ -46,22 +59,7 @@ def main_argv(argv: list[str]) -> None:
 
     :param argv: arguments to the function (main function passes `sys.argv[1:]`)
     """
-    parser = argparse.ArgumentParser(
-        description="Recursively find optional dependencies of a package")
-    parser.add_argument("-s", "--separator", type=str, default=_DEFAULT_SEP,
-                        help="separator to use between the columns")
-    parser.add_argument("-p", "--prefix", type=str, default="",
-                        help="prefix string before each line of result")
-    parser.add_argument("-H", "--header", type=str, default="",
-                        help="header line to print before the results (without trailing newline)")
-    parser.add_argument("-l", "--level", type=int, default=2,
-                        help="maximum level to search for optional dependencies")
-    parser.add_argument("package", type=str, help="name of the package")
-    args = parser.parse_args(argv)
-
-    # find optional dependencies of only the new packages that are going to be installed
-    # i.e. the package and its new dependencies skipping the already installed dependencies,
-    # otherwise the list can be too long and become pointless for the end-user
+    args = parse_opt_deps_args(argv)
 
     print_notice(f"Searching dependencies of '{args.package}' in base Arch repositories")
     # first get the list of all installed packages to eliminate installed packages

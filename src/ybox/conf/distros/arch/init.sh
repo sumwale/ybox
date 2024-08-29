@@ -31,9 +31,8 @@ if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/local
     $PAC -S glibc
     if ! locale-gen; then
       echo_color "$fg_red" "FAILED to generate locale for $LANG, fallback to en_US.UTF-8" >> $status_file
-      LANG=en_US.UTF-8
-      LANGUAGE="en_US:en"
-      export LANG LANGUAGE
+      export LANG=en_US.UTF-8
+      export LANGUAGE="en_US:en"
     fi
   fi
   echo "LANG=$LANG" > /etc/locale.conf
@@ -52,9 +51,6 @@ if [ -n "$CONFIGURE_FASTEST_MIRRORS" ] && ! pacman -Qq reflector 2>/dev/null >/d
   reflector @/etc/xdg/reflector/reflector.conf 2>/dev/null
 fi
 $PAC -Syu
-
-# for some reason TERMINFO_DIRS does not work for root user, so explicitly installing terminfo
-# packages for other terminal emulators available in arch which occupy only a tiny space
 
 # install packages most users will need for working comfortably
 echo_color "$fg_cyan" "Installing base set of packages" >> $status_file

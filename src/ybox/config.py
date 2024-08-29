@@ -192,11 +192,6 @@ class Consts:
         return "/usr/local/ybox-status"  # this should match the one in entrypoint-common.sh
 
     @staticmethod
-    def distribution_scripts() -> list[str]:
-        """distribution specific scripts expected to be present for all supported distributions"""
-        return ["init-base.sh", "init.sh", "init-user.sh"]
-
-    @staticmethod
     def entrypoint_init_done_file() -> str:
         """file that indicates completion of first run initialization by entrypoint.sh script"""
         return "ybox-init.done"
@@ -207,7 +202,7 @@ class Consts:
         return ["/usr/share/applications"]
 
     @staticmethod
-    def container_executable_dirs() -> list[str]:
+    def container_bin_dirs() -> list[str]:
         """directories on the container that has executables that may need to be wrapped"""
         return ["/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
 

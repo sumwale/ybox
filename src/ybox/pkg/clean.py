@@ -5,7 +5,7 @@ Clean package cache and related intermediate files of an active ybox container.
 import argparse
 from configparser import SectionProxy
 
-from ybox.cmd import PkgMgr, build_bash_command, run_command
+from ybox.cmd import PkgMgr, build_shell_command, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_info
 from ybox.state import RuntimeConfiguration, YboxStateManagement
@@ -29,5 +29,5 @@ def clean_cache(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
     """
     print_info(f"Cleaning package cache in container '{conf.box_name}'")
     clean_cmd = pkgmgr[PkgMgr.CLEAN_QUIET.value] if args.quiet else pkgmgr[PkgMgr.CLEAN.value]
-    return int(run_command(build_bash_command(docker_cmd, conf.box_name, clean_cmd),
+    return int(run_command(build_shell_command(docker_cmd, conf.box_name, clean_cmd),
                            exit_on_error=False, error_msg="cleaning package cache"))

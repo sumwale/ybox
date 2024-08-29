@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import pytest
 
-from ybox.cmd import (YboxLabel, build_bash_command, check_active_ybox,
+from ybox.cmd import (YboxLabel, build_shell_command, check_active_ybox,
                       check_ybox_exists, check_ybox_state, get_docker_command,
                       page_command, page_output, run_command)
 from ybox.print import fgcolor
@@ -110,9 +110,9 @@ def test_check_ybox_state(capsys: pytest.CaptureFixture[str]):
         assert proc_run([docker_cmd, "exec", cnt_name, "apk", "add", "bash"]).returncode == 0
         for pty in (None, False, True):
             if pty is None:
-                bash_cmd = build_bash_command(docker_cmd, cnt_name, "uname -s")
+                bash_cmd = build_shell_command(docker_cmd, cnt_name, "uname -s")
             else:
-                bash_cmd = build_bash_command(docker_cmd, cnt_name, "uname -s", enable_pty=pty)
+                bash_cmd = build_shell_command(docker_cmd, cnt_name, "uname -s", enable_pty=pty)
             assert "/bin/bash" in bash_cmd and "-c" in bash_cmd and "uname -s" in bash_cmd
             if pty is False:
                 assert "-it" not in bash_cmd
@@ -274,7 +274,7 @@ def test_page_command(capfd: pytest.CaptureFixture[str]):
     """check various cases for `page_command` function"""
     # first check normal output with or without pager
     check_str = "test page_command"
-    cmd = f"/usr/bin/echo -n '{check_str}'"
+    cmd = f"/bin/echo -n '{check_str}'"
     pager = "/usr/bin/less -RL"
     assert page_command(cmd, "") == 0
     captured = capfd.readouterr()
@@ -292,6 +292,8 @@ def test_page_command(capfd: pytest.CaptureFixture[str]):
     assert page_command(cmd, "/non-existent") == 2
     captured = capfd.readouterr()
     assert "FAILURE invoking pager '/non-existent'" in captured.out
+    # check empty output from command
+    assert page_command("/bin/echo -n ''", pager) == 0
     # check output transform
     assert page_command(cmd, pager, transform=lambda s: s.upper()) == 0
     captured = capfd.readouterr()

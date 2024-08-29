@@ -17,7 +17,7 @@ from tabulate import tabulate
 
 from ybox import __version__ as product_version
 
-from .cmd import build_bash_command
+from .cmd import build_shell_command
 from .config import Consts, StaticConfiguration
 from .env import Environ, PathName
 from .print import fgcolor as fg
@@ -85,7 +85,7 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
     :param interpolation: if provided then used for value interpolation
     :param top_level: the top-level configuration file; don't pass this when calling
                       externally (or set it the same as `conf_file` argument)
-    :return: instance of `configparser.ConfigParser` built after parsing the given file as
+    :return: instance of `ConfigParser` built after parsing the given file as
              well as any includes recursively
     """
     if not conf_file.is_file():
@@ -106,6 +106,9 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
         # to the including file and not the top-level parent
         inc_file = resolve_inc_path(include, conf_file)
         inc_conf = config_reader(inc_file, interpolation, top_level)
+        # disable interpolation for inc_conf after read else it can apply again when assigning
+        # pylint: disable=protected-access
+        inc_conf._interpolation = Interpolation()  # type: ignore
         for section in inc_conf.sections():
             if not config.has_section(section):
                 config[section] = inc_conf[section]
@@ -128,7 +131,7 @@ def ini_file_reader(fd: Iterable[str], interpolation: Optional[Interpolation],
     :param fd: file handle for the INI format data
     :param interpolation: if provided then used for value interpolation
     :param case_sensitive: if True then keys are case-sensitive (default) else case-insensitive
-    :return: instance of `configparser.ConfigParser` built after parsing the given file
+    :return: instance of `ConfigParser` built after parsing the given file
     """
     config = ConfigParser(allow_no_value=True, interpolation=interpolation, delimiters="=")
     if case_sensitive:
@@ -176,16 +179,13 @@ def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: Con
         path = env.search_config_path(f"resources/{script}", only_sys_conf=True)
         copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
     # also copy distribution specific scripts
-    for script in Consts.distribution_scripts():
-        path = env.search_config_path(conf.distribution_config(conf.distribution, script),
-                                      only_sys_conf=True)
-        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
     base_section = distro_config["base"]
     if scripts := base_section.get("scripts"):
         for script in scripts.split(","):
+            script = script.strip()
             path = env.search_config_path(conf.distribution_config(conf.distribution, script),
                                           only_sys_conf=True)
-            copy_file(path, f"{conf.scripts_dir}/{script}")
+            copy_file(path, f"{conf.scripts_dir}/{os.path.basename(script)}")
         # finally copy the ybox python module which may be used by distribution scripts
         src_dir = files("ybox")
         dest_dir = f"{conf.scripts_dir}/ybox"
@@ -220,23 +220,23 @@ def get_ybox_version(conf: StaticConfiguration) -> str:
     return ""
 
 
-def check_installed_package(docker_cmd: str, check_cmd: str, package: str,
-                            container_name: str) -> tuple[int, str]:
+def check_package(docker_cmd: str, check_cmd: str, package: str,
+                  container_name: str) -> tuple[int, list[str]]:
     """
-    Check if a given package is installed in a container.
+    Check if a given package is installed in a container, or available in package repositories
+    and return the list of matching packages.
 
     :param docker_cmd: the docker/podman executable to use
     :param check_cmd: the command used to check the existence of the package
     :param package: name of the package to check
     :param container_name: name of the container
-    :return: exit code of the `check_cmd` which should be 0 if the package exists
+             and name of matching package names which can be different for a virtual package
     """
-    check_result = subprocess.run(build_bash_command(
+    check_result = subprocess.run(build_shell_command(
         docker_cmd, container_name, check_cmd.format(package=package), enable_pty=False),
         check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     output = check_result.stdout.decode("utf-8").splitlines()
-    first_line = output[0] if len(output) > 0 else ""
-    return check_result.returncode, first_line
+    return check_result.returncode if output else 1, output
 
 
 def select_item_from_menu(items: list[str]) -> Optional[str]:
@@ -288,4 +288,5 @@ class FormatTable:
         """return formatted table as a string appropriate for display in the current terminal"""
         table = ((f"{c}{v}{fg.reset}" for v, c in zip(line, self.colors)) for line in self.table)
         headers = [f"{c}{h}{fg.reset}" for h, c in zip(self.headers, self.colors)]
-        return tabulate(table, headers, tablefmt=self.fmt, maxcolwidths=self.max_col_widths)
+        return tabulate(table, headers, tablefmt=self.fmt, disable_numparse=True,
+                        maxcolwidths=self.max_col_widths)

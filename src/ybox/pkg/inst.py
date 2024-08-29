@@ -14,12 +14,12 @@ from typing import Optional, Union
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from ybox.cmd import PkgMgr, build_bash_command, run_command
+from ybox.cmd import PkgMgr, build_shell_command, run_command
 from ybox.config import Consts, StaticConfiguration
-from ybox.print import print_info, print_notice, print_warn
+from ybox.print import print_error, print_info, print_notice, print_warn
 from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
                         YboxStateManagement)
-from ybox.util import check_installed_package, ini_file_reader
+from ybox.util import check_package, ini_file_reader, select_item_from_menu
 
 # match both "Exec=" and "TryExec=" lines
 _EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)\s*(.*)$")
@@ -61,18 +61,20 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     selected_deps = args.with_opt_deps.split(",") if args.with_opt_deps else None
     opt_deps_cmd = pkgmgr[PkgMgr.OPT_DEPS.value]
     # TODO: use this flag for -w option only if get_optional_deps returned the package/provides;
+    #       when this is done, then the opt_dep_flag in distro.ini can have proper values
     #       also allow for re-installation of packages using a flag
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
-    check_cmd = pkgmgr[PkgMgr.CHECK_INSTALL.value]
+    check_avail = pkgmgr[PkgMgr.CHECK_AVAIL.value]
+    check_inst = pkgmgr[PkgMgr.CHECK_INSTALL.value]
     return _install_package(args.package, args, install_cmd, list_cmd, docker_cmd, conf,
                             runtime_conf, state, opt_deps_cmd, opt_dep_flag, False,
-                            args.check_package, check_cmd, selected_deps, args.quiet)
+                            args.check_package, check_avail, check_inst, selected_deps, args.quiet)
 
 
 def _install_package(package: str, args: argparse.Namespace, install_cmd: str, list_cmd: str,
                      docker_cmd: str, conf: StaticConfiguration, rt_conf: RuntimeConfiguration,
                      state: YboxStateManagement, opt_deps_cmd: str, opt_dep_flag: str,
-                     opt_dep_install: bool, check_pkg: bool, check_cmd: str,
+                     opt_dep_install: bool, check_pkg: bool, check_avail: str, check_inst: str,
                      selected_deps: Optional[list[str]], quiet: int) -> int:
     """
     Real workhorse for :func:`install_package` that is invoked recursively for
@@ -93,7 +95,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                          it as a dependency (as read from `distro.ini`)
     :param opt_dep_install: `True` if installation is for an optional dependency
     :param check_pkg: if True then skip installation if package already exists
-    :param check_cmd: command to check if package exists before installation
+    :param check_avail: command to check if package is available in the package repositories
+    :param check_inst: command to check if package is installed
     :param selected_deps: list of dependencies to install if user has already provided them
     :param quiet: perform operations quietly
     :return: exit code of install command for the main package
@@ -106,29 +109,39 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
     else:
         resolved_install_cmd = install_cmd.format(opt_dep="")
-        # get optional deps even if args.skip_opt_deps is true to obtain installed_optional_deps
-        # which need to be registered against this package too (state.register_dependency below)
-        optional_deps, installed_optional_deps = get_optional_deps(package, docker_cmd,
-                                                                   conf.box_name, opt_deps_cmd)
     # don't exit on error here because the caller may have further actions to perform before exit
     code = -1
     if check_pkg:
-        code, inst_package = check_installed_package(docker_cmd, check_cmd, package, conf.box_name)
+        code, inst_pkgs = check_package(docker_cmd, check_inst, package, conf.box_name)
         if code == 0:
             if not quiet:
-                suffix = "" if package == inst_package else f" (as '{inst_package}')"
+                suffix = "" if len(inst_pkgs) == 1 and package == inst_pkgs[0] \
+                    else f" (as {inst_pkgs})"
                 print_notice(f"'{package}'{suffix} is already installed in '{conf.box_name}'")
-            package = inst_package
+            package = inst_pkgs[0]
     if code != 0:
+        if check_avail:
+            _, avail_pkgs = check_package(docker_cmd, check_avail, package, conf.box_name)
+            if len(avail_pkgs) > 1:
+                print_notice(f"Multiple packages found for '{package}', select one to install")
+                if selected_pkg := select_item_from_menu(avail_pkgs):
+                    package = selected_pkg
+                else:
+                    return 1
         if not quiet:
             print_info(f"Installing '{package}' in '{conf.box_name}'")
-        code = int(run_command(build_bash_command(
+        code = int(run_command(build_shell_command(
             docker_cmd, conf.box_name, f"{resolved_install_cmd} {package}"), exit_on_error=False,
             error_msg=f"installing '{package}'"))
         # actual installed package name can be different due to package being virtual and/or
         # having multiple choices
         if code == 0:
-            code, package = check_installed_package(docker_cmd, check_cmd, package, conf.box_name)
+            code, inst_pkgs = check_package(docker_cmd, check_inst, package, conf.box_name)
+            if code == 0:
+                package = inst_pkgs[0]  # pick first since it is sorted by latest installation time
+            else:
+                print_error(f"Package '{package}' was not installed successfully")
+                return 1
     if code == 0:
         skip_desktop_files = args.skip_desktop_files
         skip_executables = args.skip_executables
@@ -153,6 +166,11 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
             None, "")
         state.register_package(conf.box_name, package, local_copies, copy_type, app_flags,
                                rt_conf.shared_root, dep_type, dep_of)
+        # get optional deps even if args.skip_opt_deps is true to obtain installed_optional_deps
+        # which need to be registered against this package too (state.register_dependency below)
+        if not opt_dep_install:
+            optional_deps, installed_optional_deps = get_optional_deps(package, docker_cmd,
+                                                                       conf.box_name, opt_deps_cmd)
         # register the recorded optional dependencies for this package too
         if recorded_deps := state.check_packages(conf.box_name, installed_optional_deps):
             for dep in recorded_deps:
@@ -162,7 +180,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         if selected_deps:
             for dep in selected_deps:
                 _install_package(dep, args, install_cmd, list_cmd, docker_cmd, conf, rt_conf,
-                                 state, "", opt_dep_flag, True, check_pkg, check_cmd, None, quiet)
+                                 state, "", opt_dep_flag, True, check_pkg, check_avail,
+                                 check_inst, None, quiet)
 
     return code
 
@@ -202,7 +221,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     #  2) redirect PKG: lines somewhere else like a common file: this can be done but will
     #          likely be more messy than the code below (e.g. handle concurrent executions),
     #          but still can be considered in future
-    with subprocess.Popen(build_bash_command(
+    with subprocess.Popen(build_shell_command(
             docker_cmd, container_name, f"{opt_deps_cmd} {package}"),
             stdout=subprocess.PIPE) as deps_result:
         line = bytearray()
@@ -290,14 +309,14 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     if not copy_type:
         return []
     # skip on errors below and do not fail the installation
-    package_files = run_command(build_bash_command(
+    package_files = run_command(build_shell_command(
         docker_cmd, conf.box_name, list_cmd.format(package=package), enable_pty=False),
         capture_output=True, exit_on_error=False, error_msg=f"listing files of '{package}'")
     if isinstance(package_files, int):
         return []
     wrapper_files: list[str] = []
     desktop_dirs = Consts.container_desktop_dirs()
-    executable_dirs = Consts.container_executable_dirs()
+    executable_dirs = Consts.container_bin_dirs()
     man_dir_pattern = Consts.container_man_dir_pattern()
     # get the parsed container configuration
     parsed_box_conf = _get_parsed_box_conf(box_conf)

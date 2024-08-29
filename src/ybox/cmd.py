@@ -18,6 +18,7 @@ class PkgMgr(str, Enum):
     Package manager actions that are defined for each Linux distribution in its distro.ini file.
     """
     INSTALL = "install"
+    CHECK_AVAIL = "check_avail"
     CHECK_INSTALL = "check_install"
     QUIET_FLAG = "quiet_flag"
     QUIET_DETAILS_FLAG = "quiet_details_flag"
@@ -58,6 +59,7 @@ class RepoCmd(str, Enum):
     EXISTS = "exists"
     DEFAULT_GPG_KEY_SERVER = "default_gpg_key_server"
     ADD_KEY = "add_key"
+    ADD_KEY_ID = "add_key_id"
     ADD = "add"
     ADD_SOURCE = "add_source"
     REMOVE_KEY = "remove_key"
@@ -170,10 +172,11 @@ def check_ybox_exists(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     return check_ybox_state(docker_cmd, box_name, expected_states=[], exit_on_error=exit_on_error)
 
 
-def build_bash_command(docker_cmd: str, box_name: str, cmd: str,
-                       enable_pty: bool = True) -> list[str]:
+def build_shell_command(docker_cmd: str, box_name: str, cmd: str,
+                        enable_pty: bool = True) -> list[str]:
     """
-    Build a docker/podman command (as a list) to be run using `/bin/bash`.
+    Build a docker/podman command (as a list) to be run using `/bin/bash` in the given ybox
+    container, unless the command starts with `/bin/sh` in which case `/bin/sh` is used instead.
 
     :param docker_cmd: the docker/podman executable to use
     :param box_name: name of the ybox container
@@ -182,9 +185,10 @@ def build_bash_command(docker_cmd: str, box_name: str, cmd: str,
                        command and set interactive mode else no pty is allocated, defaults to True
     :return: command to be executed (e.g. in `subprocess`) as a list of strings
     """
+    shell = "/bin/sh" if cmd.startswith("/bin/sh ") else "/bin/bash"
     if enable_pty:
-        return [docker_cmd, "exec", "-it", box_name, "/bin/bash", "-c", cmd]
-    return [docker_cmd, "exec", box_name, "/bin/bash", "-c", cmd]
+        return [docker_cmd, "exec", "-it", box_name, shell, "-c", cmd]
+    return [docker_cmd, "exec", box_name, shell, "-c", cmd]
 
 
 def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
@@ -237,6 +241,29 @@ def _print_subprocess_output(result: subprocess.CompletedProcess[bytes]) -> None
         print_notice(result.stdout.decode("utf-8"))
     if result.stderr:
         print_warn(result.stderr.decode("utf-8"), file=sys.stderr)
+
+
+def parse_opt_deps_args(argv: list[str]) -> argparse.Namespace:
+    """
+    Common command-line parser for `opt_deps` utilities (see [pkgmgr] section of distro.ini)
+    that parses given arguments for the program and returns the result :class:`argparse.Namespace`.
+
+    :param argv: the list of arguments to be parsed
+    :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
+    """
+    parser = argparse.ArgumentParser(
+        description="Recursively find optional dependencies of a package")
+    # default separator is something that does not appear in descriptions (at least so far)
+    parser.add_argument("-s", "--separator", type=str, default="::::",
+                        help="separator to use between the columns")
+    parser.add_argument("-p", "--prefix", type=str, default="",
+                        help="prefix string before each line of result")
+    parser.add_argument("-H", "--header", type=str, default="",
+                        help="header line to print before the results (without trailing newline)")
+    parser.add_argument("-l", "--level", type=int, default=2,
+                        help="maximum level to search for optional dependencies")
+    parser.add_argument("package", type=str, help="name of the package")
+    return parser.parse_args(argv)
 
 
 def page_output(output: Iterable[bytes], pager: str) -> int:
@@ -295,6 +322,8 @@ def page_command(cmd: Union[str, list[str]], pager: str, error_msg: Optional[str
     result = run_command(cmd, capture_output=True, exit_on_error=False, error_msg=error_msg)
     if isinstance(result, int):
         return result
+    if not result:
+        return 0
     result_bytes = transform(result).encode("utf-8") if transform else result.encode("utf-8")
     output = (header.encode("utf-8"), result_bytes) if header else (result_bytes,)
     return page_output(output, pager)

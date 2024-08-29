@@ -141,7 +141,7 @@ def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
     nvidia_setup = _create_nvidia_setup(docker_args, mount_lib_dirs)
 
     # mount nvidia binary directories and add code to script to link to them in container
-    nvidia_bin_dirs = _filter_nvidia_dirs({realpath(d) for d in _STD_BIN_DIRS},
+    nvidia_bin_dirs = _filter_nvidia_dirs({realpath(d) for d in Consts.container_bin_dirs()},
                                           _NVIDIA_BIN_PATTERNS)
     mount_bin_dirs = _prepare_mount_dirs(nvidia_bin_dirs, docker_args,
                                          f"{mount_nvidia_subdir}/mnt_bin")
@@ -323,13 +323,13 @@ def _process_nvidia_data_files(docker_args: list[str], script: list[str],
             idx += 1
             add_mount_option(docker_args, data_dir, mount_data_dir, "ro")
             nvidia_data_dirs.add(data_dir)
+            path_dir = os.path.dirname(path)
+            script.append(f"mkdir -p {path_dir} && chmod 0755 {path_dir} && \\")
             if path_is_dir:
                 # links for data directories need to be in the same location as original
-                script.append(f"rm -rf {path} && ln -s {mount_data_dir} {path}")
+                script.append(f"  rm -rf {path} && ln -s {mount_data_dir} {path}")
             else:
                 # assume that files inside other directories have the pattern "*nvidia*",
                 # so the code avoids hard-coding fully resolved patterns to deal with
                 # a case when the data file name changes after driver upgrade
-                path_dir = os.path.dirname(path)
-                script.append(f"mkdir -p {path_dir} && chmod 0755 {path_dir} && \\")
                 script.append(f"  ln -sf {mount_data_dir}/*nvidia* {path_dir}/. 2>/dev/null")

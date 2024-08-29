@@ -37,4 +37,4 @@ def info_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     docker_args.extend([conf.box_name, "/bin/bash", "-c", info_cmd])
     # empty pager argument is a valid one and indicates no pagination, hence the `is None` check
     pager: str = args.pager if args.pager is not None else conf.pager
-    return page_command(docker_args, pager, error_msg="showing information of package(s)")
+    return page_command(docker_args, pager, error_msg="SKIP")

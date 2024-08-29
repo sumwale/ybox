@@ -1,31 +1,25 @@
 #!/bin/bash
 
-# this script adds a GPG/PGP key to pacman which can be either a key ID
-# or a URL having the key file
+# this script fetches a GPG/PGP key file from a URL and adds the key to pacman
 
 set -e
 
-# ensure that system path is always searched first for all the system utilities
-export PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-
-KEY="$1"
-KEY_SERVER="$2"
-
-if [[ "$KEY" == *"://"* ]]; then
-  # key is a URL
-  key_file="$(mktemp /tmp/gpg-key-XXXXXXXXXX)"
-  wget "$KEY" -O "$key_file"
-  KEYIDS="$(gpg --show-keys --with-colons "$key_file" | sed -n 's/^fpr:*\([^:]*\).*/\1/p')"
-  sudo pacman-key --add "$key_file"
-  rm -f "$key_file"
-else
-  KEYIDS="$KEY"
-  if [ -z "$KEY_SERVER" ]; then
-    sudo pacman-key --recv-keys $KEYIDS
-  else
-    sudo pacman-key --keyserver "$KEY_SERVER" --recv-keys $KEYIDS
-  fi
+# Check if all arguments are provided
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <url>"
+  exit 1
 fi
+
+# ensure that only system paths are searched for all the system utilities
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+
+file="$(mktemp /tmp/gpg-key-XXXXXXXXXX)"
+
+trap "rm -f $file" 0 1 2 3 13 15
+
+curl -sSL "$1" -o "$file"
+KEYIDS="$(gpg --show-keys --with-colons "$file" | sed -n 's/^fpr:*\([^:]*\).*/\1/p' | tr '\n' ' ')"
+sudo pacman-key --add "$file"
 
 for keyid in $KEYIDS; do
   sudo pacman-key --lsign-key $keyid
