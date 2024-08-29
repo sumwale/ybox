@@ -11,7 +11,7 @@ import sys
 from collections import defaultdict
 from typing import Iterable
 
-from pkgdeps import PKG_DEP_RE
+from pkgdeps import PKG_DEP_RE  # pylint: disable=no-name-in-module
 
 _DOT_LINE = re.compile(r"\s+\.\s*")
 
