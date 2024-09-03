@@ -15,7 +15,7 @@ export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 
 file="$(mktemp /tmp/gpg-key-XXXXXXXXXX)"
 
-trap "rm -f $file" 0 1 2 3 13 15
+trap "rm -f $file" 0 1 2 3 15
 
 curl -sSL "$1" -o "$file"
 KEYIDS="$(gpg --show-keys --with-colons "$file" | sed -n 's/^fpr:*\([^:]*\).*/\1/p' | tr '\n' ' ')"

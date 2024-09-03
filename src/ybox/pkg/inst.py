@@ -431,6 +431,8 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
 
     try:
         # the destination will be $HOME/.local/share/applications
+        os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
+                    exist_ok=True)
         wrapper_file = f"{conf.env.user_applications_dir}/{wrapper_name}"
         print_warn(f"Linking container desktop file {file} to {wrapper_file}")
         with open(wrapper_file, "w", encoding="utf-8") as wrapper_fd:
@@ -487,6 +489,8 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
                       container configuration
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
+    os.makedirs(conf.env.user_executables_dir, mode=Consts.default_directory_mode(),
+                exist_ok=True)
     wrapper_exec = _get_wrapper_executable(filename, conf)
     print_warn(f"Linking container executable {file} to {wrapper_exec}")
     # ensure to change working directory to same on as on host if possible using `run-in-dir`

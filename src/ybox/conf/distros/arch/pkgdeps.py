@@ -92,6 +92,10 @@ def build_pacman_db_map(sep: str) -> defaultdict[str, list[PackageAlternate]]:
     The first element element in the list is always the package itself while subsequent ones
     are all packages that provide the same package, if any.
 
+    This is actually faster than querying the sync database multiple times (at least twice)
+    using pacman/expac for the package and its optional dependencies since the sync databases are
+    just a tarball of the packages that have to be read in entirety either way.
+
     :param sep: the separator string to use between the output fields of `expac`
     :return: a `defaultdict` having package names as keys with list of `PackageAlternate` values
     """
@@ -143,6 +147,12 @@ def build_aur_db_map(aur_packages: defaultdict[str, list[PackageAlternate]],
     `PackageAlternate` objects which contains the name, description, required dependencies and
     optional dependencies of the package as well as any packages that provide this package.
     The result is added to the passed `aur_packages` argument which should be a `defaultdict`.
+
+    This downloads the AUR metadata explicitly and builds the map from the downloaded file.
+    The AUR metadata is refreshed if it is missing or older than 24 hours.
+    The alternative of using paru/yay to dump information of all available packages is much much
+    slower. Querying using paru/yay for virtual packages in AUR database does not work since they
+    maintain just the names of AUR packages locally, so cannot just query the optional deps.
 
     :param aur_packages: a `defaultdict` which will be populated wih the package names as keys
                          and list of `PackageAlternate` objects as the values

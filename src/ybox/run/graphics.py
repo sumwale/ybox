@@ -62,7 +62,7 @@ def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "
         docker_args.append(f"-v={src}:{dest}")
 
 
-def enable_x11(docker_args: list[str]) -> None:
+def enable_x11(docker_args: list[str], env: Environ) -> None:
     """
     Append options to docker/podman arguments to share host machine's Xorg X11 server
     with the new ybox container. This also sets up sharing of XAUTHORITY file (with automatic
@@ -70,18 +70,31 @@ def enable_x11(docker_args: list[str]) -> None:
     X authentication to work.
 
     :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param env: an instance of the current :class:`Environ`
     """
     add_env_option(docker_args, "DISPLAY")
     xsock = "/tmp/.X11-unix"
     if os.access(xsock, os.R_OK):
         add_mount_option(docker_args, xsock, xsock, "ro")
     if xauth := os.environ.get("XAUTHORITY"):
-        # XAUTHORITY file may change after a restart or login (e.g. with Xwayland), so mount its
-        # parent directory which is adjusted by run-in-dir script if it has changed
+        # XAUTHORITY file may change after a restart or login (e.g. with Xwayland), so mount some
+        # parent directory which is adjusted by run-in-dir script if it has changed;
+        # For now the known common parents are used below since using just the immediate
+        # parent can cause trouble if one changes the display manager, for example, which
+        # uses an entirely different mount point (e.g. gdm uses /run/user/... while sddm
+        #   uses /tmp)
         parent_dir = os.path.dirname(xauth)
-        target_dir = f"{parent_dir}-host"
-        target_xauth = f"{target_dir}/{os.path.basename(xauth)}"
-        add_mount_option(docker_args, parent_dir, target_dir, "ro")
+        # check if parent_dir is in $XDG_RUNTIME_DIR or /tmp
+        if not env.xdg_rt_dir:
+            parent_dirs = {parent_dir, "/tmp"}
+        elif xauth.startswith(f"{env.xdg_rt_dir}/") or xauth.startswith("/tmp/"):
+            parent_dirs = (env.xdg_rt_dir, "/tmp")
+            parent_dir = "/tmp" if parent_dir.startswith("/tmp") else env.xdg_rt_dir
+        else:
+            parent_dirs = (parent_dir, env.xdg_rt_dir, "/tmp")
+        for p_dir in parent_dirs:
+            add_mount_option(docker_args, p_dir, f"{p_dir}-host", "ro")
+        target_xauth = xauth.replace(parent_dir, f"{parent_dir}-host")
         add_env_option(docker_args, "XAUTHORITY", target_xauth)
         add_env_option(docker_args, "XAUTHORITY_ORIG", target_xauth)
 

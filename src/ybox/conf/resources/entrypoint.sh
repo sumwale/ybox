@@ -175,6 +175,7 @@ if [ ! -e "$SCRIPT_DIR/ybox-init.done" ]; then
   # may have been installed/updated by the above scripts.
   # Caller will restart the container after removing the init scripts.
   echo stopped >> $status_file
+  sync $status_file
   exit 0
 fi
 
@@ -210,7 +211,7 @@ function cleanup() {
   kill -TERM $childPID
 }
 
-# truncate status file and cleanly kill the processes on hup/int/quit/pipe/term signals
-trap "cleanup" 1 2 3 13 15
+# truncate status file and cleanly kill the processes on SIGHUP and SIGTERM
+trap "cleanup" 1 15
 
 wait $childPID

@@ -12,9 +12,16 @@ fi
 # XAUTHORITY file can change after a re-login or a restart, so search for the passed one
 # by docker/podman exec in the mount point of its parent directory
 if [ -n "$XAUTHORITY" -a -n "$XAUTHORITY_ORIG" -a ! -r "$XAUTHORITY" ]; then
-  xauth_dir="$(dirname "$XAUTHORITY_ORIG")"
-  xauth_file="$(basename "$XAUTHORITY")"
-  XAUTHORITY="$xauth_dir/$xauth_file"
+  # XAUTHORITY is assumed to be either in /run/user or in /tmp
+  run_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  if [[ "$XAUTHORITY" == $run_dir/* ]]; then
+    host_dir="$run_dir"
+  elif [[ "$XAUTHORITY" == /tmp/* ]]; then
+    host_dir=/tmp
+  else
+    host_dir="$(dirname "$XAUTHORITY")"
+  fi
+  XAUTHORITY="${XAUTHORITY/#$host_dir/${host_dir}-host}" # replace $host_dir by ${host_dir}-host
   if [ ! -r "$XAUTHORITY" ]; then
     XAUTHORITY="$XAUTHORITY_ORIG"
   fi

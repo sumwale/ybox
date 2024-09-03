@@ -17,15 +17,16 @@ fi
 echo_color "$fg_cyan" "Configuring apt and updating package list" >> $status_file
 export HOME=/root
 export DEBIAN_FRONTEND=noninteractive
-# don't install recommended and suggested packages by default
+# don't install recommended and suggested packages by default but keep them if they are
+# deliberately marked as dependencies
 cat > /etc/apt/apt.conf.d/10-ybox << EOF
-APT::Get::Install-Recommends "0";
-APT::Get::Install-Suggests "0";
-APT::Install-Recommends "0";
-APT::Install-Suggests "0";
+APT::Install-Recommends "false";
+APT::Install-Suggests "false";
+APT::AutoRemove::RecommendsImportant "true";
+APT::AutoRemove::SuggestsImportant "true";
 EOF
 # allow language translations in apt for non english locales
-if [[ ! "$LANG" =~ ^en_.* ]]; then
+if [[ -n "$LANG" && ! "$LANG" =~ ^C(\..+)?$ && "$LANG" != "POSIX" && ! "$LANG" == en_* ]]; then
   rm -f /etc/apt/apt.conf.d/docker-no-languages
 fi
 

@@ -33,7 +33,7 @@ def main_argv(argv: list[str]) -> None:
         run_command([docker_cmd, "container", "stop", container_name], error_msg="container stop")
         time.sleep(2)
 
-    check_ybox_state(docker_cmd, container_name, ["exited", "stopped"], exit_on_error=True,
+    check_ybox_state(docker_cmd, container_name, ("exited", "stopped"), exit_on_error=True,
                      cnt_state_msg=" stopped")
 
     print_color(f"Starting ybox container '{container_name}'", fg=fgcolor.cyan)

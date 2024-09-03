@@ -19,8 +19,8 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional
 
-from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_active_ybox,
-                      check_ybox_exists, get_docker_command, run_command)
+from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
+                      check_ybox_state, get_docker_command, run_command)
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
@@ -566,7 +566,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
             config_locale = _get_boolean(val)
         elif key == "x11":
             if _get_boolean(val):
-                enable_x11(docker_args)
+                enable_x11(docker_args, env)
         elif key == "wayland":
             if _get_boolean(val):
                 enable_wayland(docker_args, env)
@@ -1123,11 +1123,13 @@ def wait_for_container(docker_cmd: str, conf: StaticConfiguration) -> None:
             return False
 
         for _ in range(max_wait_secs):
-            # check the container status first
-            if check_active_ybox(docker_cmd, box_name):
+            # check the container status first which may be running or stopping
+            # in which case sleep and retry (if stopped, then read_lines should succeed)
+            if check_ybox_state(docker_cmd, box_name, expected_states=("running", "stopping")):
                 if read_lines():
                     return
             else:
+                time.sleep(1)  # wait for sometime for file write to become visible
                 if read_lines():
                     return
                 print_error("FAILED waiting for container to be ready (last status: "

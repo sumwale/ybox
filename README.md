@@ -65,7 +65,7 @@ few things like systemd.
 
 If you have cloned the repository, then no further installation is required to run the utilities
 in `src` directory which can be done directly off the repository. In the near future this will
-also be published on `pypi.org`, so you will be able to install with `pip install ybox-py`.
+also be published on `pypi.org`, so you will be able to install with `pip install --user ybox`.
 
 As of now the following is required:
 
@@ -82,7 +82,7 @@ As of now the following is required:
 - install [simple-term-menu](https://pypi.org/project/simple-term-menu/),
   [tabulate](https://pypi.org/project/tabulate/) and
   [packaging](https://pypi.org/project/packaging/),  either from your distribution
-  repository, if available, else: `pip install simple-term-menu packaging tabulate`
+  repository, if available, else: `pip install --user simple-term-menu packaging tabulate`
   (obviously you will need `pip` itself to be installed which should be in your
    distribution repositories e.g. ubuntu/debian have it as `python3-pip`)
 

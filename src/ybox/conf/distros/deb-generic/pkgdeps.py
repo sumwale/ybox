@@ -52,7 +52,6 @@ def main_argv(argv: list[str]) -> None:
         if args.header:
             print(args.header)
         prefix = args.prefix
-        # TODO: SW: handle order in ybox-pkg
         for pkg, (desc, level, _, installed) in opt_deps.items():
             # columns below are expected by ybox-pkg
             print(f"{prefix}{pkg}{sep}{level}{sep}{installed}{sep}{desc}")
@@ -105,6 +104,11 @@ def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, int
                 check_optional = False
                 provides_map[current_pkg] = current_pkg
         elif check_optional:
+            # Note: version comparisons are not required here since all we need is the description
+            # of the package. This assumes that the best package available for installation in the
+            # repositories satisfies the version mentioned in the Recommends/Suggests dependencies,
+            # but that may not be true in some rare cases in which case the installation of the
+            # optional dependency will fail after user selects it.
             if line.startswith("Recommends:"):
                 for match in PKG_DEP_RE.finditer(line, len("Recommends:")):
                     if match.group(1) != "|":  # ORed dependencies have the same `order`

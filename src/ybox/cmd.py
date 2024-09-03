@@ -103,14 +103,14 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
         f"No podman/docker found or '{option_name}' specified")
 
 
-def check_ybox_state(docker_cmd: str, box_name: str, expected_states: list[str],
+def check_ybox_state(docker_cmd: str, box_name: str, expected_states: Iterable[str],
                      exit_on_error: bool = False, cnt_state_msg: str = "") -> bool:
     """
     Check if the given ybox container exists and is in one of the given states.
 
     :param docker_cmd: the docker/podman executable to use
     :param box_name: name of the ybox container
-    :param expected_states: list of one or more expected states like 'running', 'exited';
+    :param expected_states: Iterable of one or more expected states like 'running', 'exited';
                             empty value means any state is permissible
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :param cnt_state_msg: string to be inserted in the error message "No...ybox container ..."
@@ -156,7 +156,7 @@ def check_active_ybox(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
-    return check_ybox_state(docker_cmd, box_name, expected_states=["running"],
+    return check_ybox_state(docker_cmd, box_name, expected_states=("running",),
                             exit_on_error=exit_on_error, cnt_state_msg=" active")
 
 
@@ -169,7 +169,7 @@ def check_ybox_exists(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
-    return check_ybox_state(docker_cmd, box_name, expected_states=[], exit_on_error=exit_on_error)
+    return check_ybox_state(docker_cmd, box_name, expected_states=(), exit_on_error=exit_on_error)
 
 
 def build_shell_command(docker_cmd: str, box_name: str, cmd: str,
