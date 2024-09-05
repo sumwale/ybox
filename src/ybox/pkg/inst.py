@@ -6,6 +6,7 @@ import argparse
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 from configparser import ConfigParser, SectionProxy
@@ -21,8 +22,8 @@ from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
                         YboxStateManagement)
 from ybox.util import check_package, ini_file_reader, select_item_from_menu
 
-# match both "Exec=" and "TryExec=" lines
-_EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)\s*(.*)$")
+# match both "Exec=" and "TryExec=" lines (don't capture trailing newline)
+_EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)\s*(.*?)\s*$")
 # match !p and !a to replace executable program (third group above) and arguments respectively
 _FLAGS_RE = re.compile("![ap]")
 _LOCAL_BIN_DIRS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
@@ -316,6 +317,10 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
         return []
     wrapper_files: list[str] = []
     desktop_dirs = Consts.container_desktop_dirs()
+    icon_dir_pattern = re.compile(f"({')|('.join(Consts.container_icon_dirs())})")
+    # map of found icons where key is the name of icon file (without extension) while the value
+    # is a tuple with first one being a float inverse priority (lower is better) followed by path
+    selected_icons: dict[str, tuple[float, str]] = {}
     executable_dirs = Consts.container_bin_dirs()
     man_dir_pattern = Consts.container_man_dir_pattern()
     # get the parsed container configuration
@@ -344,15 +349,20 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     for file_dir, filename, file in file_paths:
         # check if this is a .desktop directory and copy it over adding appropriate
         # "docker exec" prefix to the command
-        if (copy_type & CopyType.DESKTOP) and file_dir in desktop_dirs:
-            _wrap_desktop_file(filename, file, package, docker_cmd, conf, app_flags,
-                               wrapper_files)
-            continue  # if it is a .desktop file, then it cannot be an executable too
+        if copy_type & CopyType.DESKTOP:
+            if file_dir in desktop_dirs:
+                _wrap_desktop_file(filename, file, package, docker_cmd, conf, app_flags,
+                                   wrapper_files)
+                continue  # if it is a .desktop file, then skip executable check
+            if _select_app_icon(file_dir, filename, file, icon_dir_pattern, selected_icons):
+                continue  # if it is an icon file, then skip executable check
         if copy_type & CopyType.EXECUTABLE:
             if file_dir in executable_dirs:
                 _wrap_executable(filename, file, docker_cmd, conf, app_flags, wrapper_files)
             elif shared_root and man_dir_pattern.match(file_dir):
                 _link_man_page(file, shared_root, conf, wrapper_files)
+    if selected_icons:
+        _copy_app_icons(selected_icons, docker_cmd, conf, quiet, wrapper_files)
 
     return wrapper_files
 
@@ -411,7 +421,7 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
     """
     # container name is added to desktop file to make it unique
     wrapper_name = f"ybox.{conf.box_name}.{filename}"
-    tmp_file = Path(f"/tmp/{wrapper_name}")
+    tmp_file = Path("/tmp", wrapper_name)
     tmp_file.unlink(missing_ok=True)
     if run_command([docker_cmd, "cp", f"{conf.box_name}:{file}", str(tmp_file)],
                    exit_on_error=False, error_msg=f"copying of file from '{package}'") != 0:
@@ -424,23 +434,100 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
         if flags := app_flags.get(os.path.basename(program), ""):
             full_cmd = _FLAGS_RE.sub(
                 lambda f_match: _replace_flags(f_match, flags, program, args), flags)
-        else:
+        elif args:
             full_cmd = f"{program} {args}"
+        else:
+            full_cmd = program
         return (f'{match.group(1)}{docker_cmd} exec -it -e=XAUTHORITY {conf.box_name} '
-                f'/usr/local/bin/run-in-dir "" {full_cmd}')
+                f'/usr/local/bin/run-in-dir "" {full_cmd}\n')
 
     try:
         # the destination will be $HOME/.local/share/applications
         os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
                     exist_ok=True)
         wrapper_file = f"{conf.env.user_applications_dir}/{wrapper_name}"
-        print_warn(f"Linking container desktop file {file} to {wrapper_file}")
+        print_notice(f"Linking container desktop file {file} to {wrapper_file}")
         with open(wrapper_file, "w", encoding="utf-8") as wrapper_fd:
             with tmp_file.open("r", encoding="utf-8") as tmp_fd:
                 wrapper_fd.writelines(_EXEC_RE.sub(replace_executable, line) for line in tmp_fd)
         wrapper_files.append(wrapper_file)
     finally:
         tmp_file.unlink(missing_ok=True)
+
+
+def _select_app_icon(file_dir: str, filename: str, file: str, icon_dir_pattern: re.Pattern[str],
+                     selected_icons: dict[str, tuple[float, str]]) -> bool:
+    """
+    Check if given file is an application icon file and fill in the given dict of `selected_icons`
+    if there is no icon selected with the same name so far or it is higher priority than the
+    existing one in `selected_icons`.
+
+    :param file_dir: the directory of the application icon file
+    :param filename: name of the application icon file
+    :param file: full path of the application icon file
+    :param icon_dir_pattern: a regular expression of the form `(<dir1>|<dir2>|...)` capturing all
+                             the standard icon directories and also separately capture icon size
+                             for directory of the form `/path/64x64/...` (i.e. capture `64`)
+    :param selected_icons: dictionary of icon names (i.e. file name without extension) to a tuple
+                           having inverse priority as a float and full path of the icon file
+    :return: `True` if `file_dir` was one of the app icon directories else `False`
+    """
+    if icon_match := icon_dir_pattern.fullmatch(file_dir):
+        # find index of the first pattern that matched
+        match_groups = icon_match.groups()
+        dir_idx = next(idx for idx, d in enumerate(match_groups) if d)
+        # deal with 16x16 kind of directories; max dimension expected is 512
+        if len(match_groups) >= dir_idx + 2 and (icon_dim_str := icon_match.group(
+                dir_idx + 2)) and (icon_dim := float(icon_dim_str)) < 1024:
+            # larger `icon_dim` should give smaller `inv_priority`, hence (1.0 - ...)
+            inv_priority = dir_idx + 1.0 - icon_dim / 1024.0
+        else:
+            inv_priority = float(dir_idx)
+        icon_name = Path(filename).stem  # name is without extension
+        if not (existing := selected_icons.get(icon_name)) or inv_priority < existing[0]:
+            selected_icons[icon_name] = (inv_priority, file)
+        return True
+    return False
+
+
+def _copy_app_icons(selected_icons: dict[str, tuple[float, str]], docker_cmd: str,
+                    conf: StaticConfiguration, quiet: int, wrapper_files: list[str]) -> None:
+    """
+    Copy application icons (as accumulated in `selected_icons`) from the container to user's
+    standard application icon directory. It will also ask for confirmation (if `-q/--quiet` flag
+      was not pass) if an icon with same name already exists in user's directory.
+
+    :param selected_icons: dictionary of icon names (i.e. file name without extension) to a tuple
+                           having inverse priority as a float and full path of the icon file
+    :param docker_cmd: the docker/podman executable to use
+    :param conf: the :class:`StaticConfiguration` for the container
+    :param quiet: perform operations quietly: a value != 0 will skip overwriting existing icon
+                  file in user's application icon directory without confirmation
+    :param wrapper_files: the accumulated list of all wrapper files so far
+    """
+    target_icon_dir = Path(conf.env.user_base, "share", "icons")
+    os.makedirs(target_icon_dir, mode=Consts.default_directory_mode(), exist_ok=True)
+    for icon_name, (_, icon_path) in selected_icons.items():
+        if existing_icons := [str(p) for p in target_icon_dir.glob(f"{icon_name}.*")]:
+            resp = input(f"Application icon(s) [{' '.join(existing_icons)}] already present. "
+                         "Override? (y/N) ") if quiet == 0 else "N"
+            if resp.strip().lower() != "y":
+                print_warn(f"Skipping copying of application icon {icon_path}")
+                continue
+        target_icon_path = target_icon_dir.joinpath(os.path.basename(icon_path))
+        print_notice(f"Copying application icon file {icon_path} to {target_icon_path}")
+        # copying to temporary path so that existing file, if any can be overwritten
+        # (so that if has hard links, for example, the hard links will remain intact)
+        tmp_path = f"{target_icon_path}.ybox-tmp"
+        if run_command([docker_cmd, "cp", f"{conf.box_name}:{icon_path}", tmp_path],
+                       exit_on_error=False) == 0:
+            exists = os.path.exists(target_icon_path)
+            shutil.copy2(tmp_path, target_icon_path)
+            os.unlink(tmp_path)
+            # skip registration of icon file it already existed and was overwritten so that
+            # it is not removed on package uninstall
+            if not exists:
+                wrapper_files.append(str(target_icon_path))
 
 
 def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, quiet: int) -> bool:
@@ -451,9 +538,9 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
     :param filename: name of the executable file being wrapped
     :param file: full path of the executable file being wrapped
     :param conf: the :class:`StaticConfiguration` for the container
-    :param quiet: perform operations quietly: a value of 1 will overwrite existing wrapper file
-                  without confirmation while a value of 2 will also override system executable,
-                  if present, without confirmation
+    :param quiet: perform operations quietly: a value of 1 will skip overwriting existing wrapper
+                  file without confirmation while a value of 2 will also skip overriding
+                  system executable, if present, without confirmation
     :return: `True` if the wrapper executable file name if allowed else `False`
     """
     wrapper_exec = _get_wrapper_executable(filename, conf)
@@ -492,7 +579,7 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     os.makedirs(conf.env.user_executables_dir, mode=Consts.default_directory_mode(),
                 exist_ok=True)
     wrapper_exec = _get_wrapper_executable(filename, conf)
-    print_warn(f"Linking container executable {file} to {wrapper_exec}")
+    print_notice(f"Linking container executable {file} to {wrapper_exec}")
     # ensure to change working directory to same on as on host if possible using `run-in-dir`
     # check for additional flags to be added
     if flags := app_flags.get(filename, ""):
@@ -525,8 +612,8 @@ def _link_man_page(file: str, shared_root: str, conf: StaticConfiguration,
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
     man_dir_base = file.index("/man/")  # expect /man/ to exist in the file path
-    linked_man_page = Path(conf.env.user_man_dir).joinpath(file[man_dir_base + 5:])
-    print_warn(f"Linking man page {file} to {linked_man_page}")
+    linked_man_page = Path(conf.env.user_base, "share", "man", file[man_dir_base + 5:])
+    print_notice(f"Linking man page {file} to {linked_man_page}")
     linked_man_page.parent.mkdir(parents=True, exist_ok=True)
     linked_man_page.unlink(missing_ok=True)
     linked_man_page.symlink_to(f"{shared_root}{file}")

@@ -29,7 +29,7 @@ class Environ:
         # container will always be in /home as ensured by ybox/entrypoint.py script
         self._target_home = f"/home/{getpass.getuser()}"
         os.environ["TARGET_HOME"] = self._target_home
-        user_base = site.getuserbase()
+        self._user_base = user_base = site.getuserbase()
         target_user_base = f"{self._target_home}/.local"
         self._data_dir = f"{user_base}/share/ybox"
         self._target_data_dir = f"{target_user_base}/share/ybox"
@@ -50,7 +50,6 @@ class Environ:
                                         sys_conf_dir]
         self._user_applications_dir = f"{user_base}/share/applications"
         self._user_executables_dir = f"{user_base}/bin"
-        self._user_man_dir = f"{user_base}/share/man"
 
     def search_config_path(self, conf_path: str, only_sys_conf: bool = False,
                            quiet: bool = False) -> PathName:
@@ -114,6 +113,11 @@ class Environ:
         return self._now
 
     @property
+    def user_base(self) -> str:
+        """User's local base data directory which is typically ~/.local"""
+        return self._user_base
+
+    @property
     def user_applications_dir(self) -> str:
         """User's local applications directory that holds the .desktop files"""
         return self._user_applications_dir
@@ -122,8 +126,3 @@ class Environ:
     def user_executables_dir(self) -> str:
         """User's local executables directory which should be in the $PATH"""
         return self._user_executables_dir
-
-    @property
-    def user_man_dir(self) -> str:
-        """User's local man pages directory which should be in the path returned by `manpath`"""
-        return self._user_man_dir

@@ -4,7 +4,7 @@ Configuration locations, distribution and box name of ybox container.
 
 import os
 import re
-from typing import Optional
+from typing import Iterable, Optional
 
 from .env import Environ
 
@@ -176,10 +176,10 @@ class Consts:
         return "entrypoint.sh"
 
     @staticmethod
-    def resource_scripts() -> list[str]:
+    def resource_scripts() -> Iterable[str]:
         """all the scripts in the resources directory"""
-        return [Consts.entrypoint_base(), Consts.entrypoint_cp(), Consts.entrypoint(),
-                "entrypoint-common.sh", "entrypoint-root.sh", "prime-run", "run-in-dir"]
+        return (Consts.entrypoint_base(), Consts.entrypoint_cp(), Consts.entrypoint(),
+                "entrypoint-common.sh", "entrypoint-root.sh", "prime-run", "run-in-dir")
 
     @staticmethod
     def shared_root_mount_dir() -> str:
@@ -197,14 +197,20 @@ class Consts:
         return "ybox-init.done"
 
     @staticmethod
-    def container_desktop_dirs() -> list[str]:
+    def container_desktop_dirs() -> Iterable[str]:
         """directories on the container that has desktop files that may need to be wrapped"""
-        return ["/usr/share/applications"]
+        return ("/usr/share/applications",)
 
     @staticmethod
-    def container_bin_dirs() -> list[str]:
+    def container_icon_dirs() -> Iterable[str]:
+        """directories on the container (as regexes) that may have application icons"""
+        return ("/usr/share/icons/hicolor/scalable/.*", "/usr/share/icons/hicolor/([1-9]+)x.*",
+                "/usr/share/icons/hicolor/symbolic/.*", "/usr/share/icons", "/usr/share/pixmaps")
+
+    @staticmethod
+    def container_bin_dirs() -> Iterable[str]:
         """directories on the container that has executables that may need to be wrapped"""
-        return ["/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
+        return ("/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin", "/usr/local/sbin")
 
     @staticmethod
     def container_man_dir_pattern() -> re.Pattern[str]:

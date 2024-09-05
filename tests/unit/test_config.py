@@ -88,15 +88,19 @@ def test_consts():
     assert Consts.entrypoint_base() == "entrypoint-base.sh"
     assert Consts.entrypoint_cp() == "entrypoint-cp.sh"
     assert Consts.entrypoint() == "entrypoint.sh"
-    expected_scripts = ["entrypoint-base.sh", "entrypoint-cp.sh", "entrypoint.sh",
-                        "entrypoint-common.sh", "entrypoint-root.sh", "prime-run", "run-in-dir"]
+    expected_scripts = ("entrypoint-base.sh", "entrypoint-cp.sh", "entrypoint.sh",
+                        "entrypoint-common.sh", "entrypoint-root.sh", "prime-run", "run-in-dir")
     assert Consts.resource_scripts() == expected_scripts
     assert Consts.shared_root_mount_dir() == "/ybox-root"
     assert Consts.status_target_file() == "/usr/local/ybox-status"
     assert Consts.entrypoint_init_done_file() == "ybox-init.done"
-    assert Consts.container_desktop_dirs() == ["/usr/share/applications"]
-    expected_exec_dirs = ["/usr/bin", "/usr/sbin", "/bin", "/sbin",
-                          "/usr/local/bin", "/usr/local/sbin"]
+    assert Consts.container_desktop_dirs() == ("/usr/share/applications",)
+    expected_icon_dirs = (
+        "/usr/share/icons/hicolor/scalable/.*", "/usr/share/icons/hicolor/([1-9]+)x.*",
+        "/usr/share/icons/hicolor/symbolic/.*", "/usr/share/icons", "/usr/share/pixmaps")
+    assert Consts.container_icon_dirs() == expected_icon_dirs
+    expected_exec_dirs = ("/usr/bin", "/usr/sbin", "/bin", "/sbin",
+                          "/usr/local/bin", "/usr/local/sbin")
     assert Consts.container_bin_dirs() == expected_exec_dirs
     for man_dir in ("/usr/share/man", "/usr/man", "/usr/local/share/man", "/usr/local/man"):
         for sub_dir in (f"man{idx}" for idx in range(10)):

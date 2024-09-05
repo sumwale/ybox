@@ -219,8 +219,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
         print_error(f"FAILURE invoking '{cmd}': {err}")
         return err.errno
     if result.returncode != 0:
-        if capture_output:
-            _print_subprocess_output(result)
+        _print_subprocess_output(result)
         if not error_msg:
             error_msg = f"'{cmd}'"
         if error_msg != "SKIP":

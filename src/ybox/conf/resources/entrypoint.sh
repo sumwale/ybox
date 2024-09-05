@@ -45,10 +45,21 @@ function link_config_files() {
       eval home_file="$home_file"
       dest_file="$config_dir/${BASH_REMATCH[2]}"
       # only replace the file if it is already a link (assuming the link target may
-      #   have changed in the config_list file)
+      #   have changed in the config_list file), or a directory containing links
       if [ -e "$dest_file" ]; then
         if [ -L "$home_file" ]; then
           rm -f "$home_file"
+        elif [ -d "$home_file" ]; then
+          do_rmdir=true
+          for f in "$home_file"/*; do
+            if [ -e "$f" -a ! -L "$f" ]; then
+              do_rmdir=false
+              break
+            fi
+          done
+          if [ "$do_rmdir" = true ]; then
+            rm -rf "$home_file"
+          fi
         fi
         home_filedir="$(dirname "$home_file")"
         if [ ! -e "$home_filedir" ]; then

@@ -15,7 +15,8 @@ import pytest
 
 from ybox.cmd import (YboxLabel, build_shell_command, check_active_ybox,
                       check_ybox_exists, check_ybox_state, get_docker_command,
-                      page_command, page_output, run_command)
+                      page_command, page_output, parse_opt_deps_args,
+                      run_command)
 from ybox.print import fgcolor
 
 
@@ -182,10 +183,14 @@ def test_run_command(capsys: pytest.CaptureFixture[str]):
     expected.sort()
     output = run_command("/bin/ls /", capture_output=True)
     assert isinstance(output, str)
-    assert str(output).splitlines() == expected
+    output_list = output.splitlines()
+    output_list.sort()
+    assert output_list == expected
     output = run_command(["/bin/ls", "/"], capture_output=True)
     assert isinstance(output, str)
-    assert str(output).splitlines() == expected
+    output_list = output.splitlines()
+    output_list.sort()
+    assert output_list == expected
 
     # check failure on non-existent command
     assert run_command("/non-existent", exit_on_error=False) == 2
@@ -235,6 +240,21 @@ def test_run_command(capsys: pytest.CaptureFixture[str]):
     captured = capsys.readouterr()
     assert "No such file or directory" in captured.err
     assert "FAILURE in" not in captured.out
+
+
+def test_parse_opt_deps_args():
+    """check the `parse_opt_deps` function"""
+    pytest.raises(SystemExit, parse_opt_deps_args, [])
+    args = parse_opt_deps_args(["firefox"])
+    assert args.separator == "::::"
+    assert args.prefix == ""
+    assert args.header == ""
+    assert args.level == 2
+    args = parse_opt_deps_args(["-s", ";", "-pPKG:", "-H", "START", "-l1", "firefox"])
+    assert args.separator == ";"
+    assert args.prefix == "PKG:"
+    assert args.header == "START"
+    assert args.level == 1
 
 
 def test_page_output(capfd: pytest.CaptureFixture[str]):

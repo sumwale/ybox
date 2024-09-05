@@ -65,9 +65,9 @@ def test_other_vars(g_env: Environ):
         rt_dir = ""
     user_base = f"{os.environ['HOME']}/.local"
     assert g_env.xdg_rt_dir == rt_dir
+    assert g_env.user_base == user_base
     assert g_env.user_applications_dir == f"{user_base}/share/applications"
     assert g_env.user_executables_dir == f"{user_base}/bin"
-    assert g_env.user_man_dir == f"{user_base}/share/man"
 
 
 def test_now(g_env: Environ):

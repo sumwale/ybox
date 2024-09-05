@@ -879,10 +879,14 @@ def copytree(src: str, dest: str, hardlink: bool = False) -> None:
             src_path = f"{src_dir}/{src_file}"
             if os.path.exists(src_path):
                 if hardlink:
-                    os.link(os.path.realpath(src_path), f"{dest_dir}/{src_file}",
-                            follow_symlinks=True)
-                else:
-                    shutil.copy2(src_path, f"{dest_dir}/{src_file}", follow_symlinks=True)
+                    try:
+                        os.link(os.path.realpath(src_path), f"{dest_dir}/{src_file}",
+                                follow_symlinks=True)
+                        continue
+                    except OSError:
+                        # in case of error (likely due to cross-device link) fallback to copying
+                        pass
+                shutil.copy2(src_path, f"{dest_dir}/{src_file}", follow_symlinks=True)
 
 
 def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -> None:
