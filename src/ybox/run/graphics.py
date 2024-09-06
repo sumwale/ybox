@@ -120,8 +120,9 @@ def enable_dri(docker_args: list[str]) -> None:
 
     :param docker_args: list of docker/podman arguments to which the options have to be appended
     """
-    if os.access("/dev/dri/by-path", os.W_OK):
+    if os.access("/dev/dri", os.R_OK):
         docker_args.append("--device=/dev/dri")
+    if os.access("/dev/dri/by-path", os.R_OK):
         add_mount_option(docker_args, "/dev/dri/by-path", "/dev/dri/by-path")
 
 

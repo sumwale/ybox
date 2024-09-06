@@ -120,7 +120,7 @@ def _process_pkg_names(pkgs: Optional[list[str]]) -> list[str]:
     return [m.group(0) for pkg in pkgs if (m := _PACKAGE_NAME_RE.match(pkg))] if pkgs else []
 
 
-def refresh_aur_metadata() -> None:
+def refresh_aur_metadata(raise_error: bool) -> bool:
     """
     refresh AUR metadata having details on all available AUR packages which is refreshed if it
     is missing or older than 24 hours
@@ -134,12 +134,16 @@ def refresh_aur_metadata() -> None:
         # delete any partial file in case of download failure
         if (code := int(run_command(_FETCH_AUR_META, exit_on_error=False))) != 0:
             meta_file.unlink(missing_ok=True)
-            sys.exit(code)
-
+            if raise_error:
+                raise RuntimeError(f"Download of AUR metadata failed with exit code {code}")
+            return False
+    return True
 
 # using ijson instead of the standard json because latter always loads the entire JSON in memory
 # whereas only a few fields are required for the map, and hence using ijson is a bit faster as
 # well as far less memory consuming
+
+
 def build_aur_db_map(aur_packages: defaultdict[str, list[PackageAlternate]],
                      raise_error: bool) -> bool:
     """
@@ -162,11 +166,9 @@ def build_aur_db_map(aur_packages: defaultdict[str, list[PackageAlternate]],
              in reading the fetched AUR metadata
     """
     try:
-        with gzip.open(_AUR_META_FILE, mode="rt", encoding="utf-8") as aur_meta:
-            for package in ijson.items(aur_meta, "item"):
-                desc = package.get("Description")
-                if not desc:
-                    desc = ""
+        with gzip.open(_AUR_META_FILE, mode="rb") as aur_meta:
+            for package in ijson.items(aur_meta, "item", use_float=True):
+                desc = package.get("Description") or ""
                 deps = _process_pkg_names(package.get("Depends"))
                 opt_deps = _process_pkg_names(package.get("OptDepends"))
                 # arch linux packages are always lower case which is enforced below for the map
@@ -175,7 +177,7 @@ def build_aur_db_map(aur_packages: defaultdict[str, list[PackageAlternate]],
                 for provide in _process_pkg_names(package.get("Provides")):
                     aur_packages[provide].append(map_val)
         return True
-    except (gzip.BadGzipFile, EOFError, zlib.error):
+    except (gzip.BadGzipFile, EOFError, zlib.error, ijson.JSONError):
         if raise_error:
             raise
         return False
@@ -217,11 +219,11 @@ def find_opt_deps(package: str, installed: set[str],
         if level == 1:
             print_notice(f"Searching dependencies of '{package}' in AUR")
             # fetch AUR metadata, populate into all_packages and try again
-            refresh_aur_metadata()
-            # if AUR metadata file is broken, then refresh it and try again
-            if not build_aur_db_map(all_packages, raise_error=False):
+            # else if download fails or AUR metadata file is broken, then refresh it and try again
+            if not refresh_aur_metadata(raise_error=False) or not build_aur_db_map(
+                    all_packages, raise_error=False):
                 os.unlink(_AUR_META_FILE)
-                refresh_aur_metadata()
+                refresh_aur_metadata(raise_error=True)
                 build_aur_db_map(all_packages, raise_error=True)
             alternates = all_packages.get(package)
     if not alternates:
