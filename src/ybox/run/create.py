@@ -68,7 +68,8 @@ def main_argv(argv: list[str]) -> None:
     profile = select_profile(args, env)
 
     box_name, docker_cmd = process_args(args, distro, profile)
-    print_color(f"Creating ybox container named '{box_name}'", fg=fgcolor.green)
+    print_color(f"Creating ybox container named '{box_name}' using profile '{profile}'",
+                fg=fgcolor.green)
     if check_ybox_exists(docker_cmd, box_name):
         print_error(f"ybox container '{box_name}' already exists.")
         sys.exit(1)

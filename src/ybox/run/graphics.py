@@ -18,7 +18,6 @@ _STD_LIB_DIRS = ["/usr/lib", "/lib", "/usr/local/lib", "/usr/lib64", "/lib64",
 # the '&' in front of the paths is an indicator to the code that this is a glob pattern
 _STD_LIB_DIR_PATTERNS = ["&/usr/lib/*-linux-gnu", "&/lib/*-linux-gnu", "&/usr/lib64/*-linux-gnu",
                          "&/lib64/*-linux-gnu", "&/usr/lib32/*-linux-gnu", "&/lib32/*-linux-gnu"]
-_STD_BIN_DIRS = ["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"]
 _STD_LD_LIB_PATH_VARS = ["LD_LIBRARY_PATH", "LD_LIBRARY_PATH_64", "LD_LIBRARY_PATH_32"]
 _NVIDIA_LIB_PATTERNS = ["*nvidia*.so*", "*NVIDIA*.so*", "libcuda*.so*", "libnvcuvid*.so*",
                         "libnvoptix*.so*", "gbm/*nvidia*.so*", "vdpau/*nvidia*.so*"]
@@ -152,7 +151,7 @@ def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
                                          f"{mount_nvidia_subdir}/mnt_lib")
     # create the script to be run in the container which will create the target
     # directories that will be added to LD_LIBRARY_PATH having symlinks to the mounted libraries
-    nvidia_setup = _create_nvidia_setup(docker_args, mount_lib_dirs)
+    nvidia_setup = _create_nvidia_setup(docker_args, nvidia_lib_dirs, mount_lib_dirs)
 
     # mount nvidia binary directories and add code to script to link to them in container
     nvidia_bin_dirs = _filter_nvidia_dirs({realpath(d) for d in Consts.container_bin_dirs()},
@@ -257,7 +256,8 @@ def _prepare_mount_dirs(dirs: list[str], docker_args: list[str],
     return mount_dirs
 
 
-def _create_nvidia_setup(docker_args: list[str], mount_lib_dirs: list[str]) -> list[str]:
+def _create_nvidia_setup(docker_args: list[str], src_dirs: list[str],
+                         mount_lib_dirs: list[str]) -> list[str]:
     """
     Generate contents of a `bash` script (returned as a list of strings) to be run on container
     which will set up required NVIDIA libraries from the mounted host library directories.
@@ -268,13 +268,14 @@ def _create_nvidia_setup(docker_args: list[str], mount_lib_dirs: list[str]) -> l
     script should be executed as superuser by the container entrypoint script.
 
     :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param src_dirs: the list of source directories to be mounted
     :param mount_lib_dirs: list of destination directory mounts
     :return: contents of a `bash` script as a list of strings for each line of the script which
              should be joined with newlines to get the final contents of the script
     """
     target_dir = Consts.nvidia_target_base_dir()
-    setup_script = ["# this script should be run using bash", "", "# setup libraries", "",
-                    f"mkdir -p {target_dir} && chmod 0755 {target_dir}"]
+    setup_script = ["#!/bin/bash", "", "# this script should be run using bash", "",
+                    "# setup libraries", "", f"mkdir -p {target_dir} && chmod 0755 {target_dir}"]
     ld_lib_path: list[str] = []
     for idx, mount_lib_dir in enumerate(mount_lib_dirs):
         target_lib_dir = f"{target_dir}/lib{idx}"
@@ -282,8 +283,24 @@ def _create_nvidia_setup(docker_args: list[str], mount_lib_dirs: list[str]) -> l
         setup_script.append(f"mkdir -p {target_lib_dir} && chmod 0755 {target_lib_dir}")
         for pat in _NVIDIA_LIB_PATTERNS:
             setup_script.append(f'libs="$(compgen -G "{mount_lib_dir}/{pat}")"')
-            setup_script.append(
-                f'if [ "$?" -eq 0 ]; then ln -s $libs {target_lib_dir}/. 2>/dev/null; fi')
+            setup_script.append('if [ "$?" -eq 0 ]; then')
+            setup_script.append(f"  ln -s $libs {target_lib_dir}/. 2>/dev/null")
+            # if host library is in a sub-directory then create sub-directory on target too
+            if (slash_index := pat.find("/")) != -1:
+                # check for corresponding library in host path and /usr/lib
+                pat_subdir = pat[:slash_index]
+                src_dir = f"{src_dirs[idx]}/{pat_subdir}"
+                usr_lib_dir = f"/usr/lib/{pat_subdir}"
+                setup_script.append(
+                    f'  if compgen -G "{src_dirs[idx]}/lib{pat_subdir}.so*" >/dev/null; then')
+                setup_script.append(f"    mkdir -p {src_dir} && chmod 0755 {src_dir}")
+                setup_script.append(f"    ln -s $libs {src_dir}/. 2>/dev/null")
+                setup_script.append(
+                    f'  elif compgen -G "/usr/lib/lib{pat_subdir}.so*" >/dev/null; then')
+                setup_script.append(f"    mkdir -p {usr_lib_dir} && chmod 0755 {usr_lib_dir}")
+                setup_script.append(f"    ln -s $libs {usr_lib_dir}/. 2>/dev/null")
+                setup_script.append("  fi")
+            setup_script.append("fi")
         ld_lib_path.append(target_lib_dir)
     # add libraries to LD_LIBRARY_PATH rather than adding to system /etc/ld.so.conf in the
     # container since the system ldconfig cache may go out of sync with latter due to `ldconfig`

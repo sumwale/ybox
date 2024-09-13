@@ -25,10 +25,11 @@ source "$SCRIPT_DIR/activate.sh"
 )
 
 rm -rf "$SRC_DIR/.venv"
+python3 -m pip install --upgrade pip
+pip3 install --user --upgrade venv
 python3 -m venv "$SRC_DIR/.venv"
 source "$SRC_DIR/.venv/bin/activate"
 
-python3 -m pip install --upgrade pip
-pip3 install --upgrade -r "$SRC_DIR/requirements.txt"
-pip3 install --upgrade tox
+pip3 install --user --upgrade -r "$SRC_DIR/requirements.txt"
+pip3 install --user --upgrade tox
 pip3 cache purge
