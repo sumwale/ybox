@@ -20,13 +20,16 @@ where:
 import os
 import re
 import sys
-from typing import Union
+from enum import Enum
+from typing import Callable, Iterable, Optional, Union
 
 from ybox.cmd import parse_opt_deps_args, run_command
 from ybox.print import print_error, print_notice
 
 # regex pattern for package name in Recommends or Suggests fields
 PKG_DEP_RE = re.compile(r"([,|]?)\s*([^\s,|(]+)\s*(\([^)]*\))?\s*")
+
+PackageAlternate = tuple[str, str, Optional[list[str]]]
 
 
 def main() -> None:
@@ -52,9 +55,30 @@ def main_argv(argv: list[str]) -> None:
         if args.header:
             print(args.header)
         prefix = args.prefix
-        for pkg, (desc, level, _, installed) in opt_deps.items():
+        for pkg, (desc, level, order, installed) in opt_deps.items():
             # columns below are expected by ybox-pkg
-            print(f"{prefix}{pkg}{sep}{level}{sep}{installed}{sep}{desc}")
+            print(f"{prefix}{pkg}{sep}{level}{sep}{order}{sep}{installed}{sep}{desc}")
+
+
+class PkgDetail(Enum):
+    """Enumerates the package fields used by `pkgdeps`"""
+    PACKAGE = 1
+    DESCRIPTION = 2
+    PROVIDE = 3
+    REQUIRED_DEP = 4
+    OPTIONAL_DEP = 5
+
+
+def process_next_item(line: str, parse_line: Callable[[str], tuple[PkgDetail, str]],
+                      parse_dep: Callable[[str], Iterable[tuple[str, str, Optional[str]]]],
+                      installed: Callable[[str], bool], max_level: int,
+                      pkg_details: dict[str, list[PackageAlternate]], level: int = 1) -> None:
+    """
+    Process the next item in the package details.
+    """
+    # pylint: disable=unused-argument
+    print("TODO: SW: refactor so that it can be used by pkgdeps of deb-generic as well as arch")
+    sys.exit(1)
 
 
 def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, int, bool]]:
@@ -84,6 +108,17 @@ def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, int
     # the map below stores all the virtual packages to the list of the packages that provide them,
     # including the actual package itself which always provides itself
     provides_map: dict[str, Union[str, list[str]]] = {}
+
+    def insert_or_update_provides(provide: str, pkg: str) -> None:
+        """insert a single value in provides map if not present, else change to list and append"""
+        if provides := provides_map.get(provide):
+            if isinstance(provides, list):
+                provides.append(pkg)
+            else:
+                provides_map[provide] = [provides, pkg]
+        else:
+            provides_map[provide] = pkg
+
     # map of `Recommends` and `Suggests` dependencies to their level and order
     opt_dep_map: dict[str, tuple[int, int]] = {}
     # dump all available packages, build a map of package name and its description, then pick the
@@ -102,7 +137,7 @@ def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, int
                 check_optional = True
             else:
                 check_optional = False
-                provides_map[current_pkg] = current_pkg
+                insert_or_update_provides(current_pkg, current_pkg)
         elif check_optional:
             # Note: version comparisons are not required here since all we need is the description
             # of the package. This assumes that the best package available for installation in the
@@ -122,14 +157,7 @@ def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, int
         else:
             if line.startswith("Provides:"):
                 for match in PKG_DEP_RE.finditer(line, len("Provides:")):
-                    provide = match.group(2)
-                    if provides := provides_map.get(provide):
-                        if isinstance(provides, list):
-                            provides.append(current_pkg)
-                        else:
-                            provides_map[provide] = [provides, current_pkg]
-                    else:
-                        provides_map[provide] = [current_pkg]
+                    insert_or_update_provides(match.group(2), current_pkg)
             elif line.startswith("Description:"):
                 all_packages[current_pkg] = line[len("Description:"):].strip()
 

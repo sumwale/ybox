@@ -37,12 +37,12 @@ Issues = "https://github.com/sumwale/ybox/issues"
 
 [project.scripts]
 ybox-cmd = "ybox.run.cmd:main"
+ybox-control = "ybox.run.control:main"
 ybox-create = "ybox.run.create:main"
 ybox-destroy = "ybox.run.destroy:main"
 ybox-logs = "ybox.run.logs:main"
 ybox-ls = "ybox.run.ls:main"
 ybox-pkg = "ybox.run.pkg:main"
-ybox-restart = "ybox.run.restart:main"
 
 [tool.setuptools]
 include-package-data = true

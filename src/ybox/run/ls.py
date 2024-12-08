@@ -61,5 +61,5 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="format output using a template as accepted by docker/podman (see "
                              "https://docs.docker.com/reference/cli/docker/container/ls)")
     parser.add_argument("-l", "--long-format", action="store_true",
-                        help="display extended information and without truncating fields")
+                        help="display extended information without truncating fields")
     return parser.parse_args(argv)

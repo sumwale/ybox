@@ -14,7 +14,7 @@ from uuid import uuid4
 import pytest
 
 from ybox.cmd import (YboxLabel, build_shell_command, check_active_ybox,
-                      check_ybox_exists, check_ybox_state, get_docker_command,
+                      check_ybox_exists, get_docker_command, get_ybox_state,
                       page_command, page_output, parse_opt_deps_args,
                       run_command)
 from ybox.print import fgcolor
@@ -28,6 +28,7 @@ def proc_run(cmd: list[str], capture_output: bool = False,
 
 
 _TEST_IMAGE = "alpine"
+_TEST_DISTRO = "alpine"
 
 
 def _get_docker_cmd() -> tuple[str, argparse.ArgumentParser]:
@@ -95,14 +96,14 @@ def test_check_ybox_state(capsys: pytest.CaptureFixture[str]):
         # check failure to match ybox without label
         proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, _TEST_IMAGE,
                   "/bin/sh", "-c", sh_cmd])
-        assert not check_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
-                                    exit_on_error=False)
+        assert not get_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
+                                  exit_on_error=False)
         assert not check_active_ybox(docker_cmd, cnt_name)
         assert not check_active_ybox(docker_cmd, cnt_name, exit_on_error=False)
-        assert not check_ybox_state(docker_cmd, cnt_name, expected_states=[])
+        assert not get_ybox_state(docker_cmd, cnt_name, expected_states=())
         assert not check_ybox_exists(docker_cmd, cnt_name)
         assert not check_ybox_exists(docker_cmd, cnt_name, exit_on_error=False)
-        pytest.raises(SystemExit, check_ybox_state, docker_cmd, cnt_name,
+        pytest.raises(SystemExit, get_ybox_state, docker_cmd, cnt_name,
                       expected_states=["running"], exit_on_error=True)
         pytest.raises(SystemExit, check_active_ybox, docker_cmd, cnt_name, exit_on_error=True)
         pytest.raises(SystemExit, check_ybox_exists, docker_cmd, cnt_name, exit_on_error=True)
@@ -125,49 +126,55 @@ def test_check_ybox_state(capsys: pytest.CaptureFixture[str]):
         _stop_container(docker_cmd, cnt_name, check_removed=True)
         # check success with primary label
         proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, "--label",
-                  YboxLabel.CONTAINER_PRIMARY.value, _TEST_IMAGE, "/bin/sh", "-c",
-                  sh_cmd])
-        assert check_ybox_state(docker_cmd, cnt_name, expected_states=["running"],
-                                exit_on_error=False)
+                  YboxLabel.CONTAINER_PRIMARY.value, "--label",
+                  f"{YboxLabel.CONTAINER_DISTRIBUTION.value}={_TEST_DISTRO}", _TEST_IMAGE,
+                  "/bin/sh", "-c", sh_cmd])
+        assert get_ybox_state(docker_cmd, cnt_name, expected_states=("running",),
+                              exit_on_error=False) == ("running", _TEST_DISTRO)
         assert check_active_ybox(docker_cmd, cnt_name)
         assert check_ybox_exists(docker_cmd, cnt_name)
         _stop_container(docker_cmd, cnt_name, check_removed=True)
 
         # check success with primary label and stopped state
         proc_run([docker_cmd, "run", "-itd", "--name", cnt_name, "--label",
-                  YboxLabel.CONTAINER_PRIMARY.value, _TEST_IMAGE, "/bin/sh", "-c",
-                  sh_cmd])
+                  YboxLabel.CONTAINER_PRIMARY.value, "--label",
+                  f"{YboxLabel.CONTAINER_DISTRIBUTION.value}={_TEST_DISTRO}", _TEST_IMAGE,
+                  "/bin/sh", "-c", sh_cmd])
         _stop_container(docker_cmd, cnt_name)
-        assert not check_ybox_state(docker_cmd, cnt_name, expected_states=["running"])
+        assert not get_ybox_state(docker_cmd, cnt_name, expected_states=["running"])
         assert not check_active_ybox(docker_cmd, cnt_name)
         pytest.raises(SystemExit, check_active_ybox, docker_cmd, cnt_name, exit_on_error=True)
-        assert check_ybox_state(docker_cmd, cnt_name, expected_states=["stopped", "exited"],
-                                exit_on_error=False)
-        assert check_ybox_state(docker_cmd, cnt_name, expected_states=[])
+        assert get_ybox_state(docker_cmd, cnt_name, expected_states=["stopped", "exited"],
+                              exit_on_error=False) == ("exited", _TEST_DISTRO)
+        assert get_ybox_state(docker_cmd, cnt_name, expected_states=("stopped", "exited"),
+                              exit_on_error=False) == ("exited", _TEST_DISTRO)
+        assert get_ybox_state(docker_cmd, cnt_name, expected_states=[]) == ("exited", _TEST_DISTRO)
         assert check_ybox_exists(docker_cmd, cnt_name, exit_on_error=False)
         proc_run([docker_cmd, "container", "rm", cnt_name])
-        assert not check_ybox_state(docker_cmd, cnt_name, expected_states=[])
+        assert not get_ybox_state(docker_cmd, cnt_name, expected_states=[])
         assert not check_ybox_exists(docker_cmd, cnt_name)
 
         # check error and the messages on stdout
-        pytest.raises(SystemExit, check_ybox_state, docker_cmd, cnt_name, expected_states=[],
+        pytest.raises(SystemExit, get_ybox_state, docker_cmd, cnt_name, expected_states=[],
                       exit_on_error=True)
         captured = capsys.readouterr()
-        assert f"No ybox container named '{cnt_name}' found" in captured.out
+        assert f"No ybox container '{cnt_name}' found" in captured.err
         pytest.raises(SystemExit, check_ybox_exists, docker_cmd, cnt_name, exit_on_error=True)
         captured = capsys.readouterr()
-        assert f"No ybox container named '{cnt_name}' found" in captured.out
-        pytest.raises(SystemExit, check_ybox_state, docker_cmd, cnt_name, expected_states=[],
-                      exit_on_error=True, cnt_state_msg=" running or stopped")
+        assert f"No ybox container '{cnt_name}' found" in captured.err
+        pytest.raises(SystemExit, get_ybox_state, docker_cmd, cnt_name, expected_states=[],
+                      exit_on_error=True, state_msg=" running or stopped")
         captured = capsys.readouterr()
-        assert f"No running or stopped ybox container named '{cnt_name}' found" in captured.out
+        assert f"No running or stopped ybox container '{cnt_name}' found" in captured.err
 
         # check failure with non-primary label
         proc_run([docker_cmd, "run", "-itd", "--rm", "--name", cnt_name, "--label",
-                  YboxLabel.CONTAINER_BASE.value, _TEST_IMAGE, "/bin/sh", "-c", sh_cmd])
+                  YboxLabel.CONTAINER_BASE.value, "--label",
+                  f"{YboxLabel.CONTAINER_DISTRIBUTION.value}={_TEST_DISTRO}", _TEST_IMAGE,
+                  "/bin/sh", "-c", sh_cmd])
         assert not check_active_ybox(docker_cmd, cnt_name)
         assert not check_ybox_exists(docker_cmd, cnt_name)
-        pytest.raises(SystemExit, check_ybox_state, docker_cmd, cnt_name, expected_states=[],
+        pytest.raises(SystemExit, get_ybox_state, docker_cmd, cnt_name, expected_states=[],
                       exit_on_error=True)
         pytest.raises(SystemExit, check_ybox_exists, docker_cmd, cnt_name, exit_on_error=True)
     finally:
@@ -195,7 +202,7 @@ def test_run_command(capsys: pytest.CaptureFixture[str]):
     # check failure on non-existent command
     assert run_command("/non-existent", exit_on_error=False) == 2
     captured = capsys.readouterr()
-    assert "FAILURE invoking '/non-existent'" in captured.out
+    assert "FAILURE invoking '/non-existent'" in captured.err
     pytest.raises(FileNotFoundError, run_command, "/non-existent", exit_on_error=True)
 
     # check capture_output=True and default/False
@@ -208,7 +215,7 @@ def test_run_command(capsys: pytest.CaptureFixture[str]):
                            capture_output=True)).rstrip() == pwd
     pytest.raises(SystemExit, run_command, ["/bin/sh", "-c", "[ \"`pwd`\" = \"\" ]"])
     captured = capsys.readouterr()
-    assert "FAILURE in '[\'/bin/sh\', \'-c\', " in captured.out
+    assert "FAILURE in '[\'/bin/sh\', \'-c\', " in captured.err
     # check capture_output=True with output on stderr
     assert run_command(["/bin/sh", "-c", f"[ \"`pwd`\" = \"{pwd}\" ] && pwd >&2"],
                        capture_output=True) == ""
@@ -224,7 +231,7 @@ def test_run_command(capsys: pytest.CaptureFixture[str]):
     assert run_command(["/bin/sh", "-c", "[ \"`pwd`\" = \"\" ]"], exit_on_error=False) != 0
     # check default error_msg
     captured = capsys.readouterr()
-    assert "FAILURE in '[\'/bin/sh\', \'-c\', " in captured.out
+    assert "FAILURE in '[\'/bin/sh\', \'-c\', " in captured.err
 
     # check with specified error_msg
     non_existent = f"/{uuid4()}"
@@ -232,14 +239,14 @@ def test_run_command(capsys: pytest.CaptureFixture[str]):
                   error_msg="running /bin/ls")
     captured = capsys.readouterr()
     assert "No such file or directory" in captured.err
-    assert "FAILURE in running /bin/ls" in captured.out
+    assert "FAILURE in running /bin/ls" in captured.err
 
     # check error_msg=SKIP
     pytest.raises(SystemExit, run_command, f"/bin/ls {non_existent}", capture_output=True,
                   error_msg="SKIP")
     captured = capsys.readouterr()
     assert "No such file or directory" in captured.err
-    assert "FAILURE in" not in captured.out
+    assert "FAILURE in" not in captured.err
 
 
 def test_parse_opt_deps_args():
@@ -268,7 +275,7 @@ def test_page_output(capfd: pytest.CaptureFixture[str]):
     # test failure for non-existent pager
     assert page_output(out, "/non-existent") == 2
     captured = capfd.readouterr()
-    assert "FAILURE invoking pager '/non-existent'" in captured.out
+    assert "FAILURE invoking pager '/non-existent'" in captured.err
     # test pager invocation
     # sed does not page, but it tests output being piped and arguments being split with spaces
     pager = "/usr/bin/sed 's, or ,/,g'"
@@ -308,10 +315,10 @@ def test_page_command(capfd: pytest.CaptureFixture[str]):
     # check command and pager failure for non-existent programs
     assert page_command("/non-existent", pager) == 2
     captured = capfd.readouterr()
-    assert "FAILURE invoking '/non-existent'" in captured.out
+    assert "FAILURE invoking '/non-existent'" in captured.err
     assert page_command(cmd, "/non-existent") == 2
     captured = capfd.readouterr()
-    assert "FAILURE invoking pager '/non-existent'" in captured.out
+    assert "FAILURE invoking pager '/non-existent'" in captured.err
     # check empty output from command
     assert page_command("/bin/echo -n ''", pager) == 0
     # check output transform

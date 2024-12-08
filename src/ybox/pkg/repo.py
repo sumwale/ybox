@@ -62,8 +62,8 @@ def repo_add(args: argparse.Namespace, pkgmgr: SectionProxy, repo: SectionProxy,
     # first fetch and register the key if specified
     if key:
         print_info(f"Fetching and registering key '{key}'")
-        key_server: str = args.key_server or repo.get(RepoCmd.DEFAULT_GPG_KEY_SERVER.value,
-                                                      fallback="")
+        key_server = str(args.key_server or repo.get(RepoCmd.DEFAULT_GPG_KEY_SERVER.value,
+                                                     fallback=""))
         if re.match(r"^\S*?://", key):
             add_key_cmd = repo[RepoCmd.ADD_KEY.value].format(url=key, name=name)
             print_info(f"Registering key from URL '{key}'")

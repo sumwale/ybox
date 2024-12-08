@@ -3,6 +3,7 @@ Utilities related to command execution like running a command, get docker/podman
 """
 
 import argparse
+import errno
 import os
 import shlex
 import subprocess
@@ -103,48 +104,47 @@ def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
         f"No podman/docker found or '{option_name}' specified")
 
 
-def check_ybox_state(docker_cmd: str, box_name: str, expected_states: Iterable[str],
-                     exit_on_error: bool = False, cnt_state_msg: str = "") -> bool:
+def get_ybox_state(docker_cmd: str, box_name: str, expected_states: Iterable[str],
+                   exit_on_error: bool = False, state_msg: str = "") -> tuple[str, str]:
     """
-    Check if the given ybox container exists and is in one of the given states.
+    Check if the given ybox container exists and is in one of the given states, or get the state
+    if the given `expected_states` is empty.
 
     :param docker_cmd: the docker/podman executable to use
     :param box_name: name of the ybox container
     :param expected_states: Iterable of one or more expected states like 'running', 'exited';
-                            empty value means any state is permissible
+                            empty value means any state is permissible which is returned
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
-    :param cnt_state_msg: string to be inserted in the error message "No...ybox container ..."
-                          when `exit_on_error` is false, so this should be a display name for the
-                          `expected_states` with a space at the start e.g. ' active', ' stopped'
-    :return: if `exit_on_error` is False, then return the result of verification as True or False
+    :param state_msg: string to be inserted in the error message "No...ybox container ..."
+                      when `exit_on_error` is false, so this should be a display name for the
+                      `expected_states` with a space at the start e.g. ' active', ' stopped'
+    :return: if `exit_on_error` is False, then return a tuple of (state, distribution) of the
+             container if it was in the set of `expected_states` or if `expected_states` was empty
     """
     check_result = subprocess.run(
         [docker_cmd, "inspect", "--type=container", '--format={{index .Config.Labels "' +
-         YboxLabel.CONTAINER_TYPE.value + '"}} {{.State.Status}}', box_name],
+         YboxLabel.CONTAINER_TYPE.value + '"}} {{index .Config.Labels "' +
+         YboxLabel.CONTAINER_DISTRIBUTION.value + '"}} {{.State.Status}}', box_name],
         check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     if check_result.returncode != 0:
         if exit_on_error:
-            print_error(f"No{cnt_state_msg} ybox container named '{box_name}' found")
+            print_error(f"No{state_msg} ybox container '{box_name}' found")
             sys.exit(check_result.returncode)
-        else:
-            return False
-    else:
-        result = check_result.stdout.decode("utf-8").strip()
-        primary_ybox = "primary "
-        if result.startswith(primary_ybox):
-            state = result[len(primary_ybox):]
-            if expected_states:
-                if not (exists := state in expected_states) and exit_on_error:
-                    print_error(f"Unexpected state for ybox container '{box_name}': {state}")
-                    sys.exit(1)
-                else:
-                    return exists
-            else:
-                return True
+        return tuple[str, str]()
+    result = check_result.stdout.decode("utf-8").split()
+    if len(result) == 3 and result[0] == "primary":
+        distribution = result[1]
+        state = result[2]
+        if not expected_states or state in expected_states:
+            return (state, distribution)
+        if exit_on_error:
+            print_error(f"Unexpected state for ybox container '{box_name}': {state}")
+            sys.exit(1)
+        return tuple[str, str]()
     if exit_on_error:
-        print_error(f"Container '{box_name}' not a ybox container!!")
+        print_error(f"Container '{box_name}' not a ybox container!")
         sys.exit(1)
-    return False
+    return tuple[str, str]()
 
 
 def check_active_ybox(docker_cmd: str, box_name: str, exit_on_error: bool = False) -> bool:
@@ -156,8 +156,8 @@ def check_active_ybox(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
-    return check_ybox_state(docker_cmd, box_name, expected_states=("running",),
-                            exit_on_error=exit_on_error, cnt_state_msg=" active")
+    return bool(get_ybox_state(docker_cmd, box_name, expected_states=("running",),
+                               exit_on_error=exit_on_error, state_msg=" active"))
 
 
 def check_ybox_exists(docker_cmd: str, box_name: str, exit_on_error: bool = False) -> bool:
@@ -169,7 +169,8 @@ def check_ybox_exists(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
-    return check_ybox_state(docker_cmd, box_name, expected_states=(), exit_on_error=exit_on_error)
+    return bool(get_ybox_state(docker_cmd, box_name, expected_states=(),
+                               exit_on_error=exit_on_error))
 
 
 def build_shell_command(docker_cmd: str, box_name: str, cmd: str,
@@ -217,7 +218,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
         if exit_on_error:
             raise  # an unexpected internal issue, so keep the full stack trace
         print_error(f"FAILURE invoking '{cmd}': {err}")
-        return err.errno
+        return err.errno or errno.ENOENT
     if result.returncode != 0:
         _print_subprocess_output(result)
         if not error_msg:
@@ -291,7 +292,7 @@ def page_output(output: Iterable[bytes], pager: str) -> int:
         return 0  # this can happen if pager ends (e.g. using 'q' in less)
     except OSError as err:
         print_error(f"FAILURE invoking pager '{pager}': {err}")
-        return err.errno
+        return err.errno or errno.ENOENT
     except KeyboardInterrupt:
         # fail cleanly for user interrupt in the pager
         print()

@@ -15,13 +15,12 @@ rm -f "$user_home"/.gnupg/*/*.lock
 
 # install binaries for paru from paru-bin (paru takes too long to compile)
 PARU="paru --noconfirm"
-if ! pacman -Qq paru 2>/dev/null >/dev/null; then
-  echo_color "$fg_cyan" "Installing AUR helper 'paru'" >> $status_file
-  git clone https://aur.archlinux.org/paru-bin.git
-  cd paru-bin
-  makepkg --noconfirm -si
-  cd ..
-fi
+echo_color "$fg_cyan" "Installing AUR helper 'paru'" >> $status_file
+rm -rf paru-bin
+git clone https://aur.archlinux.org/paru-bin.git
+cd paru-bin
+makepkg --noconfirm -si
+cd ..
 if [ -n "$EXTRA_PKGS" ]; then
   echo_color "$fg_cyan" "Installing $EXTRA_PKGS" >> $status_file
   $PARU -S --needed $EXTRA_PKGS

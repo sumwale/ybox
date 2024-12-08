@@ -16,6 +16,7 @@ sed -i 's,^NoExtract[ ]*=[ ]*.*usr/share/i18n.*,#\0,' /etc/pacman.conf
 if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
   echo -e '[multilib]\nInclude = /etc/pacman.d/mirrorlist' >> /etc/pacman.conf
 fi
+$PAC -Sy archlinux-keyring
 
 # generate the configured locale and assume it is UTF-8
 if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/locale.gen; then

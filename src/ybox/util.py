@@ -6,6 +6,8 @@ import os
 import re
 import stat
 import subprocess
+import sys
+import time
 from configparser import BasicInterpolation, ConfigParser, Interpolation
 from dataclasses import dataclass, field
 from importlib.resources import files
@@ -17,11 +19,11 @@ from tabulate import tabulate
 
 from ybox import __version__ as product_version
 
-from .cmd import build_shell_command
+from .cmd import build_shell_command, get_ybox_state
 from .config import Consts, StaticConfiguration
 from .env import Environ, PathName
 from .print import fgcolor as fg
-from .print import get_terminal_width, print_warn
+from .print import get_terminal_width, print_error, print_warn
 
 
 class NotSupportedError(Exception):
@@ -218,6 +220,65 @@ def get_ybox_version(conf: StaticConfiguration) -> str:
         with open(version_file, "r", encoding="utf-8") as fd:
             return fd.read().strip()
     return ""
+
+
+def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration) -> None:
+    """
+    Wait for container created with `create.start_container` to finish all its initialization.
+    This depends on the specific entrypoint script used by `create.start_container` to write
+    and update its status in a file bind mounted in a host directory readable from outside.
+    This waits for a maximum of 600 seconds which is hard-coded.
+
+    :param docker_cmd: the docker/podman executable to use
+    :param conf: the :class:`StaticConfiguration` for the container
+    """
+    sys.stdout.flush()
+    box_name = conf.box_name
+    max_wait_secs = 600
+    status_line = ""  # keeps the last valid line read from status file
+    with open(conf.status_file, "r", encoding="utf-8") as status_fd:
+
+        def read_lines() -> bool:
+            """
+            Read status file, clear it if container has finished starting or stopping and return
+            True for that case else return False.
+            """
+            nonlocal status_line
+            while line := status_fd.readline():
+                status_line = line
+                if status_line.strip() in ("started", "stopped"):
+                    # clear the status file and return
+                    truncate_file(conf.status_file)
+                    return True
+                print(line, end="")  # line already includes the terminating newline
+            return False
+
+        for _ in range(max_wait_secs):
+            # check the container status first which may be running or stopping
+            # in which case sleep and retry (if stopped, then read_lines should succeed)
+            if get_ybox_state(docker_cmd, box_name, expected_states=("running", "stopping")):
+                if read_lines():
+                    return
+            else:
+                time.sleep(1)  # wait for sometime for file write to become visible
+                if read_lines():
+                    return
+                print_error("FAILED waiting for container to be ready (last status: "
+                            f"{status_line}).\nCheck 'ybox-logs {box_name}' for more details.")
+                sys.exit(1)
+            # using simple poll per second rather than inotify or similar because the
+            # initialization can take a good amount of time and second granularity is enough
+            time.sleep(1)
+    # reading did not end after max_wait_secs
+    print_error(f"TIMED OUT waiting for ready container after {max_wait_secs}secs (last status: "
+                f"{status_line}).\nCheck 'ybox-logs -f {box_name}' for more details.")
+    sys.exit(1)
+
+
+def truncate_file(file: str) -> None:
+    """truncate an existing file"""
+    with open(file, "a", encoding="utf-8") as file_fd:
+        file_fd.truncate(0)
 
 
 def check_package(docker_cmd: str, check_cmd: str, package: str,

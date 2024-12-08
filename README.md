@@ -10,8 +10,7 @@ of the container including directories to be shared, logging etc.
 
 Special emphasis is given on security where users can choose to lock down
 or open up the container as required with reasonable defaults out of the
-box. There is no sharing of HOME or no privileged mode container unless
-explicitly configured.
+box. There is no sharing of HOME or no privileged mode container.
 
 Expected usage is for users to group similar applications in a container
 and separate out containers depending on different needs like higher/lower
@@ -328,11 +327,14 @@ You can delete old log files there safely if they start taking a lot of disk spa
 
 A container may get stopped after a reboot if systemd/... is not configured to auto-start
 the docker/podman containers. Or you can explicitly stop a container using docker/podman.
-You can check using `ybox-ls -a` and restart a stopped or running container as below:
+You can check using `ybox-ls -a` and restart a stopped container as below:
 
 ```sh
-ybox-restart ybox-arch_apps
+ybox-control start ybox-arch_apps
 ```
+
+The `ybox-control` script also allows for other actions `stop`, `restart` and `status`
+for a ybox container. See the full set of options with `ybox-control -h/--help`.
 
 
 ### Auto-starting containers

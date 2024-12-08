@@ -4,7 +4,7 @@ set -e
 
 COV_OPTIONS="--cov=ybox --cov-report=xml:coverage.xml"
 
-rm -f .coverage
+rm -f .coverage converage.xml converage-report.txt
 if [ "$1" = "-f" ]; then
   shift
   pytest $COV_OPTIONS --verbose "$@"

@@ -25,7 +25,10 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = get_docker_command(args, "-d")
     container_name = args.container_name
 
-    docker_args = [docker_cmd, "exec", "-it", container_name]
+    docker_args = [docker_cmd, "exec"]
+    if not args.skip_terminal:
+        docker_args.append("-it")
+    docker_args.append(container_name)
     if isinstance(args.command, str):
         docker_args.append(args.command)
     else:
@@ -43,6 +46,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a command on an active ybox container")
     parser.add_argument("-d", "--docker-path", type=str,
                         help="path of docker/podman if not in /usr/bin")
+    parser.add_argument("-s", "--skip-terminal", action="store_true",
+                        help="skip interactive pseudo-terminal for the command "
+                             "(i.e. skip -it options to podman/docker)")
     parser.add_argument("container_name", type=str, help="name of the active ybox")
     parser.add_argument("command", nargs="*", default="/bin/bash",
                         help="run the given command (default is /bin/bash)")

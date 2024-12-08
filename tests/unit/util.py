@@ -14,7 +14,7 @@ from ybox.env import Environ
 from ybox.state import RuntimeConfiguration
 from ybox.util import EnvInterpolation, config_reader
 
-resources_dir = f"{os.path.dirname(__file__)}/../resources"
+RESOURCES_DIR = f"{os.path.dirname(__file__)}/../resources"
 
 
 @dataclass(frozen=True)
@@ -51,9 +51,9 @@ def read_containers_and_packages(env: Environ, fetch_types: bool,
                map of name to :class:`RuntimeConfiguration` of containers to be destroyed,
                map of containers to their :class:`PackageDetails`)
     """
-    with open(f"{resources_dir}/containers.json", "r", encoding="utf-8") as containers_fd:
+    with open(f"{RESOURCES_DIR}/containers.json", "r", encoding="utf-8") as containers_fd:
         containers: dict[str, dict[str, Any]] = json.load(containers_fd)
-    with open(f"{resources_dir}/packages.json", "r", encoding="utf-8") as pkgs_fd:
+    with open(f"{RESOURCES_DIR}/packages.json", "r", encoding="utf-8") as pkgs_fd:
         pkgs: dict[str, dict[str, Any]] = json.load(pkgs_fd)
 
     def build_runtime_config(name: str, info: dict[str, Any]) -> RuntimeConfiguration:

@@ -17,8 +17,8 @@ from typing import Any, Iterable
 from uuid import uuid4
 
 import pytest
-from unit.util import (ContainerDetails, PackageDetails,
-                       read_containers_and_packages, resources_dir)
+from unit.util import (RESOURCES_DIR, ContainerDetails, PackageDetails,
+                       read_containers_and_packages)
 
 from ybox.config import Consts
 from ybox.env import Environ
@@ -103,7 +103,7 @@ def test_migration(g_env: Environ, old_version: str):
     Path(state_db).unlink(missing_ok=True)
     # copy with decompression
     block_size = 1024 * 1024
-    with gzip.open(f"{resources_dir}/migration/{old_version}.db.gz",
+    with gzip.open(f"{RESOURCES_DIR}/migration/{old_version}.db.gz",
                    mode="rb") as gz_in, open(state_db, "wb") as db_out:
         while data := gz_in.read(block_size):
             db_out.write(data)
@@ -354,7 +354,7 @@ def test_fetch_packages(state: YboxStateManagement, container_details: Container
 
 def test_repository(state: YboxStateManagement, container_details: ContainerDetails):
     """test registration and unregistration of repositories"""
-    with open(f"{resources_dir}/repos.json", "r", encoding="utf-8") as repos_fd:
+    with open(f"{RESOURCES_DIR}/repos.json", "r", encoding="utf-8") as repos_fd:
         repos: dict[str, dict[str, Any]] = json.load(repos_fd)
     active_containers, destroy_containers, _ = container_details
     all_containers = {c.name: c for c in chain(active_containers, destroy_containers.values())}

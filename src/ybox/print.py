@@ -81,8 +81,10 @@ def print_error(msg: str, end: str = "\n", file: Optional[IO[str]] = None) -> No
 
     :param msg: the string to be displayed
     :param end: the terminating string which is newline by default (or can be empty for example)
-    :param file: the text-mode file object to use for writing (defaults to `sys.stdout`)
+    :param file: the text-mode file object to use for writing (defaults to `sys.stderr`)
     """
+    if not file:
+        file = sys.stderr
     print_color(msg, fg=fgcolor.red, end=end, file=file)
 
 

@@ -170,17 +170,17 @@ if [ -n "$(ls $run_dir 2>/dev/null)" ]; then
 fi
 
 # run actions requiring root access
-sudo bash "$SCRIPT_DIR/entrypoint-root.sh"
+sudo /bin/bash "$SCRIPT_DIR/entrypoint-root.sh"
 
 # run the distribution specific initialization scripts
 if [ ! -e "$SCRIPT_DIR/ybox-init.done" ]; then
   if [ -r "$SCRIPT_DIR/init.sh" ]; then
     echo_color "$fg_orange" "Running distribution's system initialization script" >> $status_file
-    sudo -E bash "$SCRIPT_DIR/init.sh"
+    sudo -E /bin/bash "$SCRIPT_DIR/init.sh"
   fi
   if [ -r "$SCRIPT_DIR/init-user.sh" ]; then
     echo_color "$fg_orange" "Running distribution's user initialization script" >> $status_file
-    bash "$SCRIPT_DIR/init-user.sh"
+    /bin/bash "$SCRIPT_DIR/init-user.sh"
   fi
   # Update the status file to indicate the stoppage and exit because system libraries
   # may have been installed/updated by the above scripts.

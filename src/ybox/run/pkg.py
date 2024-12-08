@@ -166,7 +166,7 @@ def add_common_args(subparser: argparse.ArgumentParser) -> None:
                            help="path to distribution configuration file to use instead of the "
                                 "`distro.ini` from user/system configuration paths")
     subparser.add_argument("-q", "--quiet", action="count", default=0,
-                           help="proceed without asking any questions using default where "
+                           help="proceed without asking any questions using defaults where "
                                 "possible; this should usually be used with explicit -z/--ybox "
                                 "argument for the container else it is assumed that there is only "
                                 "one active container which is selected else the operation fails; "
