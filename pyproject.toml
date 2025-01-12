@@ -9,7 +9,7 @@ authors = [
     { name = "Sumedh Wale", email = "sumwale@yahoo.com" },
     { name = "Vishal Rao", email = "vishalrao@gmail.com" },
 ]
-description = "Run Linux distribution inside a container"
+description = "Securely run Linux distribution inside a container"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
@@ -21,7 +21,7 @@ dependencies = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
