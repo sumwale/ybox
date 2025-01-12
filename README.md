@@ -57,7 +57,7 @@ you can simply launch it from your desktop environment's applications as usual.
 
 In this way this acts as a complete replacement of flatpak/snap while being able to choose
 from way bigger software repositories, and with applications configured the way they are
-supposed to be in the original Linux distribution (which is only Arch Linux for now).
+supposed to be in the original Linux distribution.
 The big difference being that these are just containers where you can open a shell
 (using `ybox-cmd`) and learn/play as required, or micro-configure stuff. The shell will
 behave quite like a full Linux installation apart from missing system-level stuff like systemd.
@@ -65,37 +65,50 @@ behave quite like a full Linux installation apart from missing system-level stuf
 
 ## Installation
 
-If you have cloned the repository, then no further installation is required to run the utilities
-in `src` directory which can be done directly off the repository. In the near future this will
-also be published on `pypi.org`, so you will be able to install with `pip install --user ybox`.
+First install the requirements:
 
-As of now the following is required:
+- Python version 3.9 or higher. All recent Linux distributions should satisfy
+  this but still confirm with `python3 --version`.
+- Rootless podman or docker. Podman is recommended as it works out of the box for most
+        distributions and container runs as normal non-root user unlike docker that
+        needs to run as root in the container that may break some applications.
+  * For podman this needs installation of `podman` and `slirp4netns` (or `passt` with
+          podman >= 5) packages. Then setup /etc/subuid and /etc/subgid as noted here:
+    [/etc/subuid and /etc/subgid configuration](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md#etcsubuid-and-etcsubgid-configuration).
+    Most distributions will set up subuid/subgid for current user automatically
+    and rootless podman works out of the box after installation (tested on Ubuntu,
+            Arch and Debian). Check with `podman unshare cat /proc/self/uid_map` which
+    should show an output like:
+    ```
+         0       1000          1
+         1     100000      65536
+    ```
+    where `1000` is the current user's ID (output of `id -u`).
+  * For docker follow the instructions in the official [docs](https://docs.docker.com/engine/security/rootless/).
 
-- clone the repo: `git clone https://github.com/sumwale/ybox.git`
-- rootless podman or docker
-  * for podman this needs installation of `podman` and `slirp4netns`/`passt` packages,
-    then setup /etc/subuid and /etc/subgid as noted here:
-    [/etc/subuid and /etc/subgid configuration](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md#etcsubuid-and-etcsubgid-configuration)
-    (many distributions like ubuntu will set up subuid/subgid for current user automatically)
-  * for docker follow the instructions in the official [docs](https://docs.docker.com/engine/security/rootless/)
-- python version 3.9 or higher -- all fairly recent Linux distributions should satisfy this
-  but still confirm with `python3 --version`
-- install [simple-term-menu](https://pypi.org/project/simple-term-menu/),
-  [tabulate](https://pypi.org/project/tabulate/) and
-  [packaging](https://pypi.org/project/packaging/),  either from your distribution
-  repository, if available, else: `pip install --user simple-term-menu packaging tabulate`
-  (obviously you will need `pip` itself to be installed which should be in your
-   distribution repositories e.g. ubuntu/debian have it as `python3-pip`)
-
-In the future, installer will take care of setting all of these up.
-
-Now you can simply go to the repository and run the `ybox-create` and other utilities from
-the `src` directory of the repository checkout. For convenience, you can symlink these to
-your `~/.local/bin` directory which should be in PATH in modern Linux distributions:
+Finally install the `ybox` package for the current user using `pip` (`pip` is installed
+    on most Linux distributions by default, or install from your distribution's
+    repository e.g. `python3-pip` for Debian/Ubuntu based distros, `python-pip` on Arch):
 
 ```sh
-ln -s <full path of checkout ybox directory>/src/ybox-* ~/.local/bin/
+pip install ybox --user
 ```
+
+Note that newer versions of `pip` disallow installing packages directly and instead
+require you to install in a custom virtual environment which can be done manually
+(e.g. bash/zsh: `python3 -m venv ybox-venv && source ybox-env/bin/activate`,
+ fish: `python3 -m venv ybox-venv && source ybox-env/bin/activate.fish`)
+or automatically using `pipx`. Alternatively you can add `--break-system-packages`
+flag to the `pip` command above or add it globally for all future packages using
+`python3 -m pip config set global.break-system-packages true`. The alternative
+approach works well for `ybox` which has a very minimal set of dependencies but
+in the rare case you see any issues due to package conflicts, use `pipx` or
+manual virtual environment.
+
+Now you can run the `ybox-create` and other utilities that are normally installed
+in your `~/.local/bin` directory which should be in PATH for modern Linux distributions.
+If not, then add it to your PATH in your `.bashrc` (for bash) or the configuration
+file of your login shell.
 
 All the `ybox-*` utilities will show detailed help with the `-h`/`--help` option.
 
@@ -138,7 +151,7 @@ e.g. `~/.local/share/ybox/ybox-arch_apps/home` for the above example.
 
 When shared root directory is enabled (which is the default in the shipped profiles), then
 it uses the common distribution path in `~/.local/share/ybox/SHARED_ROOTS/<distribution>`
-by default i.e. `~/.local/share/ybox/SHARED_ROOTS/arch` for the Arch Linux guests.
+by default e.g. `~/.local/share/ybox/SHARED_ROOTS/arch` for the Arch Linux guests.
 
 For more advanced usage, you can copy from the available profiles in `src/ybox/conf/profiles`
 into `~/.config/ybox/profiles`, then edit as required. The `basic.ini` profile lists
@@ -285,10 +298,10 @@ ybox-destroy ybox-arch_apps
 ```
 
 Will destroy the `apps` container created in the example before. This does not delete the
-$HOME files, nor does it delete the shared root directory (if enabled). Hence, if you create
+`$HOME` files, nor does it delete the shared root directory (if enabled). Hence, if you create
 a new container having the same shared root, then it will inherit everything installed
 previously. Likewise, if you create the container with the same profile again, then it
-will also have the $HOME as before if you do not explicitly delete the directories
+will also have the `$HOME` as before if you do not explicitly delete the directories
 in `~/.local/share/ybox`.
 
 
@@ -317,10 +330,10 @@ ybox-cmd ybox-arch_apps -- ls -l
 ```
 
 The default profiles also link the .bashrc and starship configuration files from your host
-$HOME directory by default, so you should see the same bash shell configuration as in your
+`$HOME` directory by default, so you should see the same bash shell configuration as in your
 host. These are linked in read-only mode, so if you want to change these auto-linked
 configuration files inside the container, then you will need to create a copy from the symlink
-first (but then it will lose the link from the host $HOME).
+first (but then it will lose the link from the host `$HOME`).
 
 A shell on a container will act like a native Linux distribution environment for most purposes.
 The one prominent missing thing is systemd which is not enabled deliberately since it requires
