@@ -5,7 +5,7 @@ Code for the `ybox-destroy` script that is used to destroy an active or stopped 
 import argparse
 import sys
 
-from ybox.cmd import check_ybox_exists, get_docker_command, run_command
+from ybox.cmd import check_ybox_exists, run_command
 from ybox.env import Environ
 from ybox.print import fgcolor, print_color, print_error, print_warn
 from ybox.state import YboxStateManagement
@@ -25,7 +25,8 @@ def main_argv(argv: list[str]) -> None:
     :param argv: arguments to the function (main function passes `sys.argv[1:]`)
     """
     args = parse_args(argv)
-    docker_cmd = get_docker_command(args, "-d")
+    env = Environ()
+    docker_cmd = env.docker_cmd
     container_name = args.container_name
 
     check_ybox_exists(docker_cmd, container_name, exit_on_error=True)
@@ -43,7 +44,7 @@ def main_argv(argv: list[str]) -> None:
 
     # remove the state from the database
     print_warn(f"Clearing ybox state for '{container_name}'")
-    with YboxStateManagement(Environ()) as state:
+    with YboxStateManagement(env) as state:
         if not state.unregister_container(container_name):
             print_error(f"No entry found for '{container_name}' in the state database")
             sys.exit(1)
@@ -57,8 +58,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
     """
     parser = argparse.ArgumentParser(description="Stop and remove an active ybox container")
-    parser.add_argument("-d", "--docker-path", type=str,
-                        help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-f", "--force", action="store_true",
                         help="force destroy the container using SIGKILL if required")
     parser.add_argument("container_name", type=str, help="name of the active ybox")

@@ -1,5 +1,4 @@
 """Test basic creation and destroy of ybox containers."""
-import getpass
 import os
 import subprocess
 from pathlib import Path
@@ -8,6 +7,7 @@ import pytest
 from functional.distro_base import DistributionBase, DistributionHelper
 
 from ybox.cmd import PkgMgr
+from ybox.config import Consts
 from ybox.print import print_error, print_info
 from ybox.run.create import main_argv as ybox_create
 from ybox.run.destroy import main_argv as ybox_destroy
@@ -34,14 +34,15 @@ class TestCreateDestroy(DistributionBase):
             f"{self._home}/.local/share/ybox/SHARED_ROOTS/{helper.distribution}")
         # run a command on the container
         result = self.run_on_container("whoami", helper)
-        _check_output(result, getpass.getuser())
+        _check_output(result, self.env.target_user)
         # install a package on the container and check that it works
         distro_config = self.distribution_config(Path(distro_config_file), helper)
         pkgmgr = distro_config["pkgmgr"]
         quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
         install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="")
-        assert self.run_on_container(["/bin/bash", "-c", f"{install_cmd} libtree"],
-                                     helper, capture_output=False).returncode == 0
+        assert self.run_on_container(
+            [f"/usr/local/bin/{Consts.run_user_bash_cmd()}", f"{install_cmd} libtree"],
+            helper, capture_output=False).returncode == 0
         # pipe output to remove colors
         result = self.run_on_container(["/bin/bash", "-c", "libtree /usr/bin/pwd | /bin/cat"],
                                        helper)

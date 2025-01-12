@@ -24,7 +24,7 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
 
     :param args: arguments having all attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
@@ -75,7 +75,7 @@ def _kill_processes(pkgmgr: SectionProxy, docker_cmd: str, containers: list[str]
     Kill any package manager related processes after user confirmation (if required).
 
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param containers: list of affected containers having the same shared root
     :param quiet: if True then skip user confirmation before removing any lock files
     :return: true for success, else false in case of failure to kill one or more processes
@@ -128,7 +128,7 @@ def _remove_locks(pkgmgr: SectionProxy, docker_cmd: str, containers: list[str],
     Remove any package manager related lock files after user confirmation (if required).
 
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param containers: list of affected containers having the same shared root
     :param quiet: if True then skip user confirmation before removing any lock files
     """

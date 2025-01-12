@@ -1,8 +1,6 @@
 """Unit tests for `ybox/cmd.py`"""
 
-import argparse
 import os
-import re
 import shlex
 import subprocess
 import time
@@ -14,9 +12,9 @@ from uuid import uuid4
 import pytest
 
 from ybox.cmd import (YboxLabel, build_shell_command, check_active_ybox,
-                      check_ybox_exists, get_docker_command, get_ybox_state,
-                      page_command, page_output, parse_opt_deps_args,
-                      run_command)
+                      check_ybox_exists, get_ybox_state, page_command,
+                      page_output, parse_opt_deps_args, run_command)
+from ybox.env import get_docker_command
 from ybox.print import fgcolor
 
 
@@ -29,15 +27,6 @@ def proc_run(cmd: list[str], capture_output: bool = False,
 
 _TEST_IMAGE = "alpine"
 _TEST_DISTRO = "alpine"
-
-
-def _get_docker_cmd() -> tuple[str, argparse.ArgumentParser]:
-    """build `argparse` and obtain docker/podman path using `get_docker_command`"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--docker-path")
-    args = parser.parse_args([])
-    docker_cmd = get_docker_command(args, "-d")
-    return docker_cmd, parser
 
 
 def _stop_container(docker_cmd: str, name: str, check_removed: bool = False) -> None:
@@ -55,40 +44,11 @@ def _stop_container(docker_cmd: str, name: str, check_removed: bool = False) -> 
     raise ChildProcessError(f"Failed to stop container {name}")
 
 
-def test_get_docker_command():
-    """check `get_docker_command` result"""
-    docker_cmd, parser = _get_docker_cmd()
-    assert docker_cmd is not None
-    assert re.match(r"/usr/bin/(docker|podman)", docker_cmd)
-    assert os.access(docker_cmd, os.X_OK)
-    # try with explicit -d option
-    args = parser.parse_args(["-d", "/bin/true"])
-    docker_cmd = get_docker_command(args, "-d")
-    assert docker_cmd == "/bin/true"
-    # try with explicit -d option for a non-existent program or a non-executable
-    args = parser.parse_args(["-d", "/etc/passwd"])
-    pytest.raises(PermissionError, get_docker_command, args, "-d")
-    args = parser.parse_args(["-d", "/non-existent"])
-    pytest.raises(PermissionError, get_docker_command, args, "-d")
-
-    # mock for different docker/podman executables including none available
-    def os_access(prog: str, mode: int) -> bool:
-        return prog == check_prog and mode == os.X_OK
-    args = parser.parse_args([])
-    with patch("ybox.cmd.os.access", side_effect=os_access):
-        check_prog = "/usr/bin/podman"
-        assert get_docker_command(args, "-d") == check_prog
-        check_prog = "/usr/bin/docker"
-        assert get_docker_command(args, "-d") == check_prog
-        check_prog = "/bin/true"
-        pytest.raises(FileNotFoundError, get_docker_command, args, "-d")
-
-
 def test_check_ybox_state(capsys: pytest.CaptureFixture[str]):
     """
-    Check various cases for `check_ybox_state` and related functions (also `build_bash_command`)
+    Check various cases for `check_ybox_state` and related functions (also `build_shell_command`)
     """
-    docker_cmd, _ = _get_docker_cmd()
+    docker_cmd = get_docker_command()
     cnt_name = f"ybox-test-cmd-{uuid4()}"
     # command to run in containers which allows them to stop immediately
     sh_cmd = 'tail -s10 -f /dev/null & childPID=$!; trap "kill -TERM $childPID" 1 2 3 15; wait'
@@ -108,20 +68,33 @@ def test_check_ybox_state(capsys: pytest.CaptureFixture[str]):
         pytest.raises(SystemExit, check_active_ybox, docker_cmd, cnt_name, exit_on_error=True)
         pytest.raises(SystemExit, check_ybox_exists, docker_cmd, cnt_name, exit_on_error=True)
 
-        # check `build_bash_command`
+        # check `build_shell_command`
+        run_cmd = "run-user-bash-cmd"
+        run_cmd_path = f"/usr/local/bin/{run_cmd}"
+        src_resources_dir = f"{os.path.dirname(__file__)}/../../src/ybox/conf/resources"
+        assert proc_run([docker_cmd, "cp", f"{src_resources_dir}/{run_cmd}",
+                         f"{cnt_name}:{run_cmd_path}"]).returncode == 0
+        assert proc_run([docker_cmd, "exec", cnt_name, "chmod", "755",
+                         run_cmd_path]).returncode == 0
         assert proc_run([docker_cmd, "exec", cnt_name, "apk", "add", "bash"]).returncode == 0
         for pty in (None, False, True):
             if pty is None:
                 bash_cmd = build_shell_command(docker_cmd, cnt_name, "uname -s")
             else:
                 bash_cmd = build_shell_command(docker_cmd, cnt_name, "uname -s", enable_pty=pty)
-            assert "/bin/bash" in bash_cmd and "-c" in bash_cmd and "uname -s" in bash_cmd
+            assert run_cmd_path in bash_cmd and "uname -s" in bash_cmd
+            output = proc_run(bash_cmd, capture_output=True)
+            out = output.stdout.decode("utf-8").strip()
             if pty is False:
                 assert "-it" not in bash_cmd
+                assert out == "Linux"
             else:
                 assert "-it" in bash_cmd
-            output = proc_run(bash_cmd, capture_output=True)
-            assert output.stdout.decode("utf-8").strip() == "Linux"
+                # fails with docker but succeeds with podman, so check both cases
+                if "not a tty" in output.stderr.decode("utf-8").lower():
+                    assert out == ""
+                else:
+                    assert out.endswith("Linux")
 
         _stop_container(docker_cmd, cnt_name, check_removed=True)
         # check success with primary label

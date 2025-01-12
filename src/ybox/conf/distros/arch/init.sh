@@ -10,10 +10,12 @@ source "$SCRIPT_DIR/entrypoint-common.sh"
 PAC="pacman --noconfirm"
 echo_color "$fg_cyan" "Configuring pacman" >> $status_file
 pacman-key --init
-sed -i 's/^#Color.*/Color/;s/^NoProgressBar.*/#NoProgressBar/' /etc/pacman.conf
-sed -i 's,^NoExtract[ ]*=[ ]*/\?usr/share/man.*,#\0,' /etc/pacman.conf
-sed -i 's,^NoExtract[ ]*=[ ]*.*usr/share/i18n.*,#\0,' /etc/pacman.conf
-if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
+sed -i 's/^#[ ]*Color.*/Color/;s/^[ ]*NoProgressBar.*/#NoProgressBar/' /etc/pacman.conf
+sed -i 's,^[ ]*NoExtract[ ]*=[ ]*/\?usr/share/man.*,#\0,' /etc/pacman.conf
+sed -i 's,^[ ]*NoExtract[ ]*=[ ]*.*usr/share/i18n.*,#\0,' /etc/pacman.conf
+# disable the sandbox in the newer pacman versions that does not work in container
+sed -i 's/^#[ ]*DisableSandbox/DisableSandbox/' /etc/pacman.conf
+if ! grep -q '^[ ]*\[multilib\]' /etc/pacman.conf; then
   echo -e '[multilib]\nInclude = /etc/pacman.d/mirrorlist' >> /etc/pacman.conf
 fi
 $PAC -Sy archlinux-keyring
@@ -49,7 +51,7 @@ if [ -n "$CONFIGURE_FASTEST_MIRRORS" ] && ! pacman -Qq reflector 2>/dev/null >/d
   $PAC -S --needed reflector
   sed -i 's/^--latest.*/--latest 30\n--number 5\n--threads 5/' /etc/xdg/reflector/reflector.conf
   sed -i 's/^--sort.*/--sort rate/' /etc/xdg/reflector/reflector.conf
-  reflector @/etc/xdg/reflector/reflector.conf 2>/dev/null
+  reflector @/etc/xdg/reflector/reflector.conf || true
 fi
 $PAC -Syu
 

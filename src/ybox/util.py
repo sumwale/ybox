@@ -179,7 +179,7 @@ def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: Con
     # copy the common scripts
     for script in Consts.resource_scripts():
         path = env.search_config_path(f"resources/{script}", only_sys_conf=True)
-        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o750)
+        copy_file(path, f"{conf.scripts_dir}/{script}", permissions=0o755)
     # also copy distribution specific scripts
     base_section = distro_config["base"]
     if scripts := base_section.get("scripts"):
@@ -187,14 +187,16 @@ def copy_ybox_scripts_to_container(conf: StaticConfiguration, distro_config: Con
             script = script.strip()
             path = env.search_config_path(conf.distribution_config(conf.distribution, script),
                                           only_sys_conf=True)
-            copy_file(path, f"{conf.scripts_dir}/{os.path.basename(script)}")
+            copy_file(path, f"{conf.scripts_dir}/{os.path.basename(script)}", permissions=0o644)
         # finally copy the ybox python module which may be used by distribution scripts
         src_dir = files("ybox")
         dest_dir = f"{conf.scripts_dir}/ybox"
-        os.makedirs(dest_dir, mode=Consts.default_directory_mode(), exist_ok=True)
+        os.makedirs(dest_dir, exist_ok=True)
+        # allow for read/execute permissions for all since non-root user needs access with docker
+        os.chmod(dest_dir, mode=0o755)
         for resource in src_dir.iterdir():
             if resource.is_file():
-                copy_file(resource, f"{dest_dir}/{resource.name}")
+                copy_file(resource, f"{dest_dir}/{resource.name}", permissions=0o644)
 
 
 def write_ybox_version(conf: StaticConfiguration) -> None:
@@ -229,7 +231,7 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     and update its status in a file bind mounted in a host directory readable from outside.
     This waits for a maximum of 600 seconds which is hard-coded.
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     """
     sys.stdout.flush()
@@ -287,7 +289,7 @@ def check_package(docker_cmd: str, check_cmd: str, package: str,
     Check if a given package is installed in a container, or available in package repositories
     and return the list of matching packages.
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param check_cmd: the command used to check the existence of the package
     :param package: name of the package to check
     :param container_name: name of the container
@@ -297,7 +299,7 @@ def check_package(docker_cmd: str, check_cmd: str, package: str,
         docker_cmd, container_name, check_cmd.format(package=package), enable_pty=False),
         check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     output = check_result.stdout.decode("utf-8").splitlines()
-    return check_result.returncode if output else 1, output
+    return (check_result.returncode, output) if output else (1, output)
 
 
 def select_item_from_menu(items: list[str]) -> Optional[str]:

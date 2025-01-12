@@ -12,9 +12,23 @@ config_dir=
 app_list=
 pkgmgr_conf="$SCRIPT_DIR/pkgmgr.conf"
 startup_list=
+run_user_bash_cmd=/usr/local/bin/run-user-bash-cmd
 
 # first clear the status_file
 echo -n > $status_file
+
+# for docker the container runs as root user but some actions need to be performed as normal
+# user (like installing AUR packages in Arch), so the status file is made writable by both
+# the current user as well as the group of the normal user
+uid="$(id -u)"
+gid="$(id -g)"
+chown $uid:$YBOX_HOST_GID $status_file
+chmod 0660 $status_file
+if [ "$uid" -eq 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo -E"
+fi
 
 function show_usage() {
   echo
@@ -86,11 +100,11 @@ function install_apps() {
   # install packages line by line
   while read -r pkg_line; do
     echo_color "$fg_orange" "Installing: ${pkg_line:0:40} ..." >> $status_file
-    eval $PKGMGR_INSTALL $pkg_line
+    $run_user_bash_cmd "$PKGMGR_INSTALL $pkg_line"
     echo_color "$fg_green" "Done." >> $status_file
   done < "$app_list"
   echo_color "$fg_green" "Cleaning up." >> $status_file
-  eval $PKGMGR_CLEAN
+  $run_user_bash_cmd "$PKGMGR_CLEAN"
 }
 
 # invoke the startup apps as listed in the container configuration file
@@ -101,7 +115,7 @@ function invoke_startup_apps() {
   while read -r app_line; do
     mkdir -p "$log_dir"
     echo_color "$fg_orange" "Starting: ${app_line:0:40} ..." >> $status_file
-    nohup $app_line >> "$log_dir/app-${log_no}_out.log" 2>> "$log_dir/app-${log_no}_err.log"   &
+    nohup $app_line >> "$log_dir/app-${log_no}_out.log" 2>> "$log_dir/app-${log_no}_err.log" &
     sleep 1
   done < "$startup_list"
 }
@@ -152,36 +166,42 @@ fi
 box_name="${@:$OPTIND:1}"
 
 # create/update some common directories that are mounted and may have root permissions
-dir_init=".cache .cache/fontconfig .config .config/pulse .local .local/share"
+dir_init=". .cache .cache/fontconfig .config .config/pulse .local .local/share"
 dir_init+=" .local/share/ybox .local/share/ybox/$box_name Downloads"
-uid="$(id -u)"
-gid="$(id -g)"
 echo_color "$fg_orange" "Ensuring proper permissions for user directories" >> $status_file
 for d in $dir_init; do
   dir=$HOME/$d
-  sudo mkdir -p $dir || true
-  sudo chown $uid:$gid $dir || true
+  $SUDO mkdir -p $dir || true
+  $SUDO chown $uid:$gid $dir || true
 done
 # change ownership of user's /run/user/<uid> tree which may have root ownership due to the
 # docker bind mounts
 run_dir=${XDG_RUNTIME_DIR:-/run/user/$uid}
+if [ -d $run_dir ]; then
+  $SUDO chown $uid:$gid $run_dir 2>/dev/null || true
+fi
 if [ -n "$(ls $run_dir 2>/dev/null)" ]; then
-  sudo chown $uid:$gid $run_dir/* 2>/dev/null || true
+  $SUDO chown $uid:$gid $run_dir/* 2>/dev/null || true
 fi
 
 # run actions requiring root access
-sudo /bin/bash "$SCRIPT_DIR/entrypoint-root.sh"
+$SUDO /bin/bash "$SCRIPT_DIR/entrypoint-root.sh"
 
 # run the distribution specific initialization scripts
 if [ ! -e "$SCRIPT_DIR/ybox-init.done" ]; then
   if [ -r "$SCRIPT_DIR/init.sh" ]; then
     echo_color "$fg_orange" "Running distribution's system initialization script" >> $status_file
-    sudo -E /bin/bash "$SCRIPT_DIR/init.sh"
+    $SUDO /bin/bash "$SCRIPT_DIR/init.sh"
   fi
   if [ -r "$SCRIPT_DIR/init-user.sh" ]; then
-    echo_color "$fg_orange" "Running distribution's user initialization script" >> $status_file
-    /bin/bash "$SCRIPT_DIR/init-user.sh"
+    echo_color "$fg_orange" "Running user initialization scripts" >> $status_file
+    # run the common user initialization script for both the root and non-root user
+    $SUDO /bin/bash "$SCRIPT_DIR/entrypoint-user.sh"
+    $run_user_bash_cmd "/bin/bash \"$SCRIPT_DIR/entrypoint-user.sh\""
+    # run the distribution's user initialization script for the non-root user
+    $run_user_bash_cmd "/bin/bash \"$SCRIPT_DIR/init-user.sh\""
   fi
+  $SUDO rm -rf /root/.cache/*
   # Update the status file to indicate the stoppage and exit because system libraries
   # may have been installed/updated by the above scripts.
   # Caller will restart the container after removing the init scripts.
@@ -210,8 +230,9 @@ childPID=$!
 function cleanup() {
   # clear status file first just in case other operations do not finish before SIGKILL comes
   echo -n > $status_file
-  # first send SIGTERM to all "docker exec" processes that will have parent PID as 0
-  exec_pids="$(ps -e -o ppid=,pid= | awk '{ if ($1 == 0 && $2 != 1) print $2 }')"
+  # first send SIGTERM to all "docker exec" processes that will have parent PID as 0 or 1
+  exec_pids="$(ps -e -o ppid=,pid= | \
+    awk '{ if (($1 == 0 || $1 == 1) && $2 != 1 && $2 != '$childPID') print $2 }')"
   for pid in $exec_pids; do
     echo "Sending SIGTERM to $pid"
     kill -TERM $pid

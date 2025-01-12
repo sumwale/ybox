@@ -1,6 +1,5 @@
 """Helper class to run tests on all supported distributions"""
 
-import argparse
 import os
 import shutil
 import subprocess
@@ -8,12 +7,11 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from configparser import ConfigParser
 from dataclasses import dataclass
 from importlib.resources import files
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, cast
 from uuid import uuid4
 
 import pytest
 
-from ybox.cmd import get_docker_command
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.print import print_error
@@ -50,6 +48,7 @@ class DistributionBase:
 
     _resources_dir = f"{os.path.dirname(__file__)}/../resources"
     _home = os.environ["HOME"]
+    _env = None
     _docker_cmd = ""
     _helpers: list[DistributionHelper] = []
 
@@ -61,10 +60,12 @@ class DistributionBase:
             os.mkdir(f"{self._home}/Downloads", mode=0o755)
         except FileExistsError:
             pass
-        args_parser = argparse.ArgumentParser()
-        args_parser.add_argument("-d", "--docker-path")
-        args = args_parser.parse_args([])
-        self._docker_cmd = get_docker_command(args, "-d")
+        try:
+            os.mkdir(f"{self._home}/Documents", mode=0o755)
+        except FileExistsError:
+            pass
+        self._env = Environ()
+        self._docker_cmd = self._env.docker_cmd
         with files("ybox").joinpath("conf/distros/supported.list").open(
                 "r", encoding="utf-8") as supp_fd:
             self._helpers = [DistributionHelper.create(distro)
@@ -73,6 +74,11 @@ class DistributionBase:
         yield
 
         del os.environ["YBOX_TESTING"]
+
+    @property
+    def env(self) -> Environ:
+        """the `Environ` object being used in the tests"""
+        return cast(Environ, self._env)
 
     def cleanup(self, helper: DistributionHelper) -> None:
         """
@@ -111,20 +117,20 @@ class DistributionBase:
     def run_on_container(self, cmd: Union[str, list[str]], helper: DistributionHelper,
                          capture_output: bool = True) -> subprocess.CompletedProcess[bytes]:
         """
-        Run a command on the container using docker/podman exec and return the
+        Run a command on the container using podman/docker exec and return the
         :class:`subprocess.CompletedProcess` from the result of :func:`subprocess.run`.
         """
-        docker_args = [self._docker_cmd, "exec", "-it", helper.box_name]
+        docker_args = [self._docker_cmd, "exec", helper.box_name]
         if isinstance(cmd, str):
             docker_args.extend(cmd.split())
         else:
             docker_args.extend(cmd)
         return subprocess.run(docker_args, capture_output=capture_output, check=False)
 
-    @staticmethod
-    def distribution_config(config_file: PathName, helper: DistributionHelper) -> ConfigParser:
+    def distribution_config(self, config_file: PathName,
+                            helper: DistributionHelper) -> ConfigParser:
         """read and parse a distribution configuration returning a `ConfigParser` object"""
         # instance of StaticConfiguration only required to set up the environment variables
-        conf = StaticConfiguration(Environ(), helper.distribution, helper.box_name)
+        conf = StaticConfiguration(self.env, helper.distribution, helper.box_name)
         env_interpolation = EnvInterpolation(conf.env, [])
         return config_reader(config_file, env_interpolation)

@@ -17,7 +17,7 @@ def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
                     state: YboxStateManagement) -> int:
     # pylint: disable=unused-argument
     """
-    Uninstall package specified by `args.package` on a ybox container with given docker/podman
+    Uninstall package specified by `args.package` on a ybox container with given podman/docker
     command. Additional flags honored are `args.quiet` to bypass user confirmation during
     uninstall, `args.keep_config_files` to keep the system configuration and/or data files
     of the package, `args.skip_deps` to skip removal of all orphaned dependencies of the package
@@ -25,7 +25,7 @@ def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
 
     :param args: arguments having `search` and all other attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers

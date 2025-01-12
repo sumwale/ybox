@@ -18,8 +18,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional
 
-from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
-                      get_docker_command, run_command)
+from ybox.cmd import PkgMgr, RepoCmd, YboxLabel, check_ybox_exists, run_command
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, PathName
 from ybox.filelock import FileLock
@@ -60,14 +59,15 @@ def main_argv(argv: list[str]) -> None:
     """
     args = parse_args(argv)
     env = Environ()
+    docker_cmd = env.docker_cmd
 
     # use provided distribution else let user select from available ones
     distro = select_distribution(args, env)
-    # the profile used to build the docker/podman command-line which is either provided
+    # the profile used to build the podman/docker command-line which is either provided
     # on command-line or else let user select from available ones in standard locations
     profile = select_profile(args, env)
 
-    box_name, docker_cmd = process_args(args, distro, profile)
+    box_name = process_args(args, distro, profile)
     print_color(f"Creating ybox container named '{box_name}' using profile '{profile}'",
                 fg=fgcolor.green)
     if check_ybox_exists(docker_cmd, box_name):
@@ -93,7 +93,7 @@ def main_argv(argv: list[str]) -> None:
     # 1) First start a basic container with the smallest upstream distro image (important to save
     #    space when `base.shared_root` is provided) with "entrypoint-base.sh" as the entrypoint
     #    script giving user/group arguments to be same as the user as on the host machine.
-    # 2) Next do a docker/podman commit and save the stopped container as local image which
+    # 2) Next do a podman/docker commit and save the stopped container as local image which
     #    will be used henceforth. The main point of doing #1 is to ensure that a sudo enabled
     #    user is available which matches the current host user so that "--userns" option
     #    will not try to remap the image that can substantially increase the size of image.
@@ -108,7 +108,7 @@ def main_argv(argv: list[str]) -> None:
     #    followed by the generic "entrypoint.sh" script which will create the configuration
     #    file links (from [configs] section), install required apps (from [apps] section),
     #    followed by invoking the startup scripts from the [startup] section.
-    # 4) The container is now ready to use so 'ybox-cmd' will only do a docker/podman exec
+    # 4) The container is now ready to use so 'ybox-cmd' will only do a podman/docker exec
     #    of /bin/bash to open a shell (or any given command).
     # 5) Mounts and environment variables are set up for step 3 which are automatically also
     #    available in step 4, and hence no special setup is required in step 4.
@@ -120,9 +120,11 @@ def main_argv(argv: list[str]) -> None:
     # 3) If not, then start the basic container like in step 1) of previous sequence.
     # 4) Like step 2) of the previous sequence, commit the container but with a temporary name.
     # 5) Unlike step 3) of the previous sequence, do a temporary restart of the previous
-    #    committed image with "--userns=keep-id" option, and then copy the shared root
+    #    committed image with "--userns=keep-id" option (podman), and then copy the shared root
     #    directories to the shared mount point. This copying cannot be done in step 4) above
     #    because the file permissions are different with and without the --userns option.
+    #    For docker that does not support the "--userns=keep-id" option, the container image
+    #    needs to be run as root user that maps to host's user.
     # 6) Stop the container and commit the image again with the final shared image name.
     #    Delete the previous temporary image. Release the file lock acquired in step 1).
     # 7) Now start the shared image like in step 3) of the previous sequence but with the
@@ -147,13 +149,13 @@ def main_argv(argv: list[str]) -> None:
                 # keeping a separate tmp_image helps reduce size of final image a bit because
                 # this one is without --userns while the final shared image is with --userns
                 tmp_image = f"{conf.box_image(False)}__ybox_tmp"
-                commit_container(current_user, docker_cmd, tmp_image, conf)
+                commit_container(docker_cmd, tmp_image, conf)
                 # start a container using the temporary image with "--userns" option to make
                 # a copy of the container root directories to the shared location
                 run_shared_copy_container(docker_cmd, tmp_image, shared_root, shared_root_dirs,
                                           conf, args.quiet)
                 # finally commit this container with the name of the shared image
-                commit_container(current_user, docker_cmd, conf.box_image(True), conf)
+                commit_container(docker_cmd, conf.box_image(True), conf)
                 remove_image(docker_cmd, tmp_image)
             # in case a shared root directory is not present but shared image is present,
             # need to run the container to copy to shared root
@@ -170,8 +172,8 @@ def main_argv(argv: list[str]) -> None:
         # 'entrypoint-base.sh' script to create the user and group in the container
         run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
         # commit the stopped container, remove it, then start new container with the
-        # "--userns=keep-id" option for the required container state
-        commit_container(current_user, docker_cmd, conf.box_image(False), conf)
+        # "--userns=keep-id" option (podman) for the required container state
+        commit_container(docker_cmd, conf.box_image(False), conf)
 
     # there is one additional stop/start below because all packages are upgraded by the
     # entrypoint script to pick up any important fixes which can lead to system libraries
@@ -187,7 +189,7 @@ def main_argv(argv: list[str]) -> None:
 
     # remove distribution specific scripts and restart container the final time
     print_info(f"Restarting the final container '{box_name}'")
-    Path(f"{conf.scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o640)
+    Path(f"{conf.scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o644)
     restart_container(docker_cmd, conf)
     print_info("Waiting for the container to be ready (see "
                f"'ybox-logs -f {box_name}' for detailed progress)")
@@ -252,8 +254,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-n", "--name", type=str,
                         help="name of the ybox; default is ybox-<distribution>_<profile> "
                              "if not provided (removing the .ini suffix from <profile> file)")
-    parser.add_argument("-d", "--docker-path", type=str,
-                        help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-F", "--force-own-orphans", action="store_true",
                         help="force ownership of orphan packages on the same shared root even "
                              "if container configuration does not match, meaning the packages "
@@ -349,7 +349,7 @@ def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
     :raises ValueError: unexpected internal error in the name of the profile
     :return: name of the selected or provided profile
     """
-    # the profile used to build the docker/podman command-line
+    # the profile used to build the podman/docker command-line
     if profile_arg := args.profile:
         if os.access(profile_arg, os.R_OK):
             return Path(profile_arg)
@@ -384,17 +384,17 @@ def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
     raise ValueError(f"Unexpected profile name string: {profile_name}")
 
 
-def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> tuple[str, str]:
+def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> str:
     """
     Initial processing of the provided command-line arguments to form the desired name of the
-    ybox container and the docker/podman command to use.
+    ybox container.
 
     :param args: the parsed arguments passed to the invoking `ybox-create` script
     :param distro: the Linux distribution name returned by :func:`select_distribution` to use for
                    the ybox container
     :param profile: the profile file returned by :func:`select_profile` to use for ybox container
                     configuration as a `Path` or resource file from importlib (`Traversable`)
-    :return: tuple of ybox container name and docker/podman command to use
+    :return: the ybox container name to use
     """
     ini_suffix = ".ini"
     if args.name:
@@ -414,8 +414,7 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> tu
         print_error(f"Invalid container name '{box_name}' -- only alphanumeric, underscore and "
                     "hyphen characters are accepted")
         sys.exit(1)
-    docker_cmd = get_docker_command(args, "-d")
-    return box_name, docker_cmd
+    return box_name
 
 
 def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: SectionProxy,
@@ -431,7 +430,7 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
                     configuration as a `Path` or resource file from importlib (`Traversable`)
     :param conf: the :class:`StaticConfiguration` for the container
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_args: list of arguments to be provided to docker/podman command for creating the
+    :param docker_args: list of arguments to be provided to podman/docker command for creating the
                         final ybox container which is populated with required options as per
                         the configuration in the given profile
     :raises NotSupportedError: if there is an unknown section or key in the ini format profile
@@ -452,7 +451,7 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
     shared_root, config_hardlinks = process_base_section(config["base"], profile, conf,
                                                          docker_args)
     apps_with_deps: dict[str, list[str]] = {}
-    # finally process all the sections and the keys forming the docker/podman command-line
+    # finally process all the sections and the keys forming the podman/docker command-line
     for section in config.sections():
         if section == "security":
             process_security_section(config["security"], profile, docker_args)
@@ -485,9 +484,10 @@ def read_distribution_config(args: argparse.Namespace,
     :return: a tuple of image name, shared root directories, secondary groups and an object of
              :class:`ConfigParser` for the `distro.ini`
     """
-    env_interpolation = EnvInterpolation(conf.env, [])
+    env = conf.env
+    env_interpolation = EnvInterpolation(env, [])
     distro_conf_file = args.distribution_config or conf.distribution_config(conf.distribution)
-    distro_config = config_reader(conf.env.search_config_path(
+    distro_config = config_reader(env.search_config_path(
         distro_conf_file, only_sys_conf=True), env_interpolation)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
@@ -498,12 +498,12 @@ def read_distribution_config(args: argparse.Namespace,
 
 def process_distribution_config(distro_config: ConfigParser, docker_args: list[str]) -> None:
     """
-    Process the Linux distribution's `distro.ini` file and populate relevant docker/podman options
+    Process the Linux distribution's `distro.ini` file and populate relevant podman/docker options
     in the given `docker_args` list.
 
     :param distro_config: an object of :class:`ConfigParser` from parsing the Linux
                           distribution's `distro.ini`
-    :param docker_args: list of arguments to be provided to docker/podman command for creating the
+    :param docker_args: list of arguments to be provided to podman/docker command for creating the
                         final ybox container which is populated with required options
     """
     if distro_config.getboolean("base", "configure_fastest_mirrors", fallback=False):
@@ -516,14 +516,15 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
                              ("suggested_deps", "SUGGESTED_DEPS"), ("extra", "EXTRA_PKGS")):
             if value := packages_section.get(key):
                 add_env_option(docker_args, env_var, _WS_RE.sub(" ", value))
-    if key_server := distro_config.get("repo", RepoCmd.DEFAULT_GPG_KEY_SERVER.value, fallback=""):
-        add_env_option(docker_args, "DEFAULT_GPG_KEY_SERVER", key_server)
+    key_server = distro_config.get("repo", RepoCmd.DEFAULT_GPG_KEY_SERVER.value,
+                                   fallback=Consts.default_key_server())
+    add_env_option(docker_args, "DEFAULT_GPG_KEY_SERVER", key_server)
 
 
 def process_base_section(base_section: SectionProxy, profile: PathName, conf: StaticConfiguration,
                          docker_args: list[str]) -> tuple[str, Optional[bool]]:
     """
-    Process the `[base]` section in the container profile to append required docker/podman
+    Process the `[base]` section in the container profile to append required podman/docker
     options in the list that has been passed, and return a tuple having the shared root to use for
     the container (if any), and the value of `config_hardlinks` key in the section.
 
@@ -531,7 +532,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
     :param profile: the profile file returned by :func:`select_profile` to use for ybox container
                     configuration as a `Path` or resource file from importlib (`Traversable`)
     :param conf: the :class:`StaticConfiguration` for the container
-    :param docker_args: list of docker/podman arguments to which required options as per the
+    :param docker_args: list of podman/docker arguments to which required options as per the
                         configuration in the `[base]` section are appended
     :raises NotSupportedError: if there is an unknown key in the `[base]` section
     :return: tuple of container's shared root and the value of `config_hardlinks` key
@@ -574,7 +575,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
                 enable_pulse(docker_args, env)
         elif key == "dbus":
             if _get_boolean(val):
-                enable_dbus(docker_args, base_section.getboolean("dbus_sys", fallback=False))
+                enable_dbus(docker_args, base_section.getboolean("dbus_sys", fallback=False), env)
         elif key == "dri":
             dri = _get_boolean(val)
         elif key == "nvidia":
@@ -624,10 +625,10 @@ def _get_boolean(value: str) -> bool:
 
 def enable_pulse(docker_args: list[str], env: Environ) -> None:
     """
-    Append options to docker/podman arguments to share host machine's pulse/pipewire audio server
+    Append options to podman/docker arguments to share host machine's pulse/pipewire audio server
     with the new ybox container.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param env: an instance of the current :class:`Environ`
     """
     cookie = f"{env.home}/.config/pulse/cookie"
@@ -636,28 +637,31 @@ def enable_pulse(docker_args: list[str], env: Environ) -> None:
     if env.xdg_rt_dir:
         pulse_native = f"{env.xdg_rt_dir}/pulse/native"
         if os.access(pulse_native, os.W_OK):
-            add_mount_option(docker_args, pulse_native, pulse_native)
+            add_mount_option(docker_args, pulse_native, f"{env.target_xdg_rt_dir}/pulse/native")
         for pwf in [f for f in os.listdir(env.xdg_rt_dir) if re.match("pipewire-[0-9]+$", f)]:
             pipewire_path = f"{env.xdg_rt_dir}/{pwf}"
             if os.access(pipewire_path, os.W_OK):
-                add_mount_option(docker_args, pipewire_path, pipewire_path)
+                add_mount_option(docker_args, pipewire_path, f"{env.target_xdg_rt_dir}/{pwf}")
 
 
-def enable_dbus(docker_args: list[str], sys_enable: bool) -> None:
+def enable_dbus(docker_args: list[str], sys_enable: bool, env: Environ) -> None:
     """
-    Append options to docker/podman arguments to share host machine's dbus message bus
+    Append options to podman/docker arguments to share host machine's dbus message bus
     with the new ybox container.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param sys_enable: if True then also share host machine's system dbus message bus in addition
                        to the user dbus message bus
+    :param env: an instance of the current :class:`Environ`
     """
+    def replace_target_dir(src: str) -> str:
+        return src.replace(f"{env.xdg_rt_dir}/", f"{env.target_xdg_rt_dir}/")
     if dbus_session := os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
         dbus_user = dbus_session[dbus_session.find("=") + 1:]
         if (dbus_opts_idx := dbus_user.find(",")) != -1:
             dbus_user = dbus_user[:dbus_opts_idx]
-        add_mount_option(docker_args, dbus_user, dbus_user)
-        add_env_option(docker_args, "DBUS_SESSION_BUS_ADDRESS", dbus_session)
+        add_mount_option(docker_args, dbus_user, replace_target_dir(dbus_user))
+        add_env_option(docker_args, "DBUS_SESSION_BUS_ADDRESS", replace_target_dir(dbus_session))
     if sys_enable:
         dbus_sys = "/run/dbus/system_bus_socket"
         dbus_sys2 = "/var/run/dbus/system_bus_socket"
@@ -669,11 +673,11 @@ def enable_dbus(docker_args: list[str], sys_enable: bool) -> None:
 
 def add_multi_opt(docker_args: list[str], opt: str, val: Optional[str]) -> None:
     """
-    Append a comma-separated value in the profile as multiple options to docker/podman arguments.
+    Append a comma-separated value in the profile as multiple options to podman/docker arguments.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param val: the comma-separated value
-    :param opt: the option name which is added as `--{opt}=...` to docker/podman arguments
+    :param opt: the option name which is added as `--{opt}=...` to podman/docker arguments
     """
     if val:
         for opt_val in val.split(","):
@@ -683,13 +687,13 @@ def add_multi_opt(docker_args: list[str], opt: str, val: Optional[str]) -> None:
 def process_security_section(sec_section: SectionProxy, profile: PathName,
                              docker_args: list[str]) -> None:
     """
-    Process the `[security]` section in the container profile to append required docker/podman
+    Process the `[security]` section in the container profile to append required podman/docker
     options in the list that has been passed.
 
     :param sec_section: an object of :class:`SectionProxy` from parsing the `[security]` section
     :param profile: the profile file returned by :func:`select_profile` to use for ybox container
                     configuration as a `Path` or resource file from importlib (`Traversable`)
-    :param docker_args: list of docker/podman arguments to which required options as per the
+    :param docker_args: list of podman/docker arguments to which required options as per the
                         configuration in the `[security]` section are appended
     :raises NotSupportedError: if there is an unknown key in the `[security]` section
     """
@@ -717,11 +721,11 @@ def process_security_section(sec_section: SectionProxy, profile: PathName,
 
 def process_mounts_section(mounts_section: SectionProxy, docker_args: list[str]) -> None:
     """
-    Process the `[mounts]` section in the container profile to append required docker/podman
+    Process the `[mounts]` section in the container profile to append required podman/docker
     options in the list that has been passed.
 
     :param mounts_section: an object of :class:`SectionProxy` from parsing the `[mounts]` section
-    :param docker_args: list of docker/podman arguments to which required options as per the
+    :param docker_args: list of podman/docker arguments to which required options as per the
                         configuration in the `[mounts]` section are appended
     """
     # keys here are only symbolic names and serve no purpose other than allowing
@@ -737,7 +741,7 @@ def process_mounts_section(mounts_section: SectionProxy, docker_args: list[str])
 def process_configs_section(configs_section: SectionProxy, config_hardlinks: bool,
                             conf: StaticConfiguration, docker_args: list[str]) -> None:
     """
-    Process the `[configs]` section in the container profile to append required docker/podman
+    Process the `[configs]` section in the container profile to append required podman/docker
     options in the list that has been passed. This method also makes hard-links or copies of the
     configuration files in local user's ybox data directory to mount inside the ybox container so
     that the selected configuration files from host are available in the container.
@@ -747,7 +751,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                              indicates whether the configuration files from host have to be made
                              available by creating hard-links to them or by making copies
     :param conf: the :class:`StaticConfiguration` for the container
-    :param docker_args: list of docker/podman arguments to which required options as per the
+    :param docker_args: list of podman/docker arguments to which required options as per the
                         configuration in the `[configs]` section are appended
     """
     # copy or link the mentioned files in [configs] section which can be either files
@@ -795,11 +799,11 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
 
 def process_env_section(env_section: SectionProxy, docker_args: list[str]) -> None:
     """
-    Process the `[env]` section in the container profile to append required docker/podman
+    Process the `[env]` section in the container profile to append required podman/docker
     options in the list that has been passed.
 
     :param env_section: an object of :class:`SectionProxy` from parsing the `[env]` section
-    :param docker_args: list of docker/podman arguments to which required options as per the
+    :param docker_args: list of podman/docker arguments to which required options as per the
                         configuration in the `[env]` section are appended
     """
     for key, val in env_section.items():
@@ -900,7 +904,9 @@ def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
     # first create local mount directory having entrypoint and other scripts
     if os.path.exists(conf.scripts_dir):
         shutil.rmtree(conf.scripts_dir)
-    os.makedirs(conf.scripts_dir, mode=Consts.default_directory_mode(), exist_ok=True)
+    os.makedirs(conf.scripts_dir, exist_ok=True)
+    # allow for read/execute permissions for all since non-root user needs access with docker
+    os.chmod(conf.scripts_dir, mode=0o755)
     copy_ybox_scripts_to_container(conf, distro_config)
     # finally write the current version to "version" file in scripts directory of the container
     write_ybox_version(conf)
@@ -916,14 +922,14 @@ def run_base_container(image_name: str, current_user: str, secondary_groups: str
     :param image_name: distribution image to use for the container as specified in `distro.ini`
     :param current_user: the current user executing the `ybox-create` script
     :param secondary_groups: secondary groups for the container user as specified in `distro.ini`
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     """
     # get current user and group details to pass to the entrypoint script
     user_entry = pwd.getpwnam(current_user)
     group_entry = grp.getgrgid(user_entry.pw_gid)
     print_warn(f"Creating container specific image having sudo user '{current_user}'")
-    docker_run = [docker_cmd, "run", "-it", "-e=XDG_RUNTIME_DIR", f"--name={conf.box_name}",
+    docker_run = [docker_cmd, "run", f"--name={conf.box_name}",
                   f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
                   f"--label={YboxLabel.CONTAINER_BASE.value}",
                   f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_base()}",
@@ -952,7 +958,7 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root: str
     If the provided `shared_root` directory already exists, then user is interactively asked
     whether to delete the existing directory before proceeding.
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param image_name: distribution image to use for the container as specified in `distro.ini`
     :param shared_root: the shared root directory to use for the container
     :param shared_root_dirs: comma-separate list of directories shared between containers having
@@ -976,7 +982,7 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root: str
                 shutil.rmtree(shared_root)
             except OSError:
                 # try with sudo
-                run_command(["sudo", "/bin/rm", "-rf", shared_root],
+                run_command(["/usr/bin/sudo", "/bin/rm", "-rf", shared_root],
                             error_msg="deleting directory")
         else:
             print_error(f"Aborting creation of ybox container '{conf.box_name}'")
@@ -986,41 +992,40 @@ def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root: str
     os.makedirs(shared_root, mode=Consts.default_directory_mode())
     # the entrypoint-cp.sh script requires two arguments: first is the comma separated
     # list of directories to be copied, and second the target directory
-    run_command([docker_cmd, "run", "-it", f"--name={conf.box_name}",
-                 f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
-                 f"-v={shared_root}:{Consts.shared_root_mount_dir()}",
-                 f"--label={YboxLabel.CONTAINER_COPY.value}", "--userns=keep-id", "--user=0",
-                 f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_cp()}",
-                 image_name, shared_root_dirs, Consts.shared_root_mount_dir()],
-                error_msg="running container for copying shared root")
+    docker_full_cmd = [docker_cmd, "run", f"--name={conf.box_name}",
+                       f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
+                       f"-v={shared_root}:{Consts.shared_root_mount_dir()}",
+                       f"--label={YboxLabel.CONTAINER_COPY.value}", "--user=0",
+                       f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_cp()}"]
+    if conf.env.uses_podman:
+        docker_full_cmd.append("--userns=keep-id")
+    docker_full_cmd.extend((image_name, shared_root_dirs, Consts.shared_root_mount_dir()))
+    run_command(docker_full_cmd, error_msg="running container for copying shared root")
 
 
-def commit_container(current_user: str, docker_cmd: str, image_name: str,
-                     conf: StaticConfiguration) -> None:
+def commit_container(docker_cmd: str, image_name: str, conf: StaticConfiguration) -> None:
     """
     Commit the contents of a container as a new image. This also sets up the `USER` and `WORKDIR`
-    properties of the image to those of current user's name and home respectively. A difference
-    being that the container's user home which is the same as `WORKDIR` is always set to
-    `/home/<user>` for consistency across all other ybox code.
+    properties of the image to those of target user's name and home respectively (as detected in
+    the `Environ` object).
 
-    :param current_user: the current user executing the `ybox-create` script
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param image_name: name of the image to create
     :param conf: the :class:`StaticConfiguration` for the container
     """
-    run_command([docker_cmd, "commit", f"-c=USER={current_user}",
-                 f"-c=WORKDIR=/home/{current_user}", conf.box_name, image_name],
+    run_command([docker_cmd, "commit", "--change", f"USER {conf.env.target_user}",
+                 "--change", f"WORKDIR {conf.env.target_home}", conf.box_name, image_name],
                 error_msg="container commit")
     remove_container(docker_cmd, conf)
 
 
 def remove_container(docker_cmd: str, conf: StaticConfiguration) -> None:
-    """remove a stopped docker/podman container"""
+    """remove a stopped podman/docker container"""
     run_command([docker_cmd, "container", "rm", conf.box_name], error_msg="container rm")
 
 
 def remove_image(docker_cmd: str, image_name: str) -> None:
-    """remove an unused docker/podman image"""
+    """remove an unused podman/docker image"""
     run_command([docker_cmd, "image", "rm", image_name], exit_on_error=False,
                 error_msg="image remove")
 
@@ -1032,6 +1037,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
     The following characteristics of the container are noteworthy:
       * uses docker or podman to create the container that are required to be in `rootless` mode
       * maps the host environment user ID to the same UID in the container (`--userns=keep-id`)
+        when using podman else maps to the root user for docker
       * sets the container user to host environment user using `--user=...` option but does not
         enforce the primary group in that option so that the container user can belong to other
         secondary groups that is required for some applications
@@ -1070,16 +1076,23 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
     if shared_root:
         for shared_dir in shared_root_dirs.split(","):
             add_mount_option(docker_full_cmd, f"{shared_root}{shared_dir}", shared_dir)
-    docker_full_cmd.append("-e=XDG_RUNTIME_DIR")
+    docker_full_cmd.append(f"-e=XDG_RUNTIME_DIR={conf.env.target_xdg_rt_dir}")
     docker_full_cmd.append("-e=YBOX_TARGET_SCRIPTS_DIR")  # pass this along for container scripts
     docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_PRIMARY.value}")
     docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_DISTRIBUTION.value}={conf.distribution}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint()}")
-    docker_full_cmd.append("--userns=keep-id")
     # bubblewrap and thereby programs like steam do not work without --user
     # (https://github.com/containers/bubblewrap/issues/380#issuecomment-648169485)
     user_entry = pwd.getpwnam(current_user)
-    docker_full_cmd.append(f"--user={user_entry.pw_uid}")
+    user_uid = user_entry.pw_uid
+    user_gid = user_entry.pw_gid
+    if conf.env.uses_podman:
+        docker_full_cmd.append(f"--user={user_uid}")
+        docker_full_cmd.append("--userns=keep-id")
+    else:
+        docker_full_cmd.append("--user=0")
+    docker_full_cmd.append(f"-e=YBOX_HOST_UID={user_uid}")
+    docker_full_cmd.append(f"-e=YBOX_HOST_GID={user_gid}")
     docker_full_cmd.append(conf.box_image(bool(shared_root)))
     if os.access(conf.config_list, os.R_OK):
         docker_full_cmd.extend(["-c", f"{conf.target_scripts_dir}/config.list",
@@ -1096,7 +1109,7 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
 
 
 def restart_container(docker_cmd: str, conf: StaticConfiguration) -> None:
-    """restart a stopped docker/podman container"""
+    """restart a stopped podman/docker container"""
     if (code := int(run_command([docker_cmd, "container", "start", conf.box_name],
                                 exit_on_error=False, error_msg="container restart"))) != 0:
         print_error(f"Also check 'ybox-logs {conf.box_name}' for details")

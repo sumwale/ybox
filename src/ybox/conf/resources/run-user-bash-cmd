@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -e
+
+if [ "$#" -ne 1 ]; then
+  echo "Usage: $0 <full command to run as single argument like passed to '/bin/bash -c'>"
+  exit 1
+fi
+
+if [ "$(id -u)" -eq 0 -a -n "$YBOX_HOST_UID" ] && getent passwd $YBOX_HOST_UID > /dev/null; then
+  exec sudo -u "#$YBOX_HOST_UID" -g "#$YBOX_HOST_GID" /bin/bash -c "$1"
+else
+  eval "$1"
+fi

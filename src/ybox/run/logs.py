@@ -1,12 +1,13 @@
 """
-Code for the `ybox-logs` script that is used to show the docker/podman logs of an active
+Code for the `ybox-logs` script that is used to show the podman/docker logs of an active
 ybox container.
 """
 
 import argparse
 import sys
 
-from ybox.cmd import check_ybox_exists, get_docker_command, run_command
+from ybox.cmd import check_ybox_exists, run_command
+from ybox.env import get_docker_command
 from ybox.print import print_info
 
 
@@ -24,7 +25,7 @@ def main_argv(argv: list[str]) -> None:
     :param argv: arguments to the function (main function passes `sys.argv[1:]`)
     """
     args = parse_args(argv)
-    docker_cmd = get_docker_command(args, "-d")
+    docker_cmd = get_docker_command()
     container_name = args.container_name
 
     check_ybox_exists(docker_cmd, container_name, exit_on_error=True)
@@ -50,8 +51,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         description="Show logs from an active or stopped ybox container")
-    parser.add_argument("-d", "--docker-path", type=str,
-                        help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-f", "--follow", action="store_true",
                         help="follow log output like 'tail -f'")
     parser.add_argument("container_name", type=str, help="name of the running ybox")

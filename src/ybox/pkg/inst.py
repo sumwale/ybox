@@ -9,9 +9,10 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
@@ -33,7 +34,7 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
                     conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
                     state: YboxStateManagement) -> int:
     """
-    Install package specified by `args.package` on a ybox container with given docker/podman
+    Install package specified by `args.package` on a ybox container with given podman/docker
     command. Additional flags honored are `args.quiet` to bypass user confirmation during install,
     `args.skip_opt_deps` to skip installing optional dependencies of the package,
     `args.skip_executables` to skip creating wrapper executables for the package executables,
@@ -48,7 +49,7 @@ def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
 
     :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
@@ -87,7 +88,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                         distribution which should have an unresolved `{opt_dep}` placeholder
                         for the `opt_dep_flag`
     :param list_cmd: command to list files for an installed package read from `distro.ini`
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param rt_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
@@ -193,7 +194,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     Find the optional dependencies recursively, removing the ones already installed.
 
     :param package: package to be installed
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param container_name: name of the ybox container
     :param opt_deps_cmd: command to determine optional dependencies as read from `distro.ini`
     :return: first part is list of tuples having the name of optional dependency, its description
@@ -298,7 +299,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
                       wrapper executables that invoke corresponding ones of the container
     :param app_flags: application flags that have been explicitly specified with --app-flags
     :param list_cmd: command to list files for an installed package read from `distro.ini`
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param box_conf: the resolved INI format configuration of the container as a string or
                      a `ConfigParser` object
@@ -343,7 +344,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
                     # clear EXECUTABLE mask so that no wrapper executable is created
                     copy_type &= ~CopyType.EXECUTABLE
 
-    # the "-it" flag is used for both desktop file and executable for docker/podman exec
+    # the "-it" flag is used for both desktop file and executable for podman/docker exec
     # since it is safe (unless the app may need stdin in which case Terminal must be true
     #   in its desktop file in which case a terminal will be opened during execution)
     for file_dir, filename, file in file_paths:
@@ -351,8 +352,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
         # "docker exec" prefix to the command
         if copy_type & CopyType.DESKTOP:
             if file_dir in desktop_dirs:
-                _wrap_desktop_file(filename, file, package, docker_cmd, conf, app_flags,
-                                   wrapper_files)
+                _wrap_desktop_file(filename, file, docker_cmd, conf, app_flags, wrapper_files)
                 continue  # if it is a .desktop file, then skip executable check
             if _select_app_icon(file_dir, filename, file, icon_dir_pattern, selected_icons):
                 continue  # if it is an icon file, then skip executable check
@@ -402,18 +402,41 @@ def _replace_flags(match: re.Match[str], flags: str, program: str, args: str) ->
     return args
 
 
-def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
-                       conf: StaticConfiguration, app_flags: dict[str, str],
-                       wrapper_files: list[str]) -> None:
+def docker_cp_action(docker_cmd: str, box_name: str, src: str,
+                     func: Callable[[str], None]) -> int:
     """
-    For a desktop file, add "docker/podman exec ..." to its Exec/TryExec lines. Also read
+    Copy a file from docker container to a temporary location on host and perform given action.
+    This does not use the `cp` command of podman/docker because it fails for rootless docker.
+
+    :param docker_cmd: the podman/docker executable to use
+    :param box_name: name of the ybox container
+    :param src: path of the file to be copied on the container
+    :param func: function that takes temporary copied file as an argument with no return
+    :return: exit code of the podman/docker command
+    """
+    src_dir = os.path.dirname(src)
+    src_file = os.path.basename(src)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # use shell pipe and tar instead of python Popen and tarfile which will require much more
+        # code unncessarily and may not be able to use `run_command`
+        shell_cmd = (f"'{docker_cmd}' exec '{box_name}' tar -C '{src_dir}' -cpf - '{src_file}' | "
+                     f"tar -C '{temp_dir}' -xpf -")
+        if (code := int(run_command(["/bin/sh", "-c", shell_cmd], exit_on_error=False,
+                                    error_msg=f"copying of file from '{box_name}:{src}'"))) == 0:
+            func(f"{temp_dir}/{src_file}")
+        return code
+
+
+def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
+                       app_flags: dict[str, str], wrapper_files: list[str]) -> None:
+    """
+    For a desktop file, add "podman/docker exec ..." to its Exec/TryExec lines. Also read
     the additional flags for the command passed in `app_flags` and add them to an appropriate
     position in the Exec/TryExec lines.
 
     :param filename: name of the desktop file being wrapped
     :param file: full path of the desktop file being wrapped
-    :param package: the package being installed
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param app_flags: map of executable file name to the value from [app_flags] section from the
                       container configuration
@@ -421,11 +444,6 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
     """
     # container name is added to desktop file to make it unique
     wrapper_name = f"ybox.{conf.box_name}.{filename}"
-    tmp_file = Path("/tmp", wrapper_name)
-    tmp_file.unlink(missing_ok=True)
-    if run_command([docker_cmd, "cp", f"{conf.box_name}:{file}", str(tmp_file)],
-                   exit_on_error=False, error_msg=f"copying of file from '{package}'") != 0:
-        return
 
     def replace_executable(match: re.Match[str]) -> str:
         program = match.group(3)
@@ -438,22 +456,23 @@ def _wrap_desktop_file(filename: str, file: str, package: str, docker_cmd: str,
             full_cmd = f"{program} {args}"
         else:
             full_cmd = program
-        return (f'{match.group(1)}{docker_cmd} exec -it -e=XAUTHORITY -e=DISPLAY '
+        # pseudo-tty cannot be allocated with rootless docker outside of a terminal app
+        return (f'{match.group(1)}{docker_cmd} exec -e=XAUTHORITY -e=DISPLAY '
                 f'-e=FREETYPE_PROPERTIES {conf.box_name} /usr/local/bin/run-in-dir '
                 f'"" {full_cmd}\n')
 
-    try:
-        # the destination will be $HOME/.local/share/applications
-        os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
-                    exist_ok=True)
-        wrapper_file = f"{conf.env.user_applications_dir}/{wrapper_name}"
-        print_notice(f"Linking container desktop file {file} to {wrapper_file}")
+    # the destination will be $HOME/.local/share/applications
+    os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
+                exist_ok=True)
+    wrapper_file = f"{conf.env.user_applications_dir}/{wrapper_name}"
+    print_notice(f"Linking container desktop file {file} to {wrapper_file}")
+
+    def write_desktop_file(src: str) -> None:
         with open(wrapper_file, "w", encoding="utf-8") as wrapper_fd:
-            with tmp_file.open("r", encoding="utf-8") as tmp_fd:
-                wrapper_fd.writelines(_EXEC_RE.sub(replace_executable, line) for line in tmp_fd)
+            with open(src, "r", encoding="utf-8") as src_fd:
+                wrapper_fd.writelines(_EXEC_RE.sub(replace_executable, line) for line in src_fd)
+    if docker_cp_action(docker_cmd, conf.box_name, file, write_desktop_file) == 0:
         wrapper_files.append(wrapper_file)
-    finally:
-        tmp_file.unlink(missing_ok=True)
 
 
 def _select_app_icon(file_dir: str, filename: str, file: str, icon_dir_pattern: re.Pattern[str],
@@ -500,7 +519,7 @@ def _copy_app_icons(selected_icons: dict[str, tuple[float, str]], docker_cmd: st
 
     :param selected_icons: dictionary of icon names (i.e. file name without extension) to a tuple
                            having inverse priority as a float and full path of the icon file
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param quiet: perform operations quietly: a value != 0 will skip overwriting existing icon
                   file in user's application icon directory without confirmation
@@ -517,14 +536,11 @@ def _copy_app_icons(selected_icons: dict[str, tuple[float, str]], docker_cmd: st
                 continue
         target_icon_path = target_icon_dir.joinpath(os.path.basename(icon_path))
         print_notice(f"Copying application icon file {icon_path} to {target_icon_path}")
-        # copying to temporary path so that existing file, if any can be overwritten
-        # (so that if has hard links, for example, the hard links will remain intact)
-        tmp_path = f"{target_icon_path}.ybox-tmp"
-        if run_command([docker_cmd, "cp", f"{conf.box_name}:{icon_path}", tmp_path],
-                       exit_on_error=False) == 0:
-            exists = os.path.exists(target_icon_path)
-            shutil.copy2(tmp_path, target_icon_path)
-            os.unlink(tmp_path)
+        # copy from temporary file over the existing one, if any, to overwrite rather than move
+        # (which will preserve all of its hard links, for example)
+        exists = os.path.exists(target_icon_path)
+        if docker_cp_action(docker_cmd, conf.box_name, icon_path,
+                            lambda src, dest=target_icon_path: shutil.copy2(src, dest)) == 0:
             # skip registration of icon file it already existed and was overwritten so that
             # it is not removed on package uninstall
             if not exists:
@@ -533,7 +549,7 @@ def _copy_app_icons(selected_icons: dict[str, tuple[float, str]], docker_cmd: st
 
 def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, quiet: int) -> bool:
     """
-    For an executable, check if a wrapper executable that invokes "docker/podman exec" should
+    For an executable, check if a wrapper executable that invokes "podman/docker exec" should
     be created (with user confirmation or allow without confirmation if `quiet` is non-zero).
 
     :param filename: name of the executable file being wrapped
@@ -567,11 +583,11 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
 def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
                      app_flags: dict[str, str], wrapper_files: list[str]) -> None:
     """
-    For an executable, create a wrapper executable that invokes "docker/podman exec".
+    For an executable, create a wrapper executable that invokes "podman/docker exec".
 
     :param filename: name of the executable file being wrapped
     :param file: full path of the executable file being wrapped
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param app_flags: map of executable file name to the value from [app_flags] section from the
                       container configuration
@@ -605,7 +621,7 @@ def _get_wrapper_executable(filename: str, conf: StaticConfiguration) -> str:
 def _link_man_page(file: str, shared_root: str, conf: StaticConfiguration,
                    wrapper_files: list[str]) -> None:
     """
-    For an executable, create a wrapper executable that invokes "docker/podman exec".
+    For an executable, create a wrapper executable that invokes "podman/docker exec".
 
     :param file: full path of the executable file being wrapped
     :param shared_root: the local shared root directory if `shared_root` is provided

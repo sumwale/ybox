@@ -29,7 +29,7 @@ def list_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
 
     :param args: arguments having all attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
@@ -79,7 +79,7 @@ def _build_table_transform(args: argparse.Namespace, separator: str,
                            headers: list[str]) -> Callable[[str], str]:
     """
     Return a transformation function that takes the output of the underlying package manager
-    (invoked using docker/podman exec) and returns a string of table format layout appropriate
+    (invoked using podman/docker exec) and returns a string of table format layout appropriate
     for display on a terminal.
 
     :param args: the parsed arguments passed to the invoking script
@@ -174,7 +174,7 @@ def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
 
     :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers

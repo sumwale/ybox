@@ -1,15 +1,16 @@
 """
-Utilities related to command execution like running a command, get docker/podman executable etc.
+Utilities related to command execution like running a command, get podman/docker executable etc.
 """
 
 import argparse
 import errno
-import os
 import shlex
 import subprocess
 import sys
 from enum import Enum
 from typing import Callable, Iterable, Optional, Union
+
+from ybox.config import Consts
 
 from .print import print_error, print_info, print_notice, print_warn
 
@@ -81,36 +82,13 @@ class YboxLabel(str, Enum):
     CONTAINER_PRIMARY = f"{CONTAINER_TYPE}=primary"
 
 
-def get_docker_command(args: argparse.Namespace, option_name: str) -> str:
-    """
-    If custom docker/podman defined in arguments, then return that else check for podman and
-    docker (in that order) in the standard /usr/bin path.
-
-    :param args: the parsed arguments passed to the invoking script
-    :param option_name: name of the argument that holds the docker/podman path, if specified
-    :return: the podman/docker executable specified in arguments or in standard /usr/bin path
-    """
-    # check for podman first then docker
-    if args.docker_path:
-        if os.access(args.docker_path, os.X_OK):
-            return args.docker_path
-        raise PermissionError(
-            f"Cannot execute '{args.docker_path}' provided in '{option_name}' option")
-    if os.access("/usr/bin/podman", os.X_OK):
-        return "/usr/bin/podman"
-    if os.access("/usr/bin/docker", os.X_OK):
-        return "/usr/bin/docker"
-    raise FileNotFoundError(
-        f"No podman/docker found or '{option_name}' specified")
-
-
 def get_ybox_state(docker_cmd: str, box_name: str, expected_states: Iterable[str],
                    exit_on_error: bool = False, state_msg: str = "") -> tuple[str, str]:
     """
     Check if the given ybox container exists and is in one of the given states, or get the state
     if the given `expected_states` is empty.
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param box_name: name of the ybox container
     :param expected_states: Iterable of one or more expected states like 'running', 'exited';
                             empty value means any state is permissible which is returned
@@ -151,7 +129,7 @@ def check_active_ybox(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     """
     Check if the given ybox container is up and running.
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param box_name: name of the ybox container
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
@@ -164,7 +142,7 @@ def check_ybox_exists(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     """
     Check if the given ybox container exists in either active or inactive state.
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param box_name: name of the ybox container
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
@@ -176,20 +154,20 @@ def check_ybox_exists(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
 def build_shell_command(docker_cmd: str, box_name: str, cmd: str,
                         enable_pty: bool = True) -> list[str]:
     """
-    Build a docker/podman command (as a list) to be run using `/bin/bash` in the given ybox
-    container, unless the command starts with `/bin/sh` in which case `/bin/sh` is used instead.
+    Build a podman/docker command (as a list) to be run using `run-user-bash-cmd` in the given
+    ybox container (that in turn runs the command as non-root user using `sudo` with `/bin/bash`).
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param box_name: name of the ybox container
     :param cmd: the command to be run in the container
-    :param enable_pty: if True then enable pseudo-pty allocation for the `docker/podman exec`
+    :param enable_pty: if True then enable pseudo-pty allocation for the `podman/docker exec`
                        command and set interactive mode else no pty is allocated, defaults to True
     :return: command to be executed (e.g. in `subprocess`) as a list of strings
     """
-    shell = "/bin/sh" if cmd.startswith("/bin/sh ") else "/bin/bash"
+    shell = f"/usr/local/bin/{Consts.run_user_bash_cmd()}"
     if enable_pty:
-        return [docker_cmd, "exec", "-it", box_name, shell, "-c", cmd]
-    return [docker_cmd, "exec", box_name, shell, "-c", cmd]
+        return [docker_cmd, "exec", "-it", box_name, shell, cmd]
+    return [docker_cmd, "exec", box_name, shell, cmd]
 
 
 def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
@@ -199,7 +177,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
     for the case of failure, exit on failure and capturing and returning output if required.
 
     :param cmd: the command to be run which can be either a list of strings, or a single string
-                which will be split on whitespace
+                which will be split like done by unix shell using `shlex.split`
     :param capture_output: if True then capture stdout and return it but stderr is still displayed
                            on screen using `print_warn` method in purple foreground color
     :param exit_on_error: whether to exit using `sys.exit` if command fails
@@ -308,7 +286,7 @@ def page_command(cmd: Union[str, list[str]], pager: str, error_msg: Optional[str
     or the `pager`, a failure message is shown and the exit code of the failed process is returned.
 
     :param cmd: the command to be run which can be either a list of strings, or a single string
-                which will be split on whitespace
+                which will be split like done by unix shell using `shlex.split`
     :param pager: the command to be executed for pagination as a separate process,
                   or empty to skip pagination
     :param error_msg: string to be inserted in error message "FAILURE in ..." so should be a

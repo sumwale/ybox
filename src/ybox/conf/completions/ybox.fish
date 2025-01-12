@@ -28,7 +28,6 @@ end
 
 complete -f -c ybox-create -s h -l help -d "show help"
 complete -c ybox-create -s n -l name -d "name of the ybox container" -r
-complete -c ybox-create -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -r
 complete -f -c ybox-create -s F -l force-own-orphans -d "force ownership of orphans on shared root"
 complete -f -c ybox-create -s q -l quiet -d "skip interactive questions"
 complete -f -c ybox-create -n "not __fish_seen_subcommand_from (__fish_ybox_complete_distributions)" -a "(__fish_ybox_complete_distributions)"
@@ -36,25 +35,21 @@ complete -f -c ybox-create -n "not __fish_seen_subcommand_from (__fish_ybox_comp
 
 complete -f -c ybox-destroy -s h -l help -d "show help"
 complete -f -c ybox-destroy -s f -l force -d "force destroy the container using SIGKILL if required"
-complete -c ybox-destroy -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -r
 complete -f -c ybox-destroy -n "not __fish_seen_subcommand_from (__fish_ybox_complete_all_containers)" -a "(__fish_ybox_complete_all_containers)"
 
 complete -f -c ybox-logs -s h -l help -d "show help"
 complete -f -c ybox-logs -s f -l follow -d "follow log output like 'tail -f'"
-complete -c ybox-logs -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -r
 complete -f -c ybox-logs -n "not __fish_seen_subcommand_from (__fish_ybox_complete_all_containers)" -a "(__fish_ybox_complete_all_containers)"
 
 
 complete -f -c ybox-ls -s h -l help -d "show help"
 complete -f -c ybox-ls -s a -l all -d "show all containers including stopped"
-complete -c ybox-ls -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -r
 complete -f -c ybox-ls -s f -l filter -d "filter in <key>=<value> format" -r
 complete -f -c ybox-ls -s s -l format -d "format output using a JSON/Go template string" -r
 complete -f -c ybox-ls -s l -l long-format -d "show more extended information"
 
 
 complete -c ybox-cmd -s h -l help -d "show help"
-complete -c ybox-cmd -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -r
 complete -c ybox-cmd -n "not __fish_seen_subcommand_from (__fish_ybox_complete_containers)" -a "(__fish_ybox_complete_containers)" -f
 
 
@@ -63,7 +58,6 @@ set -l control_commands start stop restart status
 complete -c ybox-control -f
 # common options for all ybox-control subcommands
 complete -c ybox-control -s h -l help -d "show help"
-complete -c ybox-control -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -rF
 # available subcommands for ybox-control with descriptions
 complete -c ybox-control -n "not __fish_seen_subcommand_from $control_commands" -a start -d "start an inactive ybox container"
 complete -c ybox-control -n "not __fish_seen_subcommand_from $control_commands" -a stop -d "stop an active ybox container"
@@ -81,7 +75,6 @@ set -l pkg_commands install uninstall update list list-files info search mark cl
 complete -c ybox-pkg -f
 # common options for all ybox-pkg subcommands
 complete -c ybox-pkg -s h -l help -d "show help"
-complete -c ybox-pkg -s d -l docker-path -d "path of docker/podman if not in /usr/bin" -rF
 complete -c ybox-pkg -s z -l ybox -d "ybox container to use for package operation" -rfa "(__fish_ybox_complete_containers)"
 complete -c ybox-pkg -s C -l distribution-config -d "path to distribution configuration file" -rF
 complete -c ybox-pkg -s q -l quiet -d "proceed without asking any questions using defaults"

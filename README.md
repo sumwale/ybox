@@ -1,6 +1,6 @@
 ## Introduction
 
-Create and manage docker/podman containers hosting different Linux
+Create and manage podman/docker containers hosting different Linux
 distribution images. Manage their packages and applications directly
 from your host machine and easily configure the containers with
 simple INI files. It allows for set up of various aspects of
@@ -19,8 +19,8 @@ security, features off to minimum required for those set of applications.
 
 ## Features
 
-- simple creation of docker/podman containers hosting Linux distributions (Arch Linux for now)
-  using `ybox-create` with interactive menus
+- simple creation of podman or docker containers hosting Linux distributions (Arch Linux, Ubuntu
+  and Debian supported currently) using `ybox-create` with interactive menus
 - special emphasis on security to lock down applications as much as possible to avoid
   "malicious" apps, backdoors etc., from affecting your main work space, so you can play/test
   software/games/... to your heart's content in these containers
@@ -38,13 +38,17 @@ security, features off to minimum required for those set of applications.
   optional dependencies you need with an application, and so on
 - specify startup applications to run in a container if required (TBD)
 
-For now only Arch Linux is supported which probably hosts the largest repository of Linux
-applications with its AUR. So, for example, if you want to run the latest and greatest
-Intellij IDEA community, all you need to do is:
+If you create an Arch Linux based container (which probably hosts the largest repository of Linux
+applications with its AUR), then you will have its applications to run in the host OS.
+So, for example, if you want to run the latest and greatest Intellij IDEA community, all you need
+to do is:
 
 ```sh
-ybox-create
+# create an Arch Linux based container
+ybox-create arch
+# then select an appropriate built-in profile e.g. "dev.ini" from the menu
 
+# then install the Arch package in the container
 ybox-pkg install intellij-idea-community-edition
 ```
 
@@ -55,9 +59,8 @@ In this way this acts as a complete replacement of flatpak/snap while being able
 from way bigger software repositories, and with applications configured the way they are
 supposed to be in the original Linux distribution (which is only Arch Linux for now).
 The big difference being that these are just containers where you can open a shell
-(using `ybox-cmd`) and learn/play as required, or micro-configure stuff. You will not
-notice much difference from a full Linux installation in a shell apart from missing
-few things like systemd.
+(using `ybox-cmd`) and learn/play as required, or micro-configure stuff. The shell will
+behave quite like a full Linux installation apart from missing system-level stuff like systemd.
 
 
 ## Installation
@@ -70,11 +73,10 @@ As of now the following is required:
 
 - clone the repo: `git clone https://github.com/sumwale/ybox.git`
 - rootless podman or docker
-  * for podman this needs installation of `podman` and `slirp4netns` packages (`buildah` optional),
+  * for podman this needs installation of `podman` and `slirp4netns`/`passt` packages,
     then setup /etc/subuid and /etc/subgid as noted here:
     [/etc/subuid and /etc/subgid configuration](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md#etcsubuid-and-etcsubgid-configuration)
-    (ubuntu, for example will also set up subuid/subgid for current user automatically;
-     for ubuntu 24.04 you may also need an apparmor profile as noted in the docker docs next)
+    (many distributions like ubuntu will set up subuid/subgid for current user automatically)
   * for docker follow the instructions in the official [docs](https://docs.docker.com/engine/security/rootless/)
 - python version 3.9 or higher -- all fairly recent Linux distributions should satisfy this
   but still confirm with `python3 --version`
@@ -106,15 +108,30 @@ packages in those containers and opening a shell into a container for more "dire
 You can also destroy the containers, list them, see their logs, or restart them using
 convenient utilities.
 
+All the commands support podman or docker configured in rootless mode. When using docker, its
+`dockerd` daemon needs to be running in background as the current user, while for podman
+there is no such requirement. Additionally podman will run applications in the container using
+the same user/group as the current user on the host, while docker needs to use the root user in
+the container due to missing support of `--userns=keep-id` option.
+
+Consequently podman is the recommended container manager for ybox containers. Its rootless mode
+also works out of the box in most modern linux distributions, unlike docker that needs some
+configuration to setup its user-mode rootless daemon.
+
+The commands search for `/usr/bin/podman` followed by `/usr/bin/docker` for the container manager
+executable. This can be overridden using the `YBOX_CONTAINER_MANAGER` environment variable
+to point to the full path of the podman or docker executable.
+
 ### Create a new ybox container
 
 ```sh
 ybox-create
 ```
 
-This will allow choosing from the available profiles. You can start with the basic `apps.ini`
-to try it out. The container will have a name like `ybox-<distro>_<profile>` by default like
-`ybox-arch_apps` for the `apps.ini` profile.
+This will allow choosing from supported distributions, then from the available profiles.
+You can start with the Arch Linux distribution and `apps.ini` profile to try it out. The container
+will have a name like `ybox-<distribution>_<profile>` by default like `ybox-arch_apps` for the
+`apps.ini` profile using Arch Linux distribution.
 
 The `$HOME` directory of the container can be found in `~/.local/share/ybox/<container>/home`
 e.g. `~/.local/share/ybox/ybox-arch_apps/home` for the above example.
@@ -125,8 +142,17 @@ by default i.e. `~/.local/share/ybox/SHARED_ROOTS/arch` for the Arch Linux guest
 
 For more advanced usage, you can copy from the available profiles in `src/ybox/conf/profiles`
 into `~/.config/ybox/profiles`, then edit as required. The `basic.ini` profile lists
-all the available options with detailed comments. There are a few more detailed examples
-in the `src/ybox/conf/profiles/examples` directory.
+all the available options with detailed comments.
+
+Note that when using podman, the container will use the same user/group as the current user
+on the host, while if docker is being used then the container will use the root user.
+This is because of missing support for `--userns=keep-id` in docker that allows mapping the
+host user to the same user in the container when using podman. This means that if some application
+does not run properly as root, then you cannot run it when using docker unless you explicitly
+`sudo/su` to the host user in the container command. However, running as host user when running
+rootless docker will map to a different user ID in the host (as specified in `/etc/subuid` on the
+host) so files shared with the host, including devices like those in `/dev/dri`, will cause
+permission issues that can hinder or break the application.
 
 
 ### Package management: install/uninstall/list/search/...
@@ -319,14 +345,14 @@ ybox-logs ybox-arch_apps -f
 ```
 
 In the shipped profiles, the container logs go to `~/.local/share/ybox/<container>/logs/`
-directory instead of polluting your journald logs as the docker/podman do by default.
+directory instead of polluting your journald logs as the podman/docker do by default.
 You can delete old log files there safely if they start taking a lot of disk space.
 
 
 ### Restart a container
 
 A container may get stopped after a reboot if systemd/... is not configured to auto-start
-the docker/podman containers. Or you can explicitly stop a container using docker/podman.
+the podman/docker containers. Or you can explicitly stop a container using podman/docker.
 You can check using `ybox-ls -a` and restart a stopped container as below:
 
 ```sh
@@ -339,7 +365,7 @@ for a ybox container. See the full set of options with `ybox-control -h/--help`.
 
 ### Auto-starting containers
 
-Containers can be auto-started as per the usual way for rootless docker/podman services.
+Containers can be auto-started as per the usual way for rootless podman/docker services.
 This is triggered by systemd on user login which is exactly what we want for ybox
 containers so that the container applications are available on login and are stopped on
 session logout. For docker the following should suffice:

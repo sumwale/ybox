@@ -32,9 +32,9 @@ _LD_SO_CONF = "/etc/ld.so.conf"
 
 def add_env_option(docker_args: list[str], env_var: str, env_val: Optional[str] = None) -> None:
     """
-    Add option to the list of docker/podman arguments to set an environment variable.
+    Add option to the list of podman/docker arguments to set an environment variable.
 
-    :param docker_args: list of docker/podman arguments to which required option has to be appended
+    :param docker_args: list of podman/docker arguments to which required option has to be appended
     :param env_var: the environment variable to be set
     :param env_val: the value of the environment variable, defaults to None which implies that
                     its value will be set to be the same as in the host environment
@@ -47,13 +47,13 @@ def add_env_option(docker_args: list[str], env_var: str, env_val: Optional[str] 
 
 def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "") -> None:
     """
-    Add option to the list of docker/podman arguments to bind mount a source directory to
+    Add option to the list of podman/docker arguments to bind mount a source directory to
     given destination directory.
 
-    :param docker_args: list of docker/podman arguments to which required option has to be appended
+    :param docker_args: list of podman/docker arguments to which required option has to be appended
     :param src: the source directory in the host system
     :param dest: the destination directory in the container
-    :param flags: any additional flags to be passed to `-v` docker/podman argument, defaults to ""
+    :param flags: any additional flags to be passed to `-v` podman/docker argument, defaults to ""
     """
     if flags:
         docker_args.append(f"-v={src}:{dest}:{flags}")
@@ -63,12 +63,12 @@ def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "
 
 def enable_x11(docker_args: list[str], env: Environ) -> None:
     """
-    Append options to docker/podman arguments to share host machine's Xorg X11 server
+    Append options to podman/docker arguments to share host machine's Xorg X11 server
     with the new ybox container. This also sets up sharing of XAUTHORITY file (with automatic
     update, if required, in the `run-in-dir` script) so that no additional setup is required for
     X authentication to work.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param env: an instance of the current :class:`Environ`
     """
     add_env_option(docker_args, "DISPLAY")
@@ -100,24 +100,25 @@ def enable_x11(docker_args: list[str], env: Environ) -> None:
 
 def enable_wayland(docker_args: list[str], env: Environ) -> None:
     """
-    Append options to docker/podman arguments to share host machine's Wayland server
+    Append options to podman/docker arguments to share host machine's Wayland server
     with the new ybox container.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param env: an instance of the current :class:`Environ`
     """
     if env.xdg_rt_dir and (wayland_display := os.environ.get("WAYLAND_DISPLAY")):
         add_env_option(docker_args, "WAYLAND_DISPLAY", wayland_display)
         wayland_sock = f"{env.xdg_rt_dir}/{wayland_display}"
         if os.access(wayland_sock, os.W_OK):
-            add_mount_option(docker_args, wayland_sock, wayland_sock)
+            add_mount_option(docker_args, wayland_sock,
+                             f"{env.target_xdg_rt_dir}/{wayland_display}")
 
 
 def enable_dri(docker_args: list[str]) -> None:
     """
-    Append options to docker/podman arguments to enable DRI access.
+    Append options to podman/docker arguments to enable DRI access.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     """
     if os.access("/dev/dri", os.R_OK):
         docker_args.append("--device=/dev/dri")
@@ -127,7 +128,7 @@ def enable_dri(docker_args: list[str]) -> None:
 
 def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
     """
-    Append options to docker/podman arguments to share host machine's NVIDIA libraries and
+    Append options to podman/docker arguments to share host machine's NVIDIA libraries and
     data files with the new ybox container.
 
     It mounts the required directories from the host system, creates a script in the container
@@ -135,7 +136,7 @@ def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
     and data files and sets up LD_LIBRARY_PATH in the container to point to the NVIDIA library
     directories.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param conf: the :class:`StaticConfiguration` for the container
     """
     # search for nvidia device files and add arguments for those
@@ -145,7 +146,7 @@ def enable_nvidia(docker_args: list[str], conf: StaticConfiguration) -> None:
     lib_dirs = _find_all_lib_dirs()
     # find the list of nvidia library directories to be mounted in the target container
     nvidia_lib_dirs = _filter_nvidia_dirs(lib_dirs, _NVIDIA_LIB_PATTERNS)
-    # add the directories to tbe mounted to docker/podman arguments
+    # add the directories to tbe mounted to podman/docker arguments
     mount_nvidia_subdir = conf.target_scripts_dir
     mount_lib_dirs = _prepare_mount_dirs(nvidia_lib_dirs, docker_args,
                                          f"{mount_nvidia_subdir}/mnt_lib")
@@ -239,12 +240,12 @@ def _filter_nvidia_dirs(dirs: Iterable[str], patterns: list[str]) -> list[str]:
 def _prepare_mount_dirs(dirs: list[str], docker_args: list[str],
                         mount_dir_prefix: str) -> list[str]:
     """
-    Append options to the list of docker/podman arguments to bind mount given source directories
+    Append options to the list of podman/docker arguments to bind mount given source directories
     to target directories having given prefix and index as the suffix. This means that the first
     directory in the given `dirs` will be mounted in `<prefix>0`, second in `<prefix>1` and so on.
 
     :param dirs: the list of source directories to be mounted
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param mount_dir_prefix: the prefix of the destination directories
     :return: list of destination directories where the source directories will be mounted
     """
@@ -263,11 +264,11 @@ def _create_nvidia_setup(docker_args: list[str], src_dirs: list[str],
     which will set up required NVIDIA libraries from the mounted host library directories.
 
     The script will create new directories in the container and links to NVIDIA libraries in those
-    from the mounted directories. Then it will add option to docker/podman arguments to set
+    from the mounted directories. Then it will add option to podman/docker arguments to set
     LD_LIBRARY_PATH in the target container to point to these directories. The returned `bash`
     script should be executed as superuser by the container entrypoint script.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param src_dirs: the list of source directories to be mounted
     :param mount_lib_dirs: list of destination directory mounts
     :return: contents of a `bash` script as a list of strings for each line of the script which
@@ -334,7 +335,7 @@ def _process_nvidia_data_files(docker_args: list[str], script: list[str],
     Add `bash` code to given script contents to create symlinks to NVIDIA data files mounted
     from the host environment.
 
-    :param docker_args: list of docker/podman arguments to which the options have to be appended
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param script: the `bash` script contents as a list of string to which the new code is appended
     :param mount_data_dir_prefix: the prefix of the destination directories where the host
                                   data directories have to be mounted

@@ -10,7 +10,7 @@ if [ -n "$dir" -a -d "$dir" ]; then
 fi
 
 # XAUTHORITY file can change after a re-login or a restart, so search for the passed one
-# by docker/podman exec in the mount point of its parent directory
+# by podman/docker exec in the mount point of its parent directory
 if [ -n "$XAUTHORITY" -a -n "$XAUTHORITY_ORIG" -a ! -r "$XAUTHORITY" ]; then
   # XAUTHORITY is assumed to be either in /run/user or in /tmp
   run_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"

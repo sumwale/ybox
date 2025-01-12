@@ -6,10 +6,9 @@ import argparse
 import sys
 import time
 
-from ybox.cmd import (check_active_ybox, get_docker_command, get_ybox_state,
-                      run_command)
+from ybox.cmd import check_active_ybox, get_ybox_state, run_command
 from ybox.config import StaticConfiguration
-from ybox.env import Environ
+from ybox.env import Environ, get_docker_command
 from ybox.print import fgcolor, print_color, print_error
 from ybox.util import wait_for_ybox_container
 
@@ -23,7 +22,7 @@ def start_container(docker_cmd: str, container_name: str):
     """
     Start an existing ybox container.
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param container_name: name of the container
     """
     if status := get_ybox_state(docker_cmd, container_name, (), exit_on_error=False):
@@ -33,7 +32,7 @@ def start_container(docker_cmd: str, container_name: str):
             print_color(f"Starting ybox container '{container_name}'", fg=fgcolor.cyan)
             run_command([docker_cmd, "container", "start", container_name],
                         error_msg="container start")
-            conf = StaticConfiguration(Environ(), status[1], container_name)
+            conf = StaticConfiguration(Environ(docker_cmd), status[1], container_name)
             wait_for_ybox_container(docker_cmd, conf)
     else:
         print_error(f"No ybox container '{container_name}' found")
@@ -44,7 +43,7 @@ def stop_container(docker_cmd: str, container_name: str, fail_on_error: bool):
     """
     Stop a ybox container.
 
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param container_name: name of the container
     :param fail_on_error: if True then show error message on failure to stop else ignore
     """
@@ -73,7 +72,7 @@ def main_argv(argv: list[str]) -> None:
     :param argv: arguments to the function (main function passes `sys.argv[1:]`)
     """
     args = parse_args(argv)
-    docker_cmd = get_docker_command(args, "-d")
+    docker_cmd = get_docker_command()
     container_name = args.container_name
     if args.action == "start":
         start_container(docker_cmd, container_name)
@@ -97,8 +96,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
     """
     parser = argparse.ArgumentParser(description="control ybox containers")
-    parser.add_argument("-d", "--docker-path", type=str,
-                        help="path of docker/podman if not in /usr/bin")
     parser.add_argument("action", choices=["start", "stop", "restart", "status"],
                         help="action to perform")
     parser.add_argument("container_name", help="name of the ybox")

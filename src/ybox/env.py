@@ -4,16 +4,40 @@ Useful user environment settings.
 
 import getpass
 import os
+import pwd
 import site
+import subprocess
 from datetime import datetime
 from importlib.abc import Traversable
 from importlib.resources import files
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 from .print import print_error, print_notice
 
 PathName = Union[Path, Traversable]
+
+
+def get_docker_command() -> str:
+    """
+    If a custom podman/docker executable is defined by YBOX_CONTAINER_MANAGER environment variable,
+    then return it else check for podman and docker (in that order) in the standard /usr/bin path.
+
+    :return: the podman/docker executable specified in arguments or defined by
+             YBOX_CONTAINER_MANAGER environment variable
+    """
+    # check for podman first then docker
+    if cmd := os.environ.get("YBOX_CONTAINER_MANAGER"):
+        if os.access(cmd, os.X_OK):
+            return cmd
+        raise PermissionError(
+            f"Cannot execute '{cmd}' provided in YBOX_CONTAINER_MANAGER environment variable")
+    if os.access("/usr/bin/podman", os.X_OK):
+        return "/usr/bin/podman"
+    if os.access("/usr/bin/docker", os.X_OK):
+        return "/usr/bin/docker"
+    raise FileNotFoundError(
+        "No podman/docker found in /usr/bin and $YBOX_CONTAINER_MANAGER not defined")
 
 
 class Environ:
@@ -23,17 +47,37 @@ class Environ:
     Also captures the current time and sets up the $NOW environment variable.
     """
 
-    def __init__(self):
-        self._home_dir = os.path.expanduser("~")
+    def __init__(self, docker_cmd: Optional[str] = None, home_dir: Optional[str] = None):
+        """
+        Initialize the `Environ` object providing the podman/docker command to use.
+
+        :param docker_cmd: the podman/docker executable to use,
+                           defaults to :func:`get_docker_command()`
+        :param home_dir: if a non-default user home directory has to be set
+        """
+        self._home_dir = home_dir or os.path.expanduser("~")
+        self._docker_cmd = docker_cmd or get_docker_command()
+        cmd_version = subprocess.check_output([self._docker_cmd, "--version"])
+        self._uses_podman = "podman" in cmd_version.decode("utf-8").lower()
         # local user home might be in a different location than /home but target user in the
-        # container will always be in /home as ensured by ybox/entrypoint.py script
-        self._target_home = f"/home/{getpass.getuser()}"
+        # container will always be in /home with podman else /root for the root user with docker
+        # as ensured by entrypoint-base.sh script
+        target_uid = 0
+        if self._uses_podman:
+            self._target_user = getpass.getuser()
+            target_uid = pwd.getpwnam(self._target_user).pw_uid
+            self._target_home = f"/home/{self._target_user}"
+        else:
+            self._target_user = "root"
+            self._target_home = "/root"
         os.environ["TARGET_HOME"] = self._target_home
         self._user_base = user_base = site.getuserbase()
         target_user_base = f"{self._target_home}/.local"
         self._data_dir = f"{user_base}/share/ybox"
         self._target_data_dir = f"{target_user_base}/share/ybox"
         self._xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
+        # the container user's one can be different because it is the root user for docker
+        self._target_xdg_rt_dir = f"/run/user/{target_uid}"
         self._now = datetime.now()
         os.environ["NOW"] = str(self._now)
         sys_conf_dir = files("ybox").joinpath("conf")
@@ -82,12 +126,28 @@ class Environ:
         """home directory of the current user"""
         return self._home_dir
 
-    # home directory of the container user (which is always $TARGET_HOME=/home/$USER and
-    #   hence can be different from $HOME)
+    @property
+    def docker_cmd(self) -> str:
+        """path of the podman/docker executable to use for all the commands"""
+        return self._docker_cmd
+
+    @property
+    def uses_podman(self) -> bool:
+        """if podman is the container manager being used"""
+        return self._uses_podman
+
+    @property
+    def target_user(self) -> str:
+        """username of the container user (which is the same as the current user for podman
+           and root for docker)"""
+        return self._target_user
+
+    # home directory of the container user (which is $TARGET_HOME=/home/$USER for podman
+    #   and /root for docker)
     @property
     def target_home(self) -> str:
-        """home directory of the container user (which is always $TARGET_HOME=/home/$USER and
-           hence can be different from $HOME)"""
+        """home directory of the container user (which is $TARGET_HOME=/home/$USER for podman
+           and /root for docker)"""
         return self._target_home
 
     @property
@@ -106,6 +166,11 @@ class Environ:
     def xdg_rt_dir(self) -> str:
         """value of $XDG_RUNTIME_DIR in the current session"""
         return self._xdg_rt_dir
+
+    @property
+    def target_xdg_rt_dir(self) -> str:
+        """value of $XDG_RUNTIME_DIR for the user in the container"""
+        return self._target_xdg_rt_dir
 
     @property
     def now(self) -> datetime:

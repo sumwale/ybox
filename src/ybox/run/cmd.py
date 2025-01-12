@@ -5,7 +5,8 @@ Code for the `ybox-cmd` script that is used to execute programs in an active ybo
 import argparse
 import sys
 
-from ybox.cmd import get_docker_command, run_command
+from ybox.cmd import run_command
+from ybox.env import get_docker_command
 
 
 def main() -> None:
@@ -22,7 +23,7 @@ def main_argv(argv: list[str]) -> None:
     :param argv: arguments to the function (main function passes `sys.argv[1:]`)
     """
     args = parse_args(argv)
-    docker_cmd = get_docker_command(args, "-d")
+    docker_cmd = get_docker_command()
     container_name = args.container_name
 
     docker_args = [docker_cmd, "exec"]
@@ -44,8 +45,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
     """
     parser = argparse.ArgumentParser(description="Run a command on an active ybox container")
-    parser.add_argument("-d", "--docker-path", type=str,
-                        help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-s", "--skip-terminal", action="store_true",
                         help="skip interactive pseudo-terminal for the command "
                              "(i.e. skip -it options to podman/docker)")

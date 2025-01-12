@@ -14,7 +14,7 @@ fi
 export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 
 current_user="$(id -un)"
-export HOME="$(eval echo "~$current_user")"
+export HOME="$(getent passwd "$current_user" | cut -d: -f6)"
 mkdir -p "$HOME/.gnupg"
 chmod 0700 "$HOME/.gnupg"
 

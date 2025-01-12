@@ -16,7 +16,8 @@ source "$SCRIPT_DIR/activate.sh"
     PYTHON3="/usr/local/bin/python3"
   fi
   if [ -n "$PYTHON3" ]; then
-    system_version="$($PYTHON3 --version | sed 's/[^0-9]*\([0-9]*\.[0-9]*\).*/\1/')"
+    #system_version="$($PYTHON3 --version | sed 's/[^0-9]*\([0-9]*\.[0-9]*\).*/\1/')"
+    :
   fi
   all_versions="3.9 3.10 3.11 3.12"
   req_versions="$(echo "$all_versions" | sed "s/\<$system_version\>//")"

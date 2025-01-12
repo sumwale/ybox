@@ -138,3 +138,25 @@ mkdir -p $run_dir
 chmod 0700 $run_dir
 chown -Rf $uid:$gid $run_dir
 echo_color "$fg_blue" "Created run directory for '$user' with proper permissions"
+
+# add root user to all user groups for rootless docker that needs to run as the root user
+# (which is mapped to the host's current user allowing for proper file and other permissions)
+usermod -aG $group,$secondary_groups root
+# the home directory of root user should be /root which is assumed to be the target directory
+# by the ybox commands when using docker
+root_home="$(getent passwd root | cut -d: -f6)"
+if [ "$root_home" != "/root" ]; then
+  echo_color "$fg_purple" "Changing home directory of root user from '$root_home' to '/root'"
+  # this should be done at the very end of the entrypoint script to avoid any complications
+  # due to change of root user's home directory in the middle of running commands
+  mkdir -p /root
+  chmod 700 /root
+  sed -i "s|:$root_home:|:/root:|" /etc/passwd
+  if [ "$root_home" != "/" ]; then
+    cd "$root_home"
+    # copy dotfiles skipping `.` and `..` which is done by setting GLOBIGNORE
+    export GLOBIGNORE=.
+    cp -a .* /root/.
+    # not removing $root_home since it can potentially be some system directory (e.g. /usr)
+  fi
+fi

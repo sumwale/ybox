@@ -78,7 +78,7 @@ class StaticConfiguration:
         it will be common for all such images for the same distribution.
 
         :param has_shared_root: whether `base.shared_root` is provided in configuration file
-        :return: the docker/podman image to be created and used for the ybox
+        :return: the podman/docker image to be created and used for the ybox
         """
         return self._shared_box_image if has_shared_root else self._box_image
 
@@ -176,10 +176,16 @@ class Consts:
         return "entrypoint.sh"
 
     @staticmethod
+    def run_user_bash_cmd() -> str:
+        """script used to force run a command as non-root user using `sudo` with `/bin/bash`"""
+        return "run-user-bash-cmd"
+
+    @staticmethod
     def resource_scripts() -> Iterable[str]:
         """all the scripts in the resources directory"""
         return (Consts.entrypoint_base(), Consts.entrypoint_cp(), Consts.entrypoint(),
-                "entrypoint-common.sh", "entrypoint-root.sh", "prime-run", "run-in-dir")
+                "entrypoint-common.sh", "entrypoint-root.sh", "entrypoint-user.sh",
+                "prime-run", "run-in-dir", Consts.run_user_bash_cmd())
 
     @staticmethod
     def shared_root_mount_dir() -> str:
@@ -240,5 +246,10 @@ class Consts:
 
     @staticmethod
     def default_field_separator() -> str:
-        """default separator used between the fields in output of docker/podman exec commands"""
+        """default separator used between the fields in output of podman/docker exec commands"""
         return "::::"
+
+    @staticmethod
+    def default_key_server() -> str:
+        """default gpg key server to use when not specified in the distribution's `distro.ini`"""
+        return "hkps://keys.openpgp.org"

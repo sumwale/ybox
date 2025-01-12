@@ -16,7 +16,7 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
                       conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
                       state: YboxStateManagement) -> int:
     """
-    Uninstall package specified by `args.package` on a ybox container with given docker/podman
+    Uninstall package specified by `args.package` on a ybox container with given podman/docker
     command. Additional flags honored are `args.quiet` to bypass user confirmation during
     uninstall, `args.keep_config_files` to keep the system configuration and/or data files
     of the package, `args.skip_deps` to skip removal of all orphaned dependencies of the package
@@ -24,7 +24,7 @@ def uninstall_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd
 
     :param args: arguments having `package` and all other attributes passed by the user
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
@@ -47,7 +47,7 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
                        dep_msg: str = "") -> int:
     """
     Real workhorse of :func:`uninstall_package` that uninstalls given package on a ybox container
-    with given docker/podman command.
+    with given podman/docker command.
 
     :param package: the package to be uninstalled
     :param skip_deps: true if orphaned dependencies of the package should not be uninstalled
@@ -55,13 +55,13 @@ def _uninstall_package(package: str, skip_deps: bool, uninstall_cmd: str, check_
     :param check_cmd: command to check for existence of the package returning the resolved name
                       as read from distribution's `distro.ini`; this should have {package}
                       placeholder in the string which will be resolved before execution
-    :param docker_cmd: the docker/podman executable to use
+    :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param runtime_conf: the `RuntimeConfiguration` of the container
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :param dep_msg: if this is invoked for uninstalling a dependency then the string "dependency "
                     to display in messages, defaults to ""
-    :return: exit code of the underlying package manager command run using docker/podman
+    :return: exit code of the underlying package manager command run using podman/docker
     """
     installed = False
     code, inst_packages = check_package(docker_cmd, check_cmd, package, conf.box_name)

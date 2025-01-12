@@ -13,7 +13,7 @@ max-returns=11 # EDIT: increased from 6 to 11
 max-branches = 35 # EDIT: increased from 12 to 35
 
 # Maximum number of statements in function / method body.
-max-statements = 70 # EDIT: increased from 50 to 70
+max-statements = 100 # EDIT: increased from 50 to 100
 
 # Maximum number of attributes for a class (see R0902).
 max-attributes = 20 # EDIT: increased from 7 to 20

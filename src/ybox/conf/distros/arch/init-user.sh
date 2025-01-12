@@ -7,15 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
 current_user="$(id -un)"
-user_home="$(eval echo "~$current_user")"
-# set gpg keyserver to an available one
-mkdir -p "$user_home/.gnupg" && chmod 0700 "$user_home/.gnupg"
-echo "keyserver $DEFAULT_GPG_KEY_SERVER" > "$user_home/.gnupg/dirmngr.conf"
-rm -f "$user_home"/.gnupg/*/*.lock
-
 # install binaries for paru from paru-bin (paru takes too long to compile)
 PARU="paru --noconfirm"
 echo_color "$fg_cyan" "Installing AUR helper 'paru'" >> $status_file
+export HOME="$(eval echo "~$current_user")"
+cd ~
 rm -rf paru-bin
 git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin
@@ -29,10 +25,11 @@ echo_color "$fg_cyan" "Clearing package cache and updating packages" >> $status_
 yes | paru -Sccd
 $PARU -Syu
 rm -rf paru-bin
-sudo rm -rf /root/.cache
 
 # add current user to realtime group (if present)
-if getent group realtime 2>/dev/null >/dev/null; then
-  echo_color "$fg_cyan" "Adding '$current_user' to realtime group" >> $status_file
-  sudo usermod -aG realtime $current_user
-fi
+# (does not work with rootless docker and is likely ineffective even if it does seem to work)
+#if getent group realtime 2>/dev/null >/dev/null; then
+#  echo_color "$fg_cyan" "Adding '$current_user' and root to realtime group" >> $status_file
+#  sudo usermod -aG realtime $current_user
+#  sudo usermod -aG realtime root
+#fi

@@ -5,7 +5,8 @@ Code for the `ybox-ls` script that is used to show the active or stopped ybox co
 import argparse
 import sys
 
-from ybox.cmd import YboxLabel, get_docker_command, run_command
+from ybox.cmd import YboxLabel, run_command
+from ybox.env import get_docker_command
 
 
 def main() -> None:
@@ -22,7 +23,7 @@ def main_argv(argv: list[str]) -> None:
     :param argv: arguments to the function (main function passes `sys.argv[1:]`)
     """
     args = parse_args(argv)
-    docker_cmd = get_docker_command(args, "-d")
+    docker_cmd = get_docker_command()
 
     docker_args = [docker_cmd, "container", "ls"]
     if args.all:
@@ -52,13 +53,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="show all containers including stopped and temporary ones; "
                              "default is to show only active ybox containers and also skip "
                              "any temporary containers spun by ybox-create")
-    parser.add_argument("-d", "--docker-path", type=str,
-                        help="path of docker/podman if not in /usr/bin")
     parser.add_argument("-f", "--filter", type=str, action="append",
                         help="apply filter to output which is in the <key>=<value> format as "
-                             "accepted by docker/podman (can be specified multiple times)")
+                             "accepted by podman/docker (can be specified multiple times)")
     parser.add_argument("-s", "--format", type=str,
-                        help="format output using a template as accepted by docker/podman (see "
+                        help="format output using a template as accepted by podman/docker (see "
                              "https://docs.docker.com/reference/cli/docker/container/ls)")
     parser.add_argument("-l", "--long-format", action="store_true",
                         help="display extended information without truncating fields")

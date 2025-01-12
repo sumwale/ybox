@@ -89,7 +89,8 @@ def test_consts():
     assert Consts.entrypoint_cp() == "entrypoint-cp.sh"
     assert Consts.entrypoint() == "entrypoint.sh"
     expected_scripts = ("entrypoint-base.sh", "entrypoint-cp.sh", "entrypoint.sh",
-                        "entrypoint-common.sh", "entrypoint-root.sh", "prime-run", "run-in-dir")
+                        "entrypoint-common.sh", "entrypoint-root.sh", "entrypoint-user.sh",
+                        "prime-run", "run-in-dir", "run-user-bash-cmd")
     assert Consts.resource_scripts() == expected_scripts
     assert Consts.shared_root_mount_dir() == "/ybox-root"
     assert Consts.status_target_file() == "/usr/local/ybox-status"
@@ -113,6 +114,7 @@ def test_consts():
     assert Consts.nvidia_setup_script() == "nvidia-setup.sh"
     assert Consts.default_pager() == "/usr/bin/less -RLFXK"
     assert Consts.default_field_separator() == "::::"
+    assert Consts.default_key_server() == "hkps://keys.openpgp.org"
 
 
 if __name__ == "__main__":

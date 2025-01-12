@@ -7,8 +7,7 @@ import argparse
 import sys
 from typing import cast
 
-from ybox.cmd import (YboxLabel, check_active_ybox, get_docker_command,
-                      run_command)
+from ybox.cmd import YboxLabel, check_active_ybox, run_command
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ
 from ybox.pkg.clean import clean_cache
@@ -45,7 +44,8 @@ def main_argv(argv: list[str]) -> None:
     if args.quiet > 2:
         print_error("Argument -q/--quiet can be specified at most two times")
         sys.exit(1)
-    docker_cmd = get_docker_command(args, "-d")
+    env = Environ()
+    docker_cmd = env.docker_cmd
     container_name = args.ybox
 
     if container_name:
@@ -73,7 +73,6 @@ def main_argv(argv: list[str]) -> None:
     if not args.quiet:
         print_info(f"Running the operation on '{container_name}'", file=sys.stderr)
 
-    env = Environ()
     with YboxStateManagement(env) as state:
         # ensure that all state database changes are done as a single transaction and only applied
         # if there were no failures (commit/rollback are automatic at the end of `with`)
@@ -152,13 +151,11 @@ def add_subparser(operations, name: str, hlp: str) -> argparse.ArgumentParser:  
 
 def add_common_args(subparser: argparse.ArgumentParser) -> None:
     """
-    Add arguments common to all the `ybox-pkg` sub-commands like `-d/--docker-path` for
-    docker/podman path, `-q/--quiet` for quiet operations with minimal user interaction etc.
+    Add arguments common to all the `ybox-pkg` sub-commands like `-z/--ybox` for the
+    container to use, `-q/--quiet` for quiet operations with minimal user interaction etc.
 
     :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
     """
-    subparser.add_argument("-d", "--docker-path", type=str,
-                           help="path of docker/podman if not in /usr/bin")
     subparser.add_argument("-z", "--ybox", type=str,
                            help="the ybox container to use for package operations else the user "
                                 "is prompted to select a container from among the active ones")
