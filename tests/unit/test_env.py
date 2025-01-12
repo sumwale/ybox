@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 
-from ybox.env import Environ, get_docker_command
+from ybox.env import Environ, NotSupportedError, get_docker_command
 
 
 @pytest.fixture(name="g_env", scope="module")
@@ -84,6 +84,8 @@ def test_get_docker_command(g_env: Environ):
     try:
         docker_cmd = get_docker_command()
         assert docker_cmd == "/bin/true"
+        # creating Environ should fail when checking for rootless docker
+        pytest.raises(NotSupportedError, Environ)
         # try with explicit environment variable for a non-existent program or a non-executable
         os.environ["YBOX_CONTAINER_MANAGER"] = "/non-existent"
         pytest.raises(PermissionError, get_docker_command)
@@ -97,7 +99,11 @@ def test_get_docker_command(g_env: Environ):
             return prog == check_prog and mode == os.X_OK
 
         def subproc_out(cmd: list[str]) -> bytes:
-            return b"podman x.x" if "podman" in cmd[0] else b"docker x.x"
+            if "podman" in cmd[0]:
+                return b"podman x.x"
+            if len(cmd) == 3 and cmd[1] == "context" and cmd[2] == "show":
+                return b"rootless"
+            return b"docker x.x"
         with patch("ybox.env.os.access", side_effect=os_access), \
                 patch("ybox.env.subprocess.check_output", side_effect=subproc_out):
             check_prog = "/usr/bin/podman"

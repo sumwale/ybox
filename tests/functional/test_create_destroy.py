@@ -30,8 +30,7 @@ class TestCreateDestroy(DistributionBase):
                      "-q", helper.distribution, box_config])
         # basic checks for directories
         assert os.access(helper.box_home, os.W_OK)
-        assert not os.path.exists(
-            f"{self._home}/.local/share/ybox/SHARED_ROOTS/{helper.distribution}")
+        assert not os.path.exists(f"{self._shared_roots}/{helper.distribution}")
         # run a command on the container
         result = self.run_on_container("whoami", helper)
         _check_output(result, self.env.target_user)
@@ -41,12 +40,12 @@ class TestCreateDestroy(DistributionBase):
         quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
         install_cmd = pkgmgr[PkgMgr.INSTALL.value].format(quiet=quiet_flag, opt_dep="")
         assert self.run_on_container(
-            [f"/usr/local/bin/{Consts.run_user_bash_cmd()}", f"{install_cmd} libtree"],
+            [f"/usr/local/bin/{Consts.run_user_bash_cmd()}", f"{install_cmd} jq"],
             helper, capture_output=False).returncode == 0
         # pipe output to remove colors
-        result = self.run_on_container(["/bin/bash", "-c", "libtree /usr/bin/pwd | /bin/cat"],
-                                       helper)
-        _check_output(result, "/usr/bin/pwd")
+        result = self.run_on_container(
+            ["/bin/bash", "-c", "echo '{\"one\": 1, \"two\": 2}' | jq '.[]'"], helper)
+        _check_output(result, "1\n2")
         ybox_destroy([helper.box_name])
         result = subprocess.run([self._docker_cmd, "ps", "-aqf", f"name={helper.box_name}"],
                                 capture_output=True, check=False)

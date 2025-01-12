@@ -114,6 +114,14 @@ fi
 # add the user with the same UID/GID as provided which should normally be the same as the
 # user running this ybox (which avoids --userns=keep-id from increasing the image size
 #   else the image size may get nearly doubled)
+existing_user="$(getent passwd $uid | cut -d: -f1)"
+if [ -n "$existing_user" ]; then
+  deluser --remove-home $existing_user
+fi
+existing_group="$(getent group $gid | cut -d: -f1)"
+if [ -n "$existing_group" ]; then
+  delgroup $existing_group
+fi
 groupadd -g $gid $group
 echo_color "$fg_blue" "Added group '$group'"
 useradd -m -g $group -G $secondary_groups \

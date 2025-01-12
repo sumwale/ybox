@@ -40,6 +40,10 @@ def get_docker_command() -> str:
         "No podman/docker found in /usr/bin and $YBOX_CONTAINER_MANAGER not defined")
 
 
+class NotSupportedError(Exception):
+    """Raised when an operation or configuration is not supported or invalid."""
+
+
 class Environ:
     """
     Holds common environment variables useful for the scripts like $HOME, $XDG_RUNTIME_DIR.
@@ -70,6 +74,14 @@ class Environ:
         else:
             self._target_user = "root"
             self._target_home = "/root"
+            # confirm that docker is being used in rootless mode (not required for podman because
+            #   it runs as rootless when run by a non-root user in any case without explicit sudo
+            #   which the ybox tools don't use)
+            if (docker_ctx := subprocess.check_output(
+                    [self._docker_cmd, "context", "show"]).decode("utf-8")).strip() != "rootless":
+                raise NotSupportedError("docker should use the rootless mode (see "
+                                        "https://docs.docker.com/engine/security/rootless/) "
+                                        f"but the current context is '{docker_ctx}'")
         os.environ["TARGET_HOME"] = self._target_home
         self._user_base = user_base = site.getuserbase()
         target_user_base = f"{self._target_home}/.local"

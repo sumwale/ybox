@@ -26,10 +26,6 @@ from .print import fgcolor as fg
 from .print import get_terminal_width, print_error, print_warn
 
 
-class NotSupportedError(Exception):
-    """Raised when an operation or configuration is not supported or invalid."""
-
-
 class EnvInterpolation(BasicInterpolation):
     """
     Substitute environment variables in the values using 'os.path.expandvars'.

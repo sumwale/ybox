@@ -31,9 +31,16 @@ if [[ -n "$LANG" && ! "$LANG" =~ ^C(\..+)?$ && "$LANG" != "POSIX" && ! "$LANG" =
 fi
 
 if [ "$(sed -n 's/^ID=//p' /etc/os-release)" = "ubuntu" ]; then
-  rel_name="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)"
+  apt_fast_rel="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)"
 else
-  rel_name=jammy # use jammy for apt-fast install which works on all recent Debian releases
+  apt_fast_rel=focal # use focal for apt-fast install which works on all recent Debian releases
+  # enable contrib and non-free repositories for debian
+  if [ -f /etc/apt/sources.list.d/debian.sources ]; then
+    sed -i 's/^Components: main[ ]*$/Components: main contrib non-free non-free-firmware/' \
+        /etc/apt/sources.list.d/debian.sources
+  else
+    sed -i 's/ main[ ]*$/ main contrib non-free/' /etc/apt/sources.list
+  fi
 fi
 apt-get update
 
@@ -41,7 +48,7 @@ echo_color "$fg_cyan" "Setting up apt-fast" >> $status_file
 apt-get install --install-recommends -y curl gnupg lsb-release
 keyring_file=/etc/apt/keyrings/apt-fast.gpg
 rm -f $keyring_file
-echo -e "deb [signed-by=$keyring_file] http://ppa.launchpad.net/apt-fast/stable/ubuntu $rel_name main" \
+echo -e "deb [signed-by=$keyring_file] http://ppa.launchpad.net/apt-fast/stable/ubuntu $apt_fast_rel main" \
     > /etc/apt/sources.list.d/apt-fast.list
 mkdir -p /etc/apt/keyrings
 bash "$SCRIPT_DIR/fetch-gpg-key-id.sh" 0xBC5934FD3DEBD4DAEA544F791E2824A7F22B44BD \
@@ -61,11 +68,16 @@ apt-fast full-upgrade -y --autoremove
 
 # skip unminimize if not installing any recommended packages which should happen only in testing
 if [ -n "$RECOMMENDED_PKGS" ]; then
-  unminimize_path="$(type -p unminimize 2>/dev/null)"
+  unminimize_path="$(type -p unminimize 2>/dev/null || true)"
+  if [ -z "$unminimize_path" ]; then
+    apt-get install -y unminimize 2>/dev/null || true
+  fi
+  unminimize_path="$(type -p unminimize 2>/dev/null || true)"
   if [ -n "$unminimize_path" ]; then
     echo_color "$fg_cyan" "Running unminimize" >> $status_file
     sed -i 's/apt-get/apt-fast/g' "$unminimize_path"
     yes | "$unminimize_path"
+    apt-get remove --purge -y unminimize 2>/dev/null || true
   fi
 fi
 

@@ -48,6 +48,7 @@ class DistributionBase:
 
     _resources_dir = f"{os.path.dirname(__file__)}/../resources"
     _home = os.environ["HOME"]
+    _shared_roots = f"{_home}/.local/share/ybox/YBOX_TEST_SHARED_ROOTS"
     _env = None
     _docker_cmd = ""
     _helpers: list[DistributionHelper] = []
@@ -95,6 +96,7 @@ class DistributionBase:
         shutil.rmtree(helper.box_home, ignore_errors=True)
         shutil.rmtree(f"{self._home}/.local/share/ybox/{helper.box_name}",
                       ignore_errors=True)
+        shutil.rmtree(self._shared_roots, ignore_errors=True)
 
     def for_all_distros(self, test_func: Callable[[DistributionHelper], None]) -> None:
         """execute a given zero argument function for all supported distributions"""

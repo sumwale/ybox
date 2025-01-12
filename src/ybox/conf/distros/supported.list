@@ -1,2 +1,5 @@
 arch
+ubuntu2404
 ubuntu2204
+deb-stable
+deb-oldstable

@@ -20,7 +20,7 @@ from typing import Optional
 
 from ybox.cmd import PkgMgr, RepoCmd, YboxLabel, check_ybox_exists, run_command
 from ybox.config import Consts, StaticConfiguration
-from ybox.env import Environ, PathName
+from ybox.env import Environ, NotSupportedError, PathName
 from ybox.filelock import FileLock
 from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
@@ -29,7 +29,7 @@ from ybox.run.graphics import (add_env_option, add_mount_option, enable_dri,
                                enable_nvidia, enable_wayland, enable_x11)
 from ybox.run.pkg import parse_args as pkg_parse_args
 from ybox.state import RuntimeConfiguration, YboxStateManagement
-from ybox.util import (EnvInterpolation, NotSupportedError, config_reader,
+from ybox.util import (EnvInterpolation, config_reader,
                        copy_ybox_scripts_to_container, ini_file_reader,
                        select_item_from_menu, truncate_file,
                        wait_for_ybox_container, write_ybox_version)
@@ -68,8 +68,8 @@ def main_argv(argv: list[str]) -> None:
     profile = select_profile(args, env)
 
     box_name = process_args(args, distro, profile)
-    print_color(f"Creating ybox container named '{box_name}' using profile '{profile}'",
-                fg=fgcolor.green)
+    print_color(f"Creating ybox container named '{box_name}' for distribution '{distro}' "
+                f"using profile '{profile}'", fg=fgcolor.green)
     if check_ybox_exists(docker_cmd, box_name):
         print_error(f"ybox container '{box_name}' already exists.")
         sys.exit(1)
