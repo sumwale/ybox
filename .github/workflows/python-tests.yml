@@ -15,6 +15,13 @@ on:
 
 # There is duplication in the build and build_pr_comment jobs, but avoiding that will need
 # quite a bit of work for reusable workflow or a composite action which is not worth it.
+
+# Note that rootless podman is available by default in ubuntu-22.04/24.04 github runner
+# images (https://github.com/actions/runner-images/tree/main/images/ubuntu), so the jobs
+# below run just fine even without the "ScribeMD/rootless-docker@0.2.2" image, but it
+# is present to enable testing with rootless docker too which the current tox.ini
+# configures for some python versions randomly.
+
 jobs:
   build:
 

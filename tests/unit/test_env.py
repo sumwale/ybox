@@ -80,6 +80,7 @@ def test_get_docker_command(g_env: Environ):
     assert docker_cmd == g_env.docker_cmd
     assert g_env.uses_podman == ("podman" in docker_cmd)
     # try with explicit environment variable
+    current_ybox_manager = os.environ.get("YBOX_CONTAINER_MANAGER")
     os.environ["YBOX_CONTAINER_MANAGER"] = "/bin/true"
     try:
         docker_cmd = get_docker_command()
@@ -122,7 +123,10 @@ def test_get_docker_command(g_env: Environ):
             pytest.raises(FileNotFoundError, get_docker_command)
             pytest.raises(FileNotFoundError, Environ)
     finally:
-        os.environ.pop("YBOX_CONTAINER_MANAGER", None)
+        if current_ybox_manager:
+            os.environ["YBOX_CONTAINER_MANAGER"] = current_ybox_manager
+        else:
+            os.environ.pop("YBOX_CONTAINER_MANAGER", None)
 
 
 def test_search_config(g_env: Environ):
