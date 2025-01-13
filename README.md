@@ -404,8 +404,8 @@ systemctl --user enable container-ybox-arch_apps.service
 
 Virtual environment setup have been provided for consistent development, test and build
 with multiple python versions. The minimum python version required is 3.9 and tests are
-run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12 and others
-in future).
+run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12, 3.13 and
+    others in future).
 
 The setup uses pyenv with venv which can be used for development with IDEA/PyCharm/VSCode
 or in terminal, running tests against all supported python versions using `tox` etc.

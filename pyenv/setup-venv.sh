@@ -19,7 +19,7 @@ source "$SCRIPT_DIR/activate.sh"
     #system_version="$($PYTHON3 --version | sed 's/[^0-9]*\([0-9]*\.[0-9]*\).*/\1/')"
     :
   fi
-  all_versions="3.9 3.10 3.11 3.12"
+  all_versions="3.9 3.10 3.11 3.12 3.13"
   req_versions="$(echo "$all_versions" | sed "s/\<$system_version\>//")"
   pyenv install $req_versions || /bin/true
   pyenv local $req_versions || /bin/true
