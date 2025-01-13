@@ -10,6 +10,9 @@ from ybox.config import StaticConfiguration
 from ybox.print import print_info
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 
+# TODO: SW: operations like clean/repair should group containers by shared roots
+# (and run without asking for it if there is only one shared root)
+
 
 # noinspection PyUnusedLocal
 def clean_cache(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,

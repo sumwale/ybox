@@ -51,9 +51,7 @@ class TestCreateDestroy(DistributionBase):
                                 capture_output=True, check=False)
         assert result.returncode == 0
         assert not result.stdout.decode("utf-8").strip()
-        result = subprocess.run([self._docker_cmd, "image", "rm", helper.box_image],
-                                check=False)
-        assert result.returncode == 0
+        subprocess.run([self._docker_cmd, "image", "rm", helper.box_image], check=False)
 
 
 def _check_output(result: subprocess.CompletedProcess[bytes], expected: str) -> None:

@@ -344,9 +344,8 @@ class YboxStateManagement:
         if self._version == old_version:
             return
         # run appropriate SQL migration scripts for product version change
-        if not (scripts := self._filter_and_sort_files_by_version(
-                files("ybox").joinpath("migrate").iterdir(), old_version, self._version, ".py")):
-            return
+        scripts = self._filter_and_sort_files_by_version(
+            files("ybox").joinpath("migrate").iterdir(), old_version, self._version, ".py")
         for script in scripts:
             print_color(f"Running migration script '{script}' for container version upgrade from "
                         f"{old_version} to {self._version}")
