@@ -100,17 +100,17 @@ class DistributionBase:
 
     def for_all_distros(self, test_func: Callable[[DistributionHelper], None]) -> None:
         """execute a given zero argument function for all supported distributions"""
-        failure: Optional[Exception] = None
+        failure: Optional[BaseException] = None
         with ProcessPoolExecutor() as executor:
             futures = {executor.submit(test_func, helper): helper for helper in self._helpers}
             for future in as_completed(futures):
                 helper = futures[future]
                 try:
                     future.result()
-                except Exception as e:  # pylint: disable=broad-exception-caught
+                except BaseException as e:  # pylint: disable=broad-exception-caught # noqa: B036
+                    failure = future.exception() or e
                     print_error(f"Error running '{test_func.__qualname__}' for container "
-                                f"'{helper.box_name}': {e}")
-                    failure = e
+                                f"'{helper.box_name}': {failure}")
                 finally:
                     self.cleanup(helper)
         if failure:
