@@ -432,14 +432,23 @@ Next you can install the required python versions and venv environment:
 pyenv/setup-venv.sh
 ```
 
-Finally, you can activate it in bash/zsh:
+Finally, you can activate it.
+
+bash:
 
 ```sh
-source pyenv/activate.sh
+source pyenv/activate.bash
 source .venv/bin/activate
 ```
 
-Or in fish shell:
+zsh:
+
+```sh
+source pyenv/activate.zsh
+source .venv/bin/activate
+```
+
+fish:
 
 ```
 source pyenv/activate.fish

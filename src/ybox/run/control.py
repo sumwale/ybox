@@ -12,6 +12,9 @@ from ybox.env import Environ, get_docker_command
 from ybox.print import fgcolor, print_color, print_error
 from ybox.util import wait_for_ybox_container
 
+# TODO: SW: add backup/restore of the running image with the option to backup $HOME of the
+# container user, and shared root warning if it is being used
+
 
 def main() -> None:
     """main function for `ybox-control` script"""

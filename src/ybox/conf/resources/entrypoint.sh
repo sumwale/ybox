@@ -22,7 +22,7 @@ echo -n > $status_file
 # the current user as well as the group of the normal user
 uid="$(id -u)"
 gid="$(id -g)"
-chown $uid:$YBOX_HOST_GID $status_file
+chown $uid:${YBOX_HOST_GID:-$gid} $status_file
 chmod 0660 $status_file
 if [ "$uid" -eq 0 ]; then
   SUDO=""
@@ -235,7 +235,7 @@ function cleanup() {
     awk '{ if (($1 == 0 || $1 == 1) && $2 != 1 && $2 != '$childPID') print $2 }')"
   for pid in $exec_pids; do
     echo "Sending SIGTERM to $pid"
-    kill -TERM $pid
+    kill -TERM $pid || true
   done
   # sleep a bit for $exec_pids to finish
   [ -n "$exec_pids" ] && sleep 3
