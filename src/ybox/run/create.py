@@ -776,6 +776,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
             if split_idx == -1:
                 raise NotSupportedError("Incorrect value format in [configs] section for "
                                         f"'{key}'. Required: '{{src}} -> {{dest}}'")
+            # TODO: SW: preserve symlinks if they point to the same tree esp for copy
             src_path = os.path.realpath(f_val[:split_idx].strip())
             dest_path = f"{conf.configs_dir}/{f_val[split_idx + 2:].strip()}"
             if os.access(src_path, os.R_OK):
@@ -1089,8 +1090,10 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
     if conf.env.uses_podman:
         docker_full_cmd.append(f"--user={user_uid}")
         docker_full_cmd.append("--userns=keep-id")
+        docker_full_cmd.append(f"-e=USER={current_user}")
     else:
         docker_full_cmd.append("--user=0")
+        docker_full_cmd.append("-e=USER=root")
     docker_full_cmd.append(f"-e=YBOX_HOST_UID={user_uid}")
     docker_full_cmd.append(f"-e=YBOX_HOST_GID={user_gid}")
     docker_full_cmd.append(conf.box_image(bool(shared_root)))

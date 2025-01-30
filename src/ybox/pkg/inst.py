@@ -419,7 +419,7 @@ def docker_cp_action(docker_cmd: str, box_name: str, src: str,
     with tempfile.TemporaryDirectory() as temp_dir:
         # use shell pipe and tar instead of python Popen and tarfile which will require much more
         # code unncessarily and may not be able to use `run_command`
-        shell_cmd = (f"'{docker_cmd}' exec '{box_name}' tar -C '{src_dir}' -cpf - '{src_file}' | "
+        shell_cmd = (f"'{docker_cmd}' exec '{box_name}' tar -C '{src_dir}' -chpf - '{src_file}' | "
                      f"tar -C '{temp_dir}' -xpf -")
         if (code := int(run_command(["/bin/sh", "-c", shell_cmd], exit_on_error=False,
                                     error_msg=f"copying of file from '{box_name}:{src}'"))) == 0:

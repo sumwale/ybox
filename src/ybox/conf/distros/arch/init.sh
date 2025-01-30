@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
+export HOME=/root
 # pacman configuration
 PAC="pacman --noconfirm"
 echo_color "$fg_cyan" "Configuring pacman" >> $status_file

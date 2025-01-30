@@ -8,14 +8,11 @@ from configparser import SectionProxy
 
 from ybox.cmd import PkgMgr, page_command
 from ybox.config import StaticConfiguration
-from ybox.state import RuntimeConfiguration, YboxStateManagement
 
 
 # noinspection PyUnusedLocal
 def info_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                  conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
-                  state: YboxStateManagement) -> int:
-    # pylint: disable=unused-argument
+                  conf: StaticConfiguration) -> int:
     """
     Show detailed information of an installed or repository package(s).
 
@@ -23,8 +20,6 @@ def info_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: st
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
-    :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of info command where 0 represents success
     """
     quiet_flag = pkgmgr[PkgMgr.QUIET_DETAILS_FLAG.value] if args.quiet else ""

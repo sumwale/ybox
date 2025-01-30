@@ -8,7 +8,6 @@ from configparser import SectionProxy
 from ybox.cmd import PkgMgr, build_shell_command, run_command
 from ybox.config import StaticConfiguration
 from ybox.print import print_info
-from ybox.state import RuntimeConfiguration, YboxStateManagement
 
 # TODO: SW: operations like clean/repair should group containers by shared roots
 # (and run without asking for it if there is only one shared root)
@@ -16,9 +15,7 @@ from ybox.state import RuntimeConfiguration, YboxStateManagement
 
 # noinspection PyUnusedLocal
 def clean_cache(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-                conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
-                state: YboxStateManagement) -> int:
-    # pylint: disable=unused-argument
+                conf: StaticConfiguration) -> int:
     """
     Clean package cache and related intermediate files.
 
@@ -26,8 +23,6 @@ def clean_cache(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
-    :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of clean command where 0 represents success
     """
     print_info(f"Cleaning package cache in container '{conf.box_name}'")

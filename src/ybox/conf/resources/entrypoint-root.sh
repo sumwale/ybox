@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
+export HOME=/root
 echo_color "$fg_cyan" "Copying prime-run, run-in-dir and run-user-bash-cmd" >> $status_file
 cp -a "$SCRIPT_DIR/prime-run" /usr/local/bin/prime-run
 cp -a "$SCRIPT_DIR/run-in-dir" /usr/local/bin/run-in-dir

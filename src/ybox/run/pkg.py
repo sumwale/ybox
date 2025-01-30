@@ -73,6 +73,7 @@ def main_argv(argv: list[str]) -> None:
     if not args.quiet:
         print_info(f"Running the operation on '{container_name}'", file=sys.stderr)
 
+    code = 0
     with YboxStateManagement(env) as state:
         # ensure that all state database changes are done as a single transaction and only applied
         # if there were no failures (commit/rollback are automatic at the end of `with`)
@@ -93,10 +94,14 @@ def main_argv(argv: list[str]) -> None:
         if args.is_repo_cmd:
             code = args.func(args, pkgmgr, distro_config["repo"], docker_cmd, conf,
                              runtime_conf, state)
-        else:
+        elif args.needs_state:
             code = args.func(args, pkgmgr, docker_cmd, conf, runtime_conf, state)
-        if code != 0:
-            sys.exit(code)  # state will be automatically rolled back for exceptions
+
+    # when "state" is not needed then run the command outside the with block to release the db lock
+    if not args.is_repo_cmd and not args.needs_state:
+        code = args.func(args, pkgmgr, docker_cmd, conf)
+    if code != 0:
+        sys.exit(code)  # state will be automatically rolled back for exceptions
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -146,6 +151,8 @@ def add_subparser(operations, name: str, hlp: str) -> argparse.ArgumentParser:  
     add_common_args(subparser)
     # by default set the flag for repository command as false
     subparser.set_defaults(is_repo_cmd=False)
+    # set the flag to require state database by default
+    subparser.set_defaults(needs_state=True)
     return subparser
 
 
@@ -291,6 +298,7 @@ def add_list_files(subparser: argparse.ArgumentParser) -> None:
     """
     add_pager_arg(subparser)
     subparser.add_argument("package", type=str, help="list files of this package")
+    subparser.set_defaults(needs_state=False)
     subparser.set_defaults(func=list_files)
 
 
@@ -310,6 +318,7 @@ def add_search(subparser: argparse.ArgumentParser) -> None:
                                 "(e.g. skip AUR repository on Arch Linux)")
     add_pager_arg(subparser)
     subparser.add_argument("search", nargs="+", help="one or more search terms")
+    subparser.set_defaults(needs_state=False)
     subparser.set_defaults(func=search_packages)
 
 
@@ -326,6 +335,7 @@ def add_info(subparser: argparse.ArgumentParser) -> None:
                                 "otherwise search only among the installed packages")
     add_pager_arg(subparser)
     subparser.add_argument("packages", nargs="+", help="one or more packages")
+    subparser.set_defaults(needs_state=False)
     subparser.set_defaults(func=info_packages)
 
 
@@ -337,6 +347,7 @@ def add_clean(subparser: argparse.ArgumentParser) -> None:
 
     :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
     """
+    subparser.set_defaults(needs_state=False)
     subparser.set_defaults(func=clean_cache)
 
 

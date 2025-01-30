@@ -8,7 +8,15 @@ if [ "$#" -ne 1 ]; then
 fi
 
 if [ "$(id -u)" -eq 0 -a -n "$YBOX_HOST_UID" ] && getent passwd $YBOX_HOST_UID > /dev/null; then
-  exec sudo -u "#$YBOX_HOST_UID" -g "#$YBOX_HOST_GID" /bin/bash -c "$1"
+  if ! sudo -u "#$YBOX_HOST_UID" -g "#$YBOX_HOST_GID" /bin/bash -c "$1"; then
+    status=$?
+    echo "FAILED in sudo execution of: $1"
+    exit $status
+  fi
 else
-  eval "$1"
+  if ! eval "$1"; then
+    status=$?
+    echo "FAILED in execution of: $1"
+    exit $status
+  fi
 fi

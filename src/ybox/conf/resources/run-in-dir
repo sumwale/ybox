@@ -49,6 +49,7 @@ if [ -e "$nvidia_setup" ]; then
       flock -x -w 60 $lock_fd || /bin/true
       trap "flock -u $lock_fd || /bin/true" 0 1 2 3 4 5 6 7 8 10 11 12 13 14 15
       if ! is_nvidia_valid; then
+        # set umask for root execution to ensure that other users have read/execute permissions
         umask 022
         sudo /bin/bash "$nvidia_setup" || /bin/true
       fi
@@ -56,5 +57,8 @@ if [ -e "$nvidia_setup" ]; then
     break
   fi
 fi
+
+# reset to more conservative umask setting
+umask 027
 
 exec "$@"

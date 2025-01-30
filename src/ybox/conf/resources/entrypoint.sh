@@ -180,7 +180,7 @@ run_dir=${XDG_RUNTIME_DIR:-/run/user/$uid}
 if [ -d $run_dir ]; then
   $SUDO chown $uid:$gid $run_dir 2>/dev/null || true
 fi
-if [ -n "$(ls $run_dir 2>/dev/null)" ]; then
+if compgen -G "$run_dir/*" >/dev/null; then
   $SUDO chown $uid:$gid $run_dir/* 2>/dev/null || true
 fi
 
@@ -231,14 +231,17 @@ function cleanup() {
   # clear status file first just in case other operations do not finish before SIGKILL comes
   echo -n > $status_file
   # first send SIGTERM to all "docker exec" processes that will have parent PID as 0 or 1
+  kill_sent=0
   exec_pids="$(ps -e -o ppid=,pid= | \
     awk '{ if (($1 == 0 || $1 == 1) && $2 != 1 && $2 != '$childPID') print $2 }')"
   for pid in $exec_pids; do
-    echo "Sending SIGTERM to $pid"
-    kill -TERM $pid || true
+    if kill -TERM $pid 2>/dev/null; then
+      kill_sent=1
+      echo "Sent SIGTERM to $pid"
+    fi
   done
   # sleep a bit for $exec_pids to finish
-  [ -n "$exec_pids" ] && sleep 3
+  [ $kill_sent -eq 1 ] && sleep 3
   # lastly kill the infinite tail process
   kill -TERM $childPID
 }

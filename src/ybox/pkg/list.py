@@ -166,9 +166,7 @@ def _format_long_line(line: str, separator: str, dep_of_width: int,
 
 # noinspection PyUnusedLocal
 def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
-               conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,
-               state: YboxStateManagement) -> int:
-    # pylint: disable=unused-argument
+               conf: StaticConfiguration) -> int:
     """
     List the files of a package installed in a container including those not managed by `ybox-pkg`.
 
@@ -176,8 +174,6 @@ def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
     :param pkgmgr: the `[pkgmgr]` section from `distro.ini` configuration file of the distribution
     :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
-    :param runtime_conf: the `RuntimeConfiguration` of the container
-    :param state: instance of `YboxStateManagement` having the state of all ybox containers
     :return: integer exit status of list package files command where 0 represents success
     """
     package: str = args.package
