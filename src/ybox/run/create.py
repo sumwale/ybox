@@ -776,7 +776,6 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
             if split_idx == -1:
                 raise NotSupportedError("Incorrect value format in [configs] section for "
                                         f"'{key}'. Required: '{{src}} -> {{dest}}'")
-            # TODO: SW: preserve symlinks if they point to the same tree esp for copy
             src_path = os.path.realpath(f_val[:split_idx].strip())
             dest_path = f"{conf.configs_dir}/{f_val[split_idx + 2:].strip()}"
             if os.access(src_path, os.R_OK):
@@ -786,7 +785,11 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                     copytree(src_path, dest_path, hardlink=config_hardlinks)
                 else:
                     if config_hardlinks:
-                        os.link(os.path.realpath(src_path), dest_path, follow_symlinks=True)
+                        try:
+                            os.link(os.path.realpath(src_path), dest_path, follow_symlinks=True)
+                        except OSError:
+                            # in case of error (likely due to cross-device link) fallback to copy
+                            shutil.copy2(src_path, dest_path, follow_symlinks=True)
                     else:
                         shutil.copy2(src_path, dest_path, follow_symlinks=True)
                 config_list_fd.write(val)
@@ -860,37 +863,69 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
 
 
 # The shutil.copytree(...) method does not work correctly for "symlinks=False" (or at least
-#   not like 'cp -rL' or 'cp -rlL') where it does not create the source symlinked file rather
-# only the target one in the destination directory.
-# This is a simplified version using os.walk(...) that works correctly that always has:
-#   a. follow_symlinks=True, and b. ignore_dangling_symlinks=True
-def copytree(src: str, dest: str, hardlink: bool = False) -> None:
+#   not like 'cp -aL' or 'cp -alL') where it does not create the source symlinked file rather
+# only the target one in the destination directory, and neither does it provide the option to
+# create hardlinks.
+#
+# This is a simplified version using recursive os.scandir(...) that works correctly so that the
+# copy will continue to work even if source disappears in all cases but still avoid making copies
+# for all symlinks. So it behaves like follow_symlinks=True if the symlink destination is outside
+# the "src_path" else it is False.
+def copytree(src_path: str, dest: str, hardlink: bool = False,
+             src_root: Optional[str] = None) -> None:
     """
     Copy or create hard links to a source directory tree in the given destination directory.
     Since hard links to directories are not supported, the destination will mirror the directories
     of the source while the files inside will be either copies or hard links to the source.
+    Symlinks are copied as such if the source ones point within the tree, else the target is
+    followed and copied recursively.
 
-    :param src: the source directory tree
+    :param src_path: the resolved source directory (using `os.path.realpath` or `Path.resolve`)
     :param dest: the destination directory which should exist
     :param hardlink: if True then create hard links to the files in the source (so it should
                        be in the same filesystem) else copy the files, defaults to False
+    :param src_root: the resolved root source directory (same as `src_path` if `None`)
     """
-    for src_dir, _, src_files in os.walk(src, followlinks=True):
-        # substitute 'src' prefix with 'dest'
-        dest_dir = f"{dest}{src_dir[len(src):]}"
-        os.mkdir(dest_dir, mode=stat.S_IMODE(os.stat(src_dir).st_mode))
-        for src_file in src_files:
-            src_path = f"{src_dir}/{src_file}"
-            if os.path.exists(src_path):
-                if hardlink:
-                    try:
-                        os.link(os.path.realpath(src_path), f"{dest_dir}/{src_file}",
-                                follow_symlinks=True)
+    src_root = src_root or src_path
+    os.mkdir(dest, mode=stat.S_IMODE(os.stat(src_path).st_mode))
+    # follow symlink if it leads to outside the "src" tree, else copy as a symlink which
+    # ensures that all destination files are always accessible regardless of source going
+    # away (for example), and also reduces the size with hardlink=False as much as possible
+    with os.scandir(src_path) as src_it:
+        for entry in src_it:
+            entry_path = ""
+            entry_st_mode = 0
+            dest_path = f"{dest}/{entry.name}"
+            try:
+                if entry.is_symlink():
+                    # check if entry is a symlink inside the tree or outside
+                    l_name = os.readlink(entry.path)
+                    if "/" not in l_name:  # shortcut check for links in the same directory
+                        os.symlink(l_name, dest_path)
                         continue
-                    except OSError:
-                        # in case of error (likely due to cross-device link) fallback to copying
-                        pass
-                shutil.copy2(src_path, f"{dest_dir}/{src_file}", follow_symlinks=True)
+                    else:
+                        entry_path = os.path.realpath(entry.path)
+                        if entry_path.startswith(src_root) and entry_path[len(src_root)] == "/":
+                            rpath = entry_path[len(src_root) + 1:]
+                            os.symlink(("../" * rpath.count("/")) + rpath, dest_path)
+                            continue
+                        entry_st_mode = os.stat(entry_path).st_mode
+                entry_path = entry_path or entry.path
+                if stat.S_ISREG(entry_st_mode) or (entry_st_mode == 0 and entry.is_file()):
+                    if hardlink:
+                        try:
+                            os.link(entry_path, dest_path)
+                            continue
+                        except OSError:
+                            # in case of error (likely due to cross-device link) fallback to copy
+                            pass
+                    shutil.copy2(entry_path, dest_path)
+                elif stat.S_ISDIR(entry_st_mode) or (entry_st_mode == 0 and entry.is_dir()):
+                    copytree(entry_path, dest_path, hardlink,
+                             entry_path if entry_st_mode else src_root)
+            except OSError as err:
+                # ignore permission and related errors and continue
+                print_warn(f"Skipping copy/link of '{entry_path}' due to error: {err}")
 
 
 def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -> None:

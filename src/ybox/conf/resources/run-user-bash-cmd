@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# This script either runs a given command using bash directly, or if YBOX_HOST_UID environment
+# variable is set to something other than the UID of the current user, then uses sudo to run
+# the command as that UID (plus YBOX_HOST_GID as the GID). This latter case happens for rootless
+# docker where the ybox container runs as the root user (due to absence of --userns=keep-id like
+#   in podman) but some commands need to be run as a normal user like Arch's paru/yay AUR helpers.
+
 set -e
 
 if [ "$#" -ne 1 ]; then
