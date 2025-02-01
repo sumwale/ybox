@@ -903,13 +903,12 @@ def copytree(src_path: str, dest: str, hardlink: bool = False,
                     if "/" not in l_name:  # shortcut check for links in the same directory
                         os.symlink(l_name, dest_path)
                         continue
-                    else:
-                        entry_path = os.path.realpath(entry.path)
-                        if entry_path.startswith(src_root) and entry_path[len(src_root)] == "/":
-                            rpath = entry_path[len(src_root) + 1:]
-                            os.symlink(("../" * rpath.count("/")) + rpath, dest_path)
-                            continue
-                        entry_st_mode = os.stat(entry_path).st_mode
+                    entry_path = os.path.realpath(entry.path)
+                    if entry_path.startswith(src_root) and entry_path[len(src_root)] == "/":
+                        rpath = entry_path[len(src_root) + 1:]
+                        os.symlink(("../" * rpath.count("/")) + rpath, dest_path)
+                        continue
+                    entry_st_mode = os.stat(entry_path).st_mode
                 entry_path = entry_path or entry.path
                 if stat.S_ISREG(entry_st_mode) or (entry_st_mode == 0 and entry.is_file()):
                     if hardlink:
