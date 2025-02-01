@@ -8,6 +8,7 @@ script from the top-level directory. Something like:
 # for "v0.9.6" substitute the required version below
 git clone -b v0.9.6 https://github.com/sumwale/ybox.git
 cd ybox
+/bin/rm -rf tests src/ybox/conf/profiles
 /bin/cp -rf <latest ybox>/tests .
 /bin/cp -rf <latest ybox>/src/ybox/conf/profiles src/ybox/conf/
 PYTHONPATH=./src /usr/bin/python3 ./tests/create_migration_db.py \

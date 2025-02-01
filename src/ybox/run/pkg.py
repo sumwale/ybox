@@ -277,6 +277,7 @@ def add_update(subparser: argparse.ArgumentParser) -> None:
                            help="the packages to update if provided, else update the entire "
                                 "installation of the container (which will end up updating all "
                                 "other containers sharing the same root if configured)")
+    subparser.set_defaults(group_by_shared_root=True)
     subparser.set_defaults(func=update_packages)
 
 
