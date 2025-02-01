@@ -558,6 +558,26 @@ class YboxStateManagement:
             pass
         return shared_containers
 
+    def get_containers_grouped_by_shared_root(self, containers: list[str]) -> list[
+            tuple[list[str], str, str]]:
+        """
+        Get the containers grouped by their `shared_root`s, if present, else as separate entries.
+
+        :param containers: list of containers to include, or empty to include all containers
+        :return: list of tuple of (container list, shared_root, distribution) matching given
+                 containers (or all containers if empty list provided)
+        """
+        in_list = "name IN (" + ("?, " * (len(containers) - 1)) + "?) AND " if containers else ""
+        # using default "," to separate container names since a container name cannot have it
+        # (see the regex check in ybox.run.create.process_args)
+        with closing(cursor := self._conn.execute(
+            f"""SELECT STRING_AGG(name, ','), shared_root, MIN(distribution) FROM containers
+                WHERE {in_list}NOT destroyed
+                GROUP BY CASE WHEN length(shared_root) = 0 THEN name ELSE shared_root END""",
+                containers)):
+            rows = cursor.fetchall()
+            return [(str(row[0]).split(","), str(row[1]), str(row[2])) for row in rows]
+
     def register_package(self, container_name: str, package: str, local_copies: list[str],
                          copy_type: CopyType, app_flags: dict[str, str], shared_root: str,
                          dep_type: Optional[DependencyType], dep_of: str,

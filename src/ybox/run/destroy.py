@@ -10,6 +10,8 @@ from ybox.env import Environ
 from ybox.print import fgcolor, print_color, print_error, print_warn
 from ybox.state import YboxStateManagement
 
+# TODO: SW: cleanup containers no longer present from the database (both here and in create)
+
 
 def main() -> None:
     """main function for `ybox-destroy` script"""

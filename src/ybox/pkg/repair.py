@@ -14,6 +14,10 @@ from ybox.print import (fgcolor, print_color, print_error, print_info,
                         print_warn)
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 
+# TODO: SW: repair should work even if no containers are active (just remove the locks)
+# Also, just checking lock file existing lock file existence is not enough (e.g. for dpkg/apt)
+# and may need to check if they are locked by any process after kill so define this in distro.ini
+
 
 def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
                          conf: StaticConfiguration, runtime_conf: RuntimeConfiguration,

@@ -38,6 +38,8 @@ _EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 _DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
 _WS_RE = re.compile(r"\s+")
 
+# TODO: SW: add option for custom image
+
 
 # Note: deliberately not using os.path.join for joining paths since the code only works on
 # Linux/POSIX systems where path separator will always be "/" and explicitly forcing the same.

@@ -17,6 +17,8 @@ where:
                   newlines in the description
 """
 
+# TODO: SW: this is returning back installed packages too which should be skipped
+
 import gzip
 import os
 import re

@@ -61,6 +61,29 @@ def main_argv(argv: list[str]) -> None:
         elif not containers:
             print_error("No active ybox container found!")
             sys.exit(1)
+        elif args.group_by_shared_root:
+            with YboxStateManagement(env) as state:
+                entries = state.get_containers_grouped_by_shared_root(containers)
+            if len(entries) == 0:
+                print_error(f"No containers in state database for: {', '.join(containers)}")
+                sys.exit(1)
+            if len(entries) == 1:
+                # select the first container in the list for the shared_root
+                container_name = entries[0][0][0]
+            elif args.quiet:
+                msg = "\n  ".join([", ".join(t[0]) + (" on " + t[1] if t[1] else " (not shared)")
+                                   for t in entries])
+                print_error(
+                    f"Expected one activate container or shared root but found:\n  {msg}")
+                sys.exit(1)
+            else:
+                # display as container names grouped by distribution and shared_root
+                selection_list = [" / ".join(t[0]) + " : distro '" + t[2] +
+                                  ("' on " + t[1] if t[1] else "' (not shared)") for t in entries]
+                print_info("Please select the container to use:", file=sys.stderr)
+                if (selection := select_item_from_menu(selection_list)) is None:
+                    sys.exit(1)
+                container_name = selection[:selection.index(" ")]
         elif args.quiet:
             print_error(
                 f"Expected one active ybox container but found: {', '.join(containers)}")
@@ -153,6 +176,8 @@ def add_subparser(operations, name: str, hlp: str) -> argparse.ArgumentParser:  
     subparser.set_defaults(is_repo_cmd=False)
     # set the flag to require state database by default
     subparser.set_defaults(needs_state=True)
+    # don't group by shared_root by default
+    subparser.set_defaults(group_by_shared_root=False)
     return subparser
 
 
@@ -319,6 +344,7 @@ def add_search(subparser: argparse.ArgumentParser) -> None:
     add_pager_arg(subparser)
     subparser.add_argument("search", nargs="+", help="one or more search terms")
     subparser.set_defaults(needs_state=False)
+    subparser.set_defaults(group_by_shared_root=True)
     subparser.set_defaults(func=search_packages)
 
 
@@ -348,6 +374,7 @@ def add_clean(subparser: argparse.ArgumentParser) -> None:
     :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
     """
     subparser.set_defaults(needs_state=False)
+    subparser.set_defaults(group_by_shared_root=True)
     subparser.set_defaults(func=clean_cache)
 
 
@@ -383,6 +410,7 @@ def add_repair(subparser: argparse.ArgumentParser) -> None:
                            help="repair thoroughly by reinstalling all packages; CAUTION: use "
                            "this only if the normal repair fails and the system cannot be "
                            "recovered otherwise")
+    subparser.set_defaults(group_by_shared_root=True)
     subparser.set_defaults(func=repair_package_state)
 
 
