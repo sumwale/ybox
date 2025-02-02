@@ -25,6 +25,7 @@ from ybox.filelock import FileLock
 from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
                         print_warn)
+from ybox.run.destroy import get_all_containers, remove_orphans_from_db
 from ybox.run.graphics import (add_env_option, add_mount_option, enable_dri,
                                enable_nvidia, enable_wayland, enable_x11)
 from ybox.run.pkg import parse_args as pkg_parse_args
@@ -203,9 +204,13 @@ def main_argv(argv: list[str]) -> None:
     if os.access(conf.config_list, os.W_OK):
         truncate_file(conf.config_list)
 
+    # check and remove any dangling container references in state database
+    valid_containers = set(get_all_containers(docker_cmd))
+
     # finally add the state and register the installed packages that were reassigned to this
     # container (because the previously destroyed one has the same configuration and shared root)
     with YboxStateManagement(env) as state:
+        remove_orphans_from_db(valid_containers, state)
         owned_packages = state.register_container(box_name, distro, shared_root, box_conf,
                                                   args.force_own_orphans)
         # create wrappers for owned_packages
