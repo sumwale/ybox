@@ -29,6 +29,8 @@ end
 complete -f -c ybox-create -s h -l help -d "show help"
 complete -c ybox-create -s n -l name -d "name of the ybox container" -r
 complete -f -c ybox-create -s F -l force-own-orphans -d "force ownership of orphans on shared root"
+complete -f -c ybox-create -s C -l distribution-config -d "path to custom distribution configuration file"
+complete -f -c ybox-create -l distribution-image -d "custom container image"
 complete -f -c ybox-create -s q -l quiet -d "skip interactive questions"
 complete -f -c ybox-create -n "not __fish_seen_subcommand_from (__fish_ybox_complete_distributions)" -a "(__fish_ybox_complete_distributions)"
 

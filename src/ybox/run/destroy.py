@@ -3,6 +3,7 @@ Code for the `ybox-destroy` script that is used to destroy an active or stopped 
 """
 
 import argparse
+import os
 import sys
 
 from ybox.cmd import check_ybox_exists, run_command
@@ -88,8 +89,9 @@ def remove_orphans_from_db(valid_containers: set[str], state: YboxStateManagemen
     :param valid_containers: set of valid container names from :func:`get_all_containers`
     :param state: instance of `YboxStateManagement` having the state of all ybox containers
     """
-    orphans = set(state.get_containers()) - valid_containers
-    if orphans:
-        print_notice(f"Removing orphan container entries from database: {', '.join(orphans)}")
-        for orphan in orphans:
-            state.unregister_container(orphan)
+    if not os.environ.get("YBOX_TESTING"):
+        orphans = set(state.get_containers()) - valid_containers
+        if orphans:
+            print_notice(f"Removing orphan container entries from database: {', '.join(orphans)}")
+            for orphan in orphans:
+                state.unregister_container(orphan)

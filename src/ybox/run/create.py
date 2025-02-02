@@ -24,7 +24,7 @@ from ybox.env import Environ, NotSupportedError, PathName
 from ybox.filelock import FileLock
 from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
-                        print_warn)
+                        print_notice, print_warn)
 from ybox.run.destroy import get_all_containers, remove_orphans_from_db
 from ybox.run.graphics import (add_env_option, add_mount_option, enable_dri,
                                enable_nvidia, enable_wayland, enable_x11)
@@ -38,8 +38,6 @@ from ybox.util import (EnvInterpolation, config_reader,
 _EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 _DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
 _WS_RE = re.compile(r"\s+")
-
-# TODO: SW: add option for custom image
 
 
 # Note: deliberately not using os.path.join for joining paths since the code only works on
@@ -269,7 +267,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "container regardless of the container configuration")
     parser.add_argument("-C", "--distribution-config", type=str,
                         help="path to distribution configuration file to use instead of the "
-                             "`distro.ini` from user/system configuration paths")
+                             "'distro.ini' from user/system configuration paths")
+    parser.add_argument("--distribution-image", type=str,
+                        help="custom container image to use that overrides the one specified in "
+                             "the distribution's 'distro.ini'; note that the distribution "
+                             "configuration scripts make assumptions on the available utilities "
+                             "in the image so you should ensure that the provided image is "
+                             "compatible with and a superset of the base image specified in the "
+                             "builtin profile of the distribution in the installed version")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="proceed without asking any questions using defaults where possible; "
                              "this should usually be used with explicit specification of "
@@ -498,6 +503,12 @@ def read_distribution_config(args: argparse.Namespace,
         distro_conf_file, only_sys_conf=True), env_interpolation)
     distro_base_section = distro_config["base"]
     image_name = distro_base_section["image"]  # should always exist
+    if args.distribution_image:
+        print()
+        print_notice(f"Overriding distribution's container image '{image_name}' with the one "
+                     f"provided on the command-line: {args.distribution_image}")
+        print()
+        image_name = args.distribution_image
     shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist
     secondary_groups = distro_base_section["secondary_groups"]  # should always exist
     return image_name, shared_root_dirs, secondary_groups, distro_config
