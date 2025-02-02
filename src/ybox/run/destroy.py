@@ -50,6 +50,7 @@ def main_argv(argv: list[str]) -> None:
     # remove the state from the database
     print_warn(f"Clearing ybox state for '{container_name}'")
     with YboxStateManagement(env) as state:
+        state.begin_transaction()
         if not state.unregister_container(container_name):
             print_error(f"No entry found for '{container_name}' in the state database")
             sys.exit(1)
@@ -84,7 +85,10 @@ def get_all_containers(docker_cmd: str) -> list[str]:
 
 def remove_orphans_from_db(valid_containers: set[str], state: YboxStateManagement) -> None:
     """
-    Unregister orphan container entries from the state database.
+    Unregister orphan container entries from the state database. This takes the output of
+    :func:`get_all_containers` as argument and should be invoked inside `YboxStateManagement`
+    context manager (i.e. with state database as locked), while the call to `get_all_containers`
+    can be outside the lock.
 
     :param valid_containers: set of valid container names from :func:`get_all_containers`
     :param state: instance of `YboxStateManagement` having the state of all ybox containers

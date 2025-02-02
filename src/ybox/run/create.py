@@ -208,9 +208,11 @@ def main_argv(argv: list[str]) -> None:
     # finally add the state and register the installed packages that were reassigned to this
     # container (because the previously destroyed one has the same configuration and shared root)
     with YboxStateManagement(env) as state:
+        state.begin_transaction()
         remove_orphans_from_db(valid_containers, state)
         owned_packages = state.register_container(box_name, distro, shared_root, box_conf,
                                                   args.force_own_orphans)
+        state.commit()
         # create wrappers for owned_packages
         if owned_packages:
             list_cmd = pkgmgr[PkgMgr.LIST_FILES.value]
