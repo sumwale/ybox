@@ -7,7 +7,8 @@ import argparse
 import sys
 from typing import cast
 
-from ybox.cmd import YboxLabel, check_active_ybox, run_command
+from ybox.cmd import (YboxLabel, check_active_ybox, parser_version_check,
+                      run_command)
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ
 from ybox.pkg.clean import clean_cache
@@ -157,6 +158,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                            "mark a package as a dependency or an explicitly installed package"))
     add_repair(add_subparser(operations, "repair",
                              "try to repair state after a failed operation or an interrupt/kill"))
+    parser_version_check(parser, argv)
     return parser.parse_args(argv)
 
 

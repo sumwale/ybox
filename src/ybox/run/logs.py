@@ -6,7 +6,7 @@ ybox container.
 import argparse
 import sys
 
-from ybox.cmd import check_ybox_exists, run_command
+from ybox.cmd import check_ybox_exists, parser_version_check, run_command
 from ybox.env import get_docker_command
 from ybox.print import print_info
 
@@ -54,4 +54,5 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-f", "--follow", action="store_true",
                         help="follow log output like 'tail -f'")
     parser.add_argument("container_name", type=str, help="name of the running ybox")
+    parser_version_check(parser, argv)
     return parser.parse_args(argv)

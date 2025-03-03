@@ -6,7 +6,8 @@ import argparse
 import sys
 import time
 
-from ybox.cmd import check_active_ybox, get_ybox_state, run_command
+from ybox.cmd import (check_active_ybox, get_ybox_state, parser_version_check,
+                      run_command)
 from ybox.config import StaticConfiguration
 from ybox.env import Environ, get_docker_command
 from ybox.print import fgcolor, print_color, print_error
@@ -102,4 +103,5 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("action", choices=["start", "stop", "restart", "status"],
                         help="action to perform")
     parser.add_argument("container_name", help="name of the ybox")
+    parser_version_check(parser, argv)
     return parser.parse_args(argv)

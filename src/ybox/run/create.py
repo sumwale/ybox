@@ -18,7 +18,8 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional
 
-from ybox.cmd import PkgMgr, RepoCmd, YboxLabel, check_ybox_exists, run_command
+from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
+                      parser_version_check, run_command)
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, NotSupportedError, PathName
 from ybox.filelock import FileLock
@@ -295,6 +296,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "optional and user is presented with a selection menu of the "
                              "available profiles in the user or system profiles directory "
                              "whichever is found (in that order)")
+    parser_version_check(parser, argv)
     return parser.parse_args(argv)
 
 

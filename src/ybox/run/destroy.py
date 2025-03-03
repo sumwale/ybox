@@ -6,7 +6,7 @@ import argparse
 import os
 import sys
 
-from ybox.cmd import check_ybox_exists, run_command
+from ybox.cmd import check_ybox_exists, parser_version_check, run_command
 from ybox.env import Environ
 from ybox.print import (fgcolor, print_color, print_error, print_notice,
                         print_warn)
@@ -68,6 +68,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-f", "--force", action="store_true",
                         help="force destroy the container using SIGKILL if required")
     parser.add_argument("container_name", type=str, help="name of the active ybox")
+    parser_version_check(parser, argv)
     return parser.parse_args(argv)
 
 

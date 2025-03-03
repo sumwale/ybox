@@ -1,5 +1,6 @@
 """Unit tests for `ybox/cmd.py`"""
 
+import argparse
 import os
 import shlex
 import subprocess
@@ -11,9 +12,11 @@ from uuid import uuid4
 
 import pytest
 
+from ybox import __version__ as product_version
 from ybox.cmd import (YboxLabel, build_shell_command, check_active_ybox,
                       check_ybox_exists, get_ybox_state, page_command,
-                      page_output, parse_opt_deps_args, run_command)
+                      page_output, parse_opt_deps_args, parser_version_check,
+                      run_command)
 from ybox.env import get_docker_command
 from ybox.print import fgcolor
 
@@ -220,6 +223,49 @@ def test_run_command(capsys: pytest.CaptureFixture[str]):
     captured = capsys.readouterr()
     assert "No such file or directory" in captured.err
     assert "FAILURE in" not in captured.err
+
+
+def test_parse_args_with_version_check(capsys: pytest.CaptureFixture[str]):
+    """check the `parse_args_with_version_check` function"""
+    parser = argparse.ArgumentParser(description="Test for --version")
+    parser_version_check(parser, [])
+    args = parser.parse_args([])
+    assert not args.version
+    # check success
+    parser = argparse.ArgumentParser(description="Test for --version")
+    with pytest.raises(SystemExit) as exc_info:
+        parser_version_check(parser, ["--version"])
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == product_version
+
+    # check success with optional arguments
+    parser = argparse.ArgumentParser(description="Test for --version with optional args")
+    parser.add_argument("-f", "--format", type=str)
+    parser_version_check(parser, ["--format", "FMT"])
+    args = parser.parse_args(["--format", "FMT"])
+    assert not args.version
+    assert args.format == "FMT"
+    args = parser.parse_args(["--format", "FMT2", "--version"])
+    assert args.version
+    assert args.format == "FMT2"
+    parser = argparse.ArgumentParser(description="Test for --version with optional args")
+    parser.add_argument("-f", "--format", type=str)
+    with pytest.raises(SystemExit) as exc_info:
+        parser_version_check(parser, ["--format", "FMT", "--version"])
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == product_version
+
+    # check success with required arguments
+    parser = argparse.ArgumentParser(description="Test for --version with optional args")
+    parser.add_argument("-f", "--format", type=str)
+    parser.add_argument("package", type=str)
+    with pytest.raises(SystemExit) as exc_info:
+        parser_version_check(parser, ["--version"])
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == product_version
 
 
 def test_parse_opt_deps_args():

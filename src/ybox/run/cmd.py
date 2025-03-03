@@ -5,7 +5,7 @@ Code for the `ybox-cmd` script that is used to execute programs in an active ybo
 import argparse
 import sys
 
-from ybox.cmd import run_command
+from ybox.cmd import parser_version_check, run_command
 from ybox.env import get_docker_command
 
 
@@ -51,4 +51,5 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("container_name", type=str, help="name of the active ybox")
     parser.add_argument("command", nargs="*", default="/bin/bash",
                         help="run the given command (default is /bin/bash)")
+    parser_version_check(parser, argv)
     return parser.parse_args(argv)

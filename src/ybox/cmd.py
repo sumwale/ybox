@@ -10,6 +10,7 @@ import sys
 from enum import Enum
 from typing import Callable, Iterable, Optional, Union
 
+from ybox import __version__ as product_version
 from ybox.config import Consts
 
 from .print import print_error, print_info, print_notice, print_warn
@@ -219,6 +220,21 @@ def _print_subprocess_output(result: subprocess.CompletedProcess[bytes]) -> None
         print_notice(result.stdout.decode("utf-8"))
     if result.stderr:
         print_warn(result.stderr.decode("utf-8"), file=sys.stderr)
+
+
+def parser_version_check(parser: argparse.ArgumentParser, argv: list[str]) -> None:
+    """
+    Update command-line parser to add `--version` option to existing ones that will output the
+    ybox product version and exit if specified in the given list of arguments.
+
+    :param parser: instance of :class:`argparse.ArgumentParser` having the command-line parser
+    :param argv: the list of arguments to be parsed
+    """
+    parser.add_argument("--version", action="store_true", help="output ybox version")
+    # argv may have required positional arguments, hence check for --version separately
+    if "--version" in argv:
+        print(product_version)
+        sys.exit(0)
 
 
 def parse_opt_deps_args(argv: list[str]) -> argparse.Namespace:

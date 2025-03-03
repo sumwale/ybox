@@ -5,7 +5,7 @@ Code for the `ybox-ls` script that is used to show the active or stopped ybox co
 import argparse
 import sys
 
-from ybox.cmd import YboxLabel, run_command
+from ybox.cmd import YboxLabel, parser_version_check, run_command
 from ybox.env import get_docker_command
 
 
@@ -61,4 +61,5 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "https://docs.docker.com/reference/cli/docker/container/ls)")
     parser.add_argument("-l", "--long-format", action="store_true",
                         help="display extended information without truncating fields")
+    parser_version_check(parser, argv)
     return parser.parse_args(argv)
