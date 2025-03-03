@@ -10,8 +10,8 @@ current_user="$(id -un)"
 # install binaries for paru from paru-bin (paru takes too long to compile)
 PARU="paru --noconfirm"
 echo_color "$fg_cyan" "Installing AUR helper 'paru'" >> $status_file
-export HOME="$(eval echo "~$current_user")"
-cd ~
+export HOME=$(getent passwd "$current_user" | cut -d: -f6)
+cd "$HOME"
 rm -rf paru-bin
 git clone https://aur.archlinux.org/paru-bin.git
 cd paru-bin

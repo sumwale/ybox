@@ -11,7 +11,7 @@ where:
             and so on; resolution of level > 2 is not required since caller currently ignores those
  * <order>: this is a simple counter assigned to the dependencies where the value itself is of no
             significance but if multiple dependencies have the same value then it means that they
-            are ORed dependencies and only one of them should normlly be selected for installation
+            are ORed dependencies and only one of them need to be selected for installation
  * <installed>: true if the dependency already installed and false otherwise
  * <description>: detailed description of the dependency; it can contain literal \n to indicate
                   newlines in the description

@@ -27,7 +27,12 @@ from ybox.util import check_package, ini_file_reader, select_item_from_menu
 _EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)\s*(.*?)\s*$")
 # match !p and !a to replace executable program (third group above) and arguments respectively
 _FLAGS_RE = re.compile("![ap]")
-_LOCAL_BIN_DIRS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin"]
+# standard system executable paths
+_SYS_BIN_DIRS = ("/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin")
+# environment variables passed through from host environment to podman/docker executable
+_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "WAYLAND_DISPLAY", "FREETYPE_PROPERTIES",
+                        "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
+                        "__VK_LAYER_NV_optimus", "VK_ICD_FILES", "VK_ICD_FILENAMES")
 
 
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
@@ -153,7 +158,9 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
             if not skip_desktop_files:
                 copy_type |= CopyType.DESKTOP
             if not skip_executables:
-                copy_type |= CopyType.EXECUTABLE
+                resp = input("Create application executable(s)? (Y/n) ") if quiet == 0 else "Y"
+                if resp.strip().lower() != "n":
+                    copy_type |= CopyType.EXECUTABLE
         # TODO: wrappers for newly installed required dependencies should also be created;
         #       handle DependencyType.SUGGESTION if supported by underlying package manager
         app_flags: dict[str, str] = {}
@@ -223,13 +230,14 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     #  2) redirect PKG: lines somewhere else like a common file: this can be done but will
     #          likely be more messy than the code below (e.g. handle concurrent executions),
     #          but still can be considered in future
+    # (reduced bufsize to show download progress better)
     with subprocess.Popen(build_shell_command(
             docker_cmd, container_name, f"{opt_deps_cmd} {package}"),
-            stdout=subprocess.PIPE) as deps_result:
+            bufsize=256, stdout=subprocess.PIPE) as deps_result:
         line = bytearray()
         # possible end of lines
-        eol1 = b"\r"[0]
-        eol2 = b"\n"[0]
+        eol1 = ord(b"\r")
+        eol2 = ord(b"\n")
         buffered = 0
         assert deps_result.stdout is not None
         # readline does not work for in-place updates like from aria2
@@ -245,7 +253,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
                     break
             else:
                 line.append(char[0])
-                if buffered >= 4:  # flush frequently to show download progress, for example
+                if buffered >= 8:  # flush frequently to show download progress, for example
                     sys.stdout.flush()
                     buffered = 0
         sys.stdout.flush()
@@ -457,9 +465,9 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
         else:
             full_cmd = program
         # pseudo-tty cannot be allocated with rootless docker outside of a terminal app
-        return (f'{match.group(1)}{docker_cmd} exec -e=XAUTHORITY -e=DISPLAY '
-                f'-e=FREETYPE_PROPERTIES {conf.box_name} /usr/local/bin/run-in-dir '
-                f'"" {full_cmd}\n')
+        env_vars = " -e=".join(_PASSTHROUGH_ENVVARS)
+        return (f'{match.group(1)}{docker_cmd} exec -e={env_vars} {conf.box_name} '
+                f'/usr/local/bin/run-in-dir "" {full_cmd}\n')
 
     # the destination will be $HOME/.local/share/applications
     os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
@@ -568,9 +576,9 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
             print_warn(f"Skipping local wrapper for {file}")
             return False
     # also check if creating user executable will override system executable
-    for bin_dir in _LOCAL_BIN_DIRS:
+    for bin_dir in _SYS_BIN_DIRS:
         sys_exec = f"{bin_dir}/{filename}"
-        if os.path.exists(sys_exec):
+        if os.access(sys_exec, os.X_OK):
             resp = input(f"Target file {wrapper_exec} will override system installed "
                          f"{sys_exec}. Continue? (y/N) ") if quiet < 2 else "N"
             if resp.strip().lower() != "y":
@@ -604,9 +612,9 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
             lambda f_match: _replace_flags(f_match, flags, f'"{file}"', '"$@"'), flags)
     else:
         full_cmd = f'/usr/local/bin/run-in-dir "`pwd`" "{file}" "$@"'
+    env_vars = " -e=".join(_PASSTHROUGH_ENVVARS)
     exec_content = ("#!/bin/sh\n",
-                    f"exec {docker_cmd} exec -it -e=XAUTHORITY -e=DISPLAY "
-                    f"-e=FREETYPE_PROPERTIES {conf.box_name} ", full_cmd)
+                    f"exec {docker_cmd} exec -it -e={env_vars} {conf.box_name} ", full_cmd)
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)

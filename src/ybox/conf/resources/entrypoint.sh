@@ -47,16 +47,14 @@ function show_usage() {
   echo "  -h               show this help message and exit"
 }
 
-# link the configuration files in HOME to the target directory having the required files
-function link_config_files() {
+# copy/link the configuration files in HOME to the target directory having the required files
+function replicate_config_files() {
   # line is of the form <src> -> <dest>; pattern below matches this while trimming spaces
   echo_color "$fg_orange" "Linking configuration files from $config_dir to user's home" >> $status_file
-  pattern='(.*[^[:space:]]+)[[:space:]]*->[[:space:]]*(.*)'
+  pattern='(COPY|LINK_DIR|LINK):(.*)'
   while read -r config; do
     if [[ "$config" =~ $pattern ]]; then
-      home_file="${BASH_REMATCH[1]}"
-      # expand env variables
-      eval home_file="$home_file"
+      home_file="$HOME/${BASH_REMATCH[2]}"
       dest_file="$config_dir/${BASH_REMATCH[2]}"
       # only replace the file if it is already a link (assuming the link target may
       #   have changed in the config_list file), or a directory containing links
@@ -80,7 +78,15 @@ function link_config_files() {
           mkdir -p "$home_filedir"
         fi
         if [ ! -e "$home_file" ]; then
-          ln -s "$dest_file" "$home_file"
+          if [ "${BASH_REMATCH[1]}" = "COPY" ]; then
+            cp -r "$dest_file" "$home_file"
+          elif [ "${BASH_REMATCH[1]}" = "LINK_DIR" ]; then
+            # if dest_file is a directory, then replicate the directory structure in home and
+            # symlink individual files which is accomplished with "cp -sr"
+            cp -sr "$dest_file" "$home_file"
+          else  # "${BASH_REMATCH[1]}" = "LINK"
+            ln -s "$dest_file" "$home_file"
+          fi
         fi
       fi
     else
@@ -212,7 +218,7 @@ fi
 
 # process config files, application installs and invoke startup apps
 if [ -n "$config_list" ]; then
-  link_config_files
+  replicate_config_files
 fi
 if [ -n "$app_list" ]; then
   install_apps

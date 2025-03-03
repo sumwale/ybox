@@ -377,7 +377,7 @@ def select_profile(args: argparse.Namespace, env: Environ) -> PathName:
     if len(profiles) == 1:
         print_info(f"Using profile '{profiles[0]}'")
         return profiles[0]
-    if len(profiles) == 0:
+    if not profiles:
         print_error(f"No valid profile found in '{profiles_dir}'")
         sys.exit(1)
 
@@ -797,10 +797,17 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                 raise NotSupportedError("Incorrect value format in [configs] section for "
                                         f"'{key}'. Required: '{{src}} -> {{dest}}'")
             src_path = os.path.realpath(f_val[:split_idx].strip())
-            dest_path = f"{conf.configs_dir}/{f_val[split_idx + 2:].strip()}"
+            dest_rel_path = f_val[split_idx + 2:].strip()
+            dest_path = f"{conf.configs_dir}/{dest_rel_path}"
             if os.access(src_path, os.R_OK):
-                os.makedirs(os.path.dirname(dest_path),
-                            mode=Consts.default_directory_mode(), exist_ok=True)
+                if os.path.exists(dest_path):
+                    if os.path.isdir(dest_path):
+                        shutil.rmtree(dest_path)
+                    else:
+                        os.unlink(dest_path)
+                else:
+                    os.makedirs(os.path.dirname(dest_path),
+                                mode=Consts.default_directory_mode(), exist_ok=True)
                 if os.path.isdir(src_path):
                     copytree(src_path, dest_path, hardlink=config_hardlinks)
                 else:
@@ -812,8 +819,14 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                             shutil.copy2(src_path, dest_path, follow_symlinks=True)
                     else:
                         shutil.copy2(src_path, dest_path, follow_symlinks=True)
-                config_list_fd.write(val)
-                config_list_fd.write("\n")
+                # - if key has ":copy", then indicate creation of copies in the target
+                # - if key has ":dir", then indicate replication of directory structure with links
+                #      for individual files
+                # - else a symlink should be created
+                # handled by "replicate_config_files" function in entrypoint.sh
+                prefix = "COPY" if key.endswith(":copy") else (
+                    "LINK_DIR" if key.endswith(":dir") else "LINK")
+                config_list_fd.write(f"{prefix}:{dest_rel_path}\n")
             else:
                 print_warn(f"Skipping inaccessible configuration path '{src_path}'")
     print_info("DONE.")
@@ -846,7 +859,7 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
     :return: dictionary of package names mapped to their list of dependencies as specified
              in the `[apps]` section
     """
-    if len(apps_section) == 0:
+    if not apps_section:
         return {}
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value]
     opt_dep_flag = pkgmgr[PkgMgr.OPT_DEP_FLAG.value]
@@ -900,6 +913,9 @@ def copytree(src_path: str, dest: str, hardlink: bool = False,
     Symlinks are copied as such if the source ones point within the tree, else the target is
     followed and copied recursively.
 
+    Note: this function only handles regular files and directories (and hard/symbolic links to
+    them) and will skip special files like device files, fifos etc.
+
     :param src_path: the resolved source directory (using `os.path.realpath` or `Path.resolve`)
     :param dest: the destination directory which should exist
     :param hardlink: if True then create hard links to the files in the source (so it should
@@ -942,6 +958,8 @@ def copytree(src_path: str, dest: str, hardlink: bool = False,
                 elif stat.S_ISDIR(entry_st_mode) or (entry_st_mode == 0 and entry.is_dir()):
                     copytree(entry_path, dest_path, hardlink,
                              entry_path if entry_st_mode else src_root)
+                else:
+                    print_warn(f"Skipping copy/link of special file (fifo/dev/...) '{entry_path}'")
             except OSError as err:
                 # ignore permission and related errors and continue
                 print_warn(f"Skipping copy/link of '{entry_path}' due to error: {err}")

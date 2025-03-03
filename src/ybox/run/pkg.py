@@ -64,7 +64,7 @@ def main_argv(argv: list[str]) -> None:
         elif args.group_by_shared_root:
             with YboxStateManagement(env) as state:
                 entries = state.get_containers_grouped_by_shared_root(containers)
-            if len(entries) == 0:
+            if not entries:
                 print_error(f"No containers in state database for: {', '.join(containers)}")
                 sys.exit(1)
             if len(entries) == 1:

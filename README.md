@@ -10,7 +10,17 @@ of the container including directories to be shared, logging etc.
 
 Special emphasis is given on security where users can choose to lock down
 or open up the container as required with reasonable defaults out of the
-box. There is no sharing of HOME or no privileged mode container.
+box. There is no sharing of HOME or no privileged mode container. This sets
+it apart from other similar solutions like distrobox/toolbx and the reason
+for starting this project since those other solutions don't care about
+security/sandboxing at all and share the entire HOME while running the
+containers in privileged mode. The other problem with those solutions is that
+the shared HOME means that the user's configuration dot files also get shared
+and can cause all kinds of trouble where container apps can overwrite
+with their own versions (especially for updated apps in the containers)
+breaking the app in the host system. It is, however, possible to share the
+entire HOME if user really wants but that needs to be explcitly configured
+in the ini profile.
 
 Expected usage is for users to group similar applications in a container
 and separate out containers depending on different needs like higher/lower
@@ -100,10 +110,11 @@ require you to install in a custom virtual environment which can be done manuall
  fish: `python3 -m venv ybox-venv && source ybox-env/bin/activate.fish`)
 or automatically using `pipx`. Alternatively you can add `--break-system-packages`
 flag to the `pip` command above or add it globally for all future packages using
-`python3 -m pip config set global.break-system-packages true`. The alternative
-approach works well for `ybox` which has a very minimal set of dependencies but
-in the rare case you see any issues due to package conflicts, use `pipx` or
-manual virtual environment.
+`python3 -m pip config set global.break-system-packages true`. This alternative
+approach works well for `ybox` which has a very minimal set of dependencies which will
+not conflict with system packages (rather work with whatever system version is installed),
+but if you prefer keeping the installation separate then use `pipx` or
+a manual virtual environment.
 
 Now you can run the `ybox-create` and other utilities that are normally installed
 in your `~/.local/bin` directory which should be in PATH for modern Linux distributions.
@@ -165,7 +176,9 @@ does not run properly as root, then you cannot run it when using docker unless y
 `sudo/su` to the host user in the container command. However, running as host user when running
 rootless docker will map to a different user ID in the host (as specified in `/etc/subuid` on the
 host) so files shared with the host, including devices like those in `/dev/dri`, will cause
-permission issues that can hinder or break the application.
+permission issues that can hinder or break the application. Hence it is recommended to
+just install podman (even if you already have docker installed) which works out of the
+box in rootless mode in all tested distributions.
 
 
 ### Package management: install/uninstall/list/search/...
