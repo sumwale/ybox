@@ -4,9 +4,11 @@ Code for the `ybox-destroy` script that is used to destroy an active or stopped 
 
 import argparse
 import os
+import shutil
 import sys
 
 from ybox.cmd import check_ybox_exists, parser_version_check, run_command
+from ybox.config import Consts
 from ybox.env import Environ
 from ybox.print import (fgcolor, print_color, print_error, print_notice,
                         print_warn)
@@ -33,9 +35,21 @@ def main_argv(argv: list[str]) -> None:
 
     check_ybox_exists(docker_cmd, container_name, exit_on_error=True)
     print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
+    # check if there is a systemd service for the container
+    systemd_dir = f"{env.home}/.config/systemd/user"
+    ybox_svc = f"ybox-{container_name}.service"
+    ybox_svc_path = ""
+    if (systemctl := shutil.which("systemctl", path=os.pathsep.join(Consts.sys_bin_dirs()))) and \
+            not os.access(ybox_svc_path := f"{systemd_dir}/{ybox_svc}", os.R_OK):
+        ybox_svc_path = ""
+
     # continue even if this fails since the container may already be in stopped state
-    run_command([docker_cmd, "container", "stop", container_name],
-                exit_on_error=False, error_msg=f"stopping '{container_name}'")
+    if systemctl and ybox_svc_path:
+        run_command([systemctl, "--user", "stop", ybox_svc],
+                    exit_on_error=False, error_msg=f"stopping '{container_name}'")
+    else:
+        run_command([docker_cmd, "container", "stop", container_name],
+                    exit_on_error=False, error_msg=f"stopping '{container_name}'")
 
     print_warn(f"Removing ybox container '{container_name}'")
     rm_args = [docker_cmd, "container", "rm"]
@@ -43,6 +57,17 @@ def main_argv(argv: list[str]) -> None:
         rm_args.append("--force")
     rm_args.append(container_name)
     run_command(rm_args, error_msg=f"removing '{container_name}'")
+
+    # remove systemd service file and reload daemon
+    if systemctl and ybox_svc_path:
+        print_color(f"Removing systemd service '{ybox_svc}' and reloading daemon", fg=fgcolor.cyan)
+        run_command([systemctl, "--user", "disable", ybox_svc], exit_on_error=False)
+        os.unlink(ybox_svc_path)
+        try:
+            os.unlink(f"{systemd_dir}/.ybox-{container_name}.env")
+        except OSError:
+            pass
+        run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
 
     # check and remove any dangling container references in state database
     valid_containers = set(get_all_containers(docker_cmd))

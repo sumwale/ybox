@@ -10,7 +10,6 @@ from ybox.cmd import PkgMgr, page_command
 from ybox.config import StaticConfiguration
 
 
-# noinspection PyUnusedLocal
 def search_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
                     conf: StaticConfiguration) -> int:
     """

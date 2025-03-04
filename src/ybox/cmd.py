@@ -208,7 +208,7 @@ def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
             sys.exit(result.returncode)
         else:
             return result.returncode
-    if capture_output and result.stderr:
+    if capture_output and result.stderr and error_msg != "SKIP":
         print_warn(result.stderr.decode("utf-8"), file=sys.stderr)
     return result.stdout.decode("utf-8") if capture_output else result.returncode
 

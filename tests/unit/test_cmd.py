@@ -257,9 +257,10 @@ def test_parse_args_with_version_check(capsys: pytest.CaptureFixture[str]):
     captured = capsys.readouterr()
     assert captured.out.strip() == product_version
 
-    # check success with required arguments
-    parser = argparse.ArgumentParser(description="Test for --version with optional args")
+    # check success with required arguments even when the required arguments are absent
+    parser = argparse.ArgumentParser(description="Test for --version with required args")
     parser.add_argument("-f", "--format", type=str)
+    parser.add_argument("operation", type=str)
     parser.add_argument("package", type=str)
     with pytest.raises(SystemExit) as exc_info:
         parser_version_check(parser, ["--version"])

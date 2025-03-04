@@ -220,7 +220,7 @@ def get_ybox_version(conf: StaticConfiguration) -> str:
     return ""
 
 
-def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration) -> None:
+def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout: int) -> None:
     """
     Wait for container created with `create.start_container` to finish all its initialization.
     This depends on the specific entrypoint script used by `create.start_container` to write
@@ -229,10 +229,10 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration) -> None:
 
     :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
+    :param timeout: seconds to wait for container to start before exiting with failure code 1
     """
     sys.stdout.flush()
     box_name = conf.box_name
-    max_wait_secs = 600
     status_line = ""  # keeps the last valid line read from status file
     with open(conf.status_file, "r", encoding="utf-8") as status_fd:
 
@@ -251,7 +251,7 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration) -> None:
                 print(line, end="")  # line already includes the terminating newline
             return False
 
-        for _ in range(max_wait_secs):
+        for _ in range(timeout):
             # check the container status first which may be running or stopping
             # in which case sleep and retry (if stopped, then read_lines should succeed)
             if get_ybox_state(docker_cmd, box_name, expected_states=("running", "stopping")):
@@ -267,8 +267,8 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration) -> None:
             # using simple poll per second rather than inotify or similar because the
             # initialization can take a good amount of time and second granularity is enough
             time.sleep(1)
-    # reading did not end after max_wait_secs
-    print_error(f"TIMED OUT waiting for ready container after {max_wait_secs}secs (last status: "
+    # reading did not end after timeout
+    print_error(f"TIMED OUT waiting for ready container after {timeout}secs (last status: "
                 f"{status_line}).\nCheck 'ybox-logs -f {box_name}' for more details.")
     sys.exit(1)
 

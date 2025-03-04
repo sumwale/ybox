@@ -27,8 +27,6 @@ from ybox.util import check_package, ini_file_reader, select_item_from_menu
 _EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)\s*(.*?)\s*$")
 # match !p and !a to replace executable program (third group above) and arguments respectively
 _FLAGS_RE = re.compile("![ap]")
-# standard system executable paths
-_SYS_BIN_DIRS = ("/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin")
 # environment variables passed through from host environment to podman/docker executable
 _PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "WAYLAND_DISPLAY", "FREETYPE_PROPERTIES",
                         "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
@@ -576,7 +574,7 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
             print_warn(f"Skipping local wrapper for {file}")
             return False
     # also check if creating user executable will override system executable
-    for bin_dir in _SYS_BIN_DIRS:
+    for bin_dir in Consts.sys_bin_dirs():
         sys_exec = f"{bin_dir}/{filename}"
         if os.access(sys_exec, os.X_OK):
             resp = input(f"Target file {wrapper_exec} will override system installed "

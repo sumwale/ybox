@@ -100,7 +100,7 @@ def test_consts():
         "/usr/share/icons/hicolor/scalable/.*", "/usr/share/icons/hicolor/([1-9]+)x.*",
         "/usr/share/icons/hicolor/symbolic/.*", "/usr/share/icons", "/usr/share/pixmaps")
     assert Consts.container_icon_dirs() == expected_icon_dirs
-    expected_exec_dirs = ("/usr/bin", "/usr/sbin", "/bin", "/sbin",
+    expected_exec_dirs = ("/usr/bin", "/bin", "/usr/sbin", "/sbin",
                           "/usr/local/bin", "/usr/local/sbin")
     assert Consts.container_bin_dirs() == expected_exec_dirs
     for man_dir in ("/usr/share/man", "/usr/man", "/usr/local/share/man", "/usr/local/man"):
@@ -110,6 +110,7 @@ def test_consts():
             assert Consts.container_man_dir_pattern().match(f"{man_dir}/cs/{sub_dir}")
             assert Consts.container_man_dir_pattern().match(f"{man_dir}/de/{sub_dir}")
             assert Consts.container_man_dir_pattern().match(f"{man_dir}/zh_TW/{sub_dir}")
+    assert Consts.sys_bin_dirs() == expected_exec_dirs
     assert Consts.nvidia_target_base_dir() == "/usr/local/nvidia"
     assert Consts.nvidia_setup_script() == "nvidia-setup.sh"
     assert Consts.default_pager() == "/usr/bin/less -RLFXK"

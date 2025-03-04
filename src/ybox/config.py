@@ -142,6 +142,9 @@ class Consts:
     Defines fixed file/path and other names used by ybox that are not configurable.
     """
 
+    # standard system executable paths
+    _SYS_BIN_DIRS = ("/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin")
+    # regex pattern to match all manual page directories
     _MAN_DIRS_PATTERN = re.compile(r"/usr(/local)?(/share)?/man(/[^/]*)?/man[0-9][a-zA-Z_]*")
 
     @staticmethod
@@ -216,12 +219,17 @@ class Consts:
     @staticmethod
     def container_bin_dirs() -> Iterable[str]:
         """directories on the container that has executables that may need to be wrapped"""
-        return ("/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin", "/usr/local/sbin")
+        return Consts._SYS_BIN_DIRS
 
     @staticmethod
     def container_man_dir_pattern() -> re.Pattern[str]:
         """directory regex pattern on the container having man-pages that may need to be linked"""
         return Consts._MAN_DIRS_PATTERN
+
+    @staticmethod
+    def sys_bin_dirs() -> Iterable[str]:
+        """standard directories to search for system installed executables"""
+        return Consts._SYS_BIN_DIRS
 
     @staticmethod
     def nvidia_target_base_dir() -> str:

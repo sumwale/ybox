@@ -10,7 +10,6 @@ from ybox.config import StaticConfiguration
 from ybox.print import print_info
 
 
-# noinspection PyUnusedLocal
 def clean_cache(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
                 conf: StaticConfiguration) -> int:
     """

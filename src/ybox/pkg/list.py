@@ -164,7 +164,6 @@ def _format_long_line(line: str, separator: str, dep_of_width: int,
     return name, version, dep_of, description
 
 
-# noinspection PyUnusedLocal
 def list_files(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
                conf: StaticConfiguration) -> int:
     """

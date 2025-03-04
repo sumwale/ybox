@@ -18,6 +18,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Optional
 
+from ybox import __version__ as product_version
 from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
                       parser_version_check, run_command)
 from ybox.config import Consts, StaticConfiguration
@@ -183,19 +184,24 @@ def main_argv(argv: list[str]) -> None:
 
     # set up the final container with all the required arguments
     print_info(f"Initializing container for '{distro}' using '{profile}'")
-    start_container(docker_full_args, current_user, shared_root, shared_root_dirs, conf)
+    run_container(docker_full_args, current_user, shared_root, shared_root_dirs, conf)
     print_info("Waiting for the container to initialize (see "
                f"'ybox-logs -f {box_name}' for detailed progress)")
     # wait for container to initialize while printing out its progress from conf.status_file
-    wait_for_ybox_container(docker_cmd, conf)
+    wait_for_ybox_container(docker_cmd, conf, 600)
 
     # remove distribution specific scripts and restart container the final time
-    print_info(f"Restarting the final container '{box_name}'")
+    print_info(f"Starting the final container '{box_name}'")
     Path(f"{conf.scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o644)
-    restart_container(docker_cmd, conf)
-    print_info("Waiting for the container to be ready (see "
-               f"'ybox-logs -f {box_name}' for detailed progress)")
-    wait_for_ybox_container(docker_cmd, conf)
+    wait_msg = ("Waiting for the container to be ready "
+                f"(see ybox-logs -f {box_name}' for detailed progress)")
+    if args.systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
+            systemctl := shutil.which("systemctl", path=sys_path)):
+        create_and_start_service(box_name, env, systemctl, sys_path, wait_msg)
+    else:
+        start_container(docker_cmd, conf)
+        print_info(wait_msg)
+        wait_for_ybox_container(docker_cmd, conf, 120)
     # truncate the app.list and config.list files so that those actions are skipped if the
     # container is restarted later
     if os.access(conf.app_list, os.W_OK):
@@ -262,6 +268,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-n", "--name", type=str,
                         help="name of the ybox; default is ybox-<distribution>_<profile> "
                              "if not provided (removing the .ini suffix from <profile> file)")
+    parser.add_argument("-S", "--systemd-service", action="store_true",
+                        help="create/overwrite user systemd service file for the container in "
+                             "~/.config/systemd/user and enable it by default")
     parser.add_argument("-F", "--force-own-orphans", action="store_true",
                         help="force ownership of orphan packages on the same shared root even "
                              "if container configuration does not match, meaning the packages "
@@ -781,7 +790,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
     # this is refreshed on every container start
 
     # always recreate the directory to pick up any changes
-    if os.path.exists(conf.configs_dir):
+    if os.path.isdir(conf.configs_dir):
         shutil.rmtree(conf.configs_dir)
     os.makedirs(conf.configs_dir, mode=Consts.default_directory_mode(), exist_ok=True)
     if config_hardlinks:
@@ -977,7 +986,7 @@ def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -
                           distribution's `distro.ini`
     """
     # first create local mount directory having entrypoint and other scripts
-    if os.path.exists(conf.scripts_dir):
+    if os.path.isdir(conf.scripts_dir):
         shutil.rmtree(conf.scripts_dir)
     os.makedirs(conf.scripts_dir, exist_ok=True)
     # allow for read/execute permissions for all since non-root user needs access with docker
@@ -1105,8 +1114,8 @@ def remove_image(docker_cmd: str, image_name: str) -> None:
                 error_msg="image remove")
 
 
-def start_container(docker_full_cmd: list[str], current_user: str, shared_root: str,
-                    shared_root_dirs: str, conf: StaticConfiguration) -> None:
+def run_container(docker_full_cmd: list[str], current_user: str, shared_root: str,
+                  shared_root_dirs: str, conf: StaticConfiguration) -> None:
     """
     Create and start the final ybox container applying all the provided configuration.
     The following characteristics of the container are noteworthy:
@@ -1129,9 +1138,8 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
         programs from less secure containers; the `ybox-pkg` tool provided a convenient high-level
         package manager that users should use for managing packages in the containers which will
         help in exposing packages only in designated containers
-      * systemd user service file can be generated for podman to start the container automatically
-        on user login; docker installations run a background user service in any case which starts
-        up the container without any additional setup
+      * systemd user service file can be generated for podman/docker to start the container
+        automatically on user login when -S/--systemd-service option has been provided
 
     :param docker_full_cmd: the `docker`/`podman run -itd` command with all the options filled
                             in from the container profile specification as a list of string
@@ -1185,8 +1193,61 @@ def start_container(docker_full_cmd: list[str], current_user: str, shared_root: 
         sys.exit(code)
 
 
-def restart_container(docker_cmd: str, conf: StaticConfiguration) -> None:
-    """restart a stopped podman/docker container"""
+def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_path: str,
+                             wait_msg: str) -> None:
+    """
+    Create, enable and start systemd service for a ybox container.
+
+    :param box_name: name of the ybox container
+    :param env: an instance of the current :class:`Environ`
+    :param systemctl: resolved path to the `systemctl` utility
+    :param sys_path: PATH used for searching system utilities
+    :param wait_msg: message to output before waiting for the service to start
+    """
+    svc_file = env.search_config_path("resources/ybox-systemd.template", only_sys_conf=True)
+    with svc_file.open("r", encoding="utf-8") as svc_fd:
+        svc_tmpl = svc_fd.read()
+    pid_file = ""
+    if env.uses_podman:
+        manager_name = "Podman"
+        docker_requires = ""
+        res = run_command([env.docker_cmd, "container", "inspect", "--format={{.ConmonPidFile}}",
+                           box_name], capture_output=True, exit_on_error=False)
+        if isinstance(res, str):
+            pid_file = f"PIDFile={res}"
+    else:
+        manager_name = "Docker"
+        docker_requires = "After=docker.service\nRequires=docker.service\n"
+    systemd_dir = f"{env.home}/.config/systemd/user"
+    ybox_svc = f"ybox-{box_name}.service"
+    ybox_env = f"{systemd_dir}/.ybox-{box_name}.env"
+    formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
+    svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
+                                  manager_name=manager_name, docker_requires=docker_requires,
+                                  env_file=ybox_env, pid_file=pid_file)
+    env_content = f"""
+        PATH={sys_path}:{env.home}/.local/bin
+        SLEEP_SECS={{sleep_secs}}
+        # set the container manager to the one configured during ybox-create
+        YBOX_CONTAINER_MANAGER={env.docker_cmd}
+    """
+    os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
+    print_color(f"Generating user systemd service '{ybox_svc}' and reloading daemon", fgcolor.cyan)
+    with open(f"{systemd_dir}/{ybox_svc}", "w", encoding="utf-8") as svc_fd:
+        svc_fd.write(svc_content)
+    with open(ybox_env, "w", encoding="utf-8") as env_fd:
+        env_fd.write(dedent(env_content.format(sleep_secs=0)))  # don't sleep for the start below
+    run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
+    run_command([systemctl, "--user", "enable", ybox_svc], exit_on_error=True)
+    print_info(wait_msg)
+    run_command([systemctl, "--user", "start", ybox_svc], exit_on_error=True)
+    # change SLEEP_SECS to 7 for subsequent starts
+    with open(ybox_env, "w", encoding="utf-8") as env_fd:
+        env_fd.write(dedent(env_content.format(sleep_secs=7)))
+
+
+def start_container(docker_cmd: str, conf: StaticConfiguration) -> None:
+    """start a stopped podman/docker container"""
     if (code := int(run_command([docker_cmd, "container", "start", conf.box_name],
                                 exit_on_error=False, error_msg="container restart"))) != 0:
         print_error(f"Also check 'ybox-logs {conf.box_name}' for details")

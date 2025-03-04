@@ -69,6 +69,7 @@ class PkgDetail(Enum):
     OPTIONAL_DEP = 5
 
 
+# noinspection PyUnusedLocal
 def process_next_item(line: str, parse_line: Callable[[str], tuple[PkgDetail, str]],
                       parse_dep: Callable[[str], Iterable[tuple[str, str, Optional[str]]]],
                       installed: Callable[[str], bool], max_level: int,
