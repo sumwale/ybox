@@ -54,8 +54,8 @@ So, for example, if you want to run the latest and greatest Intellij IDEA commun
 to do is:
 
 ```sh
-# create an Arch Linux based container
-ybox-create arch
+# create an Arch Linux based container (and generate systemd service file with the -S option)
+ybox-create -S arch
 # then select an appropriate built-in profile e.g. "dev.ini" from the menu
 
 # then install the Arch package in the container
@@ -152,6 +152,7 @@ to point to the full path of the podman or docker executable.
 ybox-create
 ```
 
+Add `-S` option (or `--systemd-service`) to also generate user systemd service file.
 This will allow choosing from supported distributions, then from the available profiles.
 You can start with the Arch Linux distribution and `apps.ini` profile to try it out. The container
 will have a name like `ybox-<distribution>_<profile>` by default like `ybox-arch_apps` for the
@@ -224,7 +225,7 @@ ybox-pkg list -o
 ```
 To show more details of the packages (combine with -a/-o as required):
 ```sh
-ybox-pkg list -o
+ybox-pkg list -v
 ```
 
 List all the files installed by the package:
@@ -264,6 +265,8 @@ Clean package cache, temporary downloads etc:
 ```sh
 ybox-pkg clean
 ```
+Add `-q` option to answer yes for any questions automatically if all your containers use
+the same shared root.
 
 Mark a package as explicitly installed (also registers with `ybox-pkg` if not present):
 ```sh
@@ -392,25 +395,30 @@ for a ybox container. See the full set of options with `ybox-control -h/--help`.
 ### Auto-starting containers
 
 Containers can be auto-started as per the usual way for rootless podman/docker services.
-This is triggered by systemd on user login which is exactly what we want for ybox
+This is triggered by systemd on user login which is exactly what is required for ybox
 containers so that the container applications are available on login and are stopped on
-session logout. For docker the following should suffice:
+session logout. All the tested Linux distributions support this and provide for user
+systemd daemon on user login.
+
+The `ybox-create` command provides the `-S` or `--systemd-service` option to autogenerate
+the systemd service file (which is also removed by `ybox-destroy` automatically).
+The name of the generated service is `ybox-<NAME>` where `<NAME>` is the name of the container.
+
+With a user service installed, the `systemctl` commands can be used to control the
+ybox container (`<SERVICE_NAME>` is `ybox-<NAME>` mentioned above):
 
 ```sh
-systemctl --user enable docker
+systemctl --user status <SERVICE_NAME>  # show status of the service
+systemctl --user stop <SERVICE_NAME>    # stop the service
+systemctl --user start <SERVICE_NAME>   # start the service
 ```
 
-See [docker docs](https://docs.docker.com/engine/security/rootless/#daemon) for details.
-
-For podman you will need to explicitly generate systemd service file for each container and
-copy to your systemd configuration directory since podman does not use a background daemon.
-For the `ybox-arch_apps` container in the examples before:
-
-```sh
-mkdir -p ~/.config/systemd/user/
-podman generate systemd --name ybox-arch_apps > ~/.config/systemd/user/container-ybox-arch_apps.service
-systemctl --user enable container-ybox-arch_apps.service
-```
+If your Linux distribution does not use systemd, then the autostart has to be handled
+manually as per the distribution's preferred way. For instance an appropriate desktop
+file can be added to `~/.config/autostart` directory to start a ybox container on
+graphical login, though performing a clean stop can be hard with this approach.
+Note that the preferred way to start/stop a ybox container is using the `ybox-control`
+command rather than directly using podman/docker.
 
 
 ## Development

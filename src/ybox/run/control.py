@@ -32,7 +32,7 @@ def start_container(docker_cmd: str, args: argparse.Namespace):
     container_name = args.container
     if status := get_ybox_state(docker_cmd, container_name, (), exit_on_error=False):
         if status[0] == "running":
-            print_color(f"Ybox container '{container_name}' already active", fg=fgcolor.cyan)
+            print_color(f"ybox container '{container_name}' already active", fg=fgcolor.cyan)
         else:
             print_color(f"Starting ybox container '{container_name}'", fg=fgcolor.cyan)
             run_command([docker_cmd, "container", "start", container_name],
