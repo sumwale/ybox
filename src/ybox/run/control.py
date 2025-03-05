@@ -107,6 +107,17 @@ def show_container_status(docker_cmd: str, args: argparse.Namespace) -> None:
         print_error(f"No ybox container '{container_name}' found")
 
 
+def wait_for_container_stop(docker_cmd: str, args: argparse.Namespace) -> None:
+    """
+    Wait for an active container to stop.
+
+    :param docker_cmd: the podman/docker executable to use
+    :param args: arguments having all attributes passed by the user
+    """
+    while check_active_ybox(docker_cmd, args.container):
+        time.sleep(2)
+
+
 def main_argv(argv: list[str]) -> None:
     """
     Main entrypoint of `ybox-control` that takes a list of arguments which are usually the
@@ -138,7 +149,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     stop = operations.add_parser("stop", help="stop a ybox container")
     _add_subparser_args(stop, 10,
                         "time in seconds to wait for a container to stop before killing it")
-    stop.add_argument("--ignore-stopped", action="store_true",
+    stop.add_argument("-I", "--ignore-stopped", action="store_true",
                       help="don't fail on an already stopped container")
     stop.set_defaults(func=stop_container)
 
@@ -149,6 +160,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     status = operations.add_parser("status", help="show status of a ybox container")
     _add_subparser_args(status, 0, "")
     status.set_defaults(func=show_container_status)
+
+    wait = operations.add_parser("wait", help="wait for an active ybox container to stop")
+    _add_subparser_args(wait, 0, "")
+    wait.set_defaults(func=wait_for_container_stop)
 
     parser_version_check(parser, argv)
     return parser.parse_args(argv)

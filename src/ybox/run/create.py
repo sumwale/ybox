@@ -1207,26 +1207,20 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
     svc_file = env.search_config_path("resources/ybox-systemd.template", only_sys_conf=True)
     with svc_file.open("r", encoding="utf-8") as svc_fd:
         svc_tmpl = svc_fd.read()
-    pid_file = ""
     if env.uses_podman:
         manager_name = "Podman"
         docker_requires = ""
-        res = run_command([env.docker_cmd, "container", "inspect", "--format={{.ConmonPidFile}}",
-                           box_name], capture_output=True, exit_on_error=False)
-        if isinstance(res, str):
-            pid_file = f"PIDFile={res}"
     else:
         manager_name = "Docker"
         docker_requires = "After=docker.service\nRequires=docker.service\n"
     systemd_dir = f"{env.home}/.config/systemd/user"
     ybox_svc = f"ybox-{box_name}.service"
-    ybox_env = f"{systemd_dir}/.ybox-{box_name}.env"
+    ybox_env = f".ybox-{box_name}.env"
     formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
     svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
                                   manager_name=manager_name, docker_requires=docker_requires,
-                                  env_file=ybox_env, pid_file=pid_file)
+                                  sys_path=sys_path, env_file=ybox_env)
     env_content = f"""
-        PATH={sys_path}:{env.home}/.local/bin
         SLEEP_SECS={{sleep_secs}}
         # set the container manager to the one configured during ybox-create
         YBOX_CONTAINER_MANAGER={env.docker_cmd}
@@ -1235,14 +1229,14 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
     print_color(f"Generating user systemd service '{ybox_svc}' and reloading daemon", fgcolor.cyan)
     with open(f"{systemd_dir}/{ybox_svc}", "w", encoding="utf-8") as svc_fd:
         svc_fd.write(svc_content)
-    with open(ybox_env, "w", encoding="utf-8") as env_fd:
+    with open(f"{systemd_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content.format(sleep_secs=0)))  # don't sleep for the start below
     run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
     run_command([systemctl, "--user", "enable", ybox_svc], exit_on_error=True)
     print_info(wait_msg)
     run_command([systemctl, "--user", "start", ybox_svc], exit_on_error=True)
     # change SLEEP_SECS to 7 for subsequent starts
-    with open(ybox_env, "w", encoding="utf-8") as env_fd:
+    with open(f"{systemd_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content.format(sleep_secs=7)))
 
 
