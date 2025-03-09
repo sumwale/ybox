@@ -20,7 +20,8 @@ _STD_LIB_DIR_PATTERNS = ["&/usr/lib/*-linux-gnu", "&/lib/*-linux-gnu", "&/usr/li
                          "&/lib64/*-linux-gnu", "&/usr/lib32/*-linux-gnu", "&/lib32/*-linux-gnu"]
 _STD_LD_LIB_PATH_VARS = ["LD_LIBRARY_PATH", "LD_LIBRARY_PATH_64", "LD_LIBRARY_PATH_32"]
 _NVIDIA_LIB_PATTERNS = ["*nvidia*.so*", "*NVIDIA*.so*", "libcuda*.so*", "libnvcuvid*.so*",
-                        "libnvoptix*.so*", "gbm/*nvidia*.so*", "vdpau/*nvidia*.so*"]
+                        "libnvoptix*.so*", "gbm/*nvidia*.so*", "vdpau/*nvidia*.so*",
+                        "libXNVCtrl.so*"]
 _NVIDIA_BIN_PATTERNS = ["nvidia-smi", "nvidia-cuda*", "nvidia-debug*", "nvidia-bug*"]
 # note that the code below assumes that file name pattern below is always of the form *nvidia*
 # (while others are directories), so if that changes then update _process_nvidia_data_files

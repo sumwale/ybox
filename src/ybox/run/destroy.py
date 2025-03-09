@@ -37,7 +37,8 @@ def main_argv(argv: list[str]) -> None:
     print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
     # check if there is a systemd service for the container
     systemd_dir = f"{env.home}/.config/systemd/user"
-    ybox_svc = f"ybox-{container_name}.service"
+    ybox_svc_prefix = ybox_systemd_service_prefix(container_name)
+    ybox_svc = f"{ybox_svc_prefix}.service"
     ybox_svc_path = ""
     if (systemctl := shutil.which("systemctl", path=os.pathsep.join(Consts.sys_bin_dirs()))) and \
             not os.access(ybox_svc_path := f"{systemd_dir}/{ybox_svc}", os.R_OK):
@@ -64,7 +65,7 @@ def main_argv(argv: list[str]) -> None:
         run_command([systemctl, "--user", "disable", ybox_svc], exit_on_error=False)
         os.unlink(ybox_svc_path)
         try:
-            os.unlink(f"{systemd_dir}/.ybox-{container_name}.env")
+            os.unlink(f"{systemd_dir}/.{ybox_svc_prefix}.env")
         except OSError:
             pass
         run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
@@ -95,6 +96,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("container_name", type=str, help="name of the active ybox")
     parser_version_check(parser, argv)
     return parser.parse_args(argv)
+
+
+def ybox_systemd_service_prefix(container_name: str) -> str:
+    """systemd service name prefix for given ybox container name"""
+    return container_name if container_name.startswith("ybox-") else f"ybox-{container_name}"
 
 
 def get_all_containers(docker_cmd: str) -> list[str]:

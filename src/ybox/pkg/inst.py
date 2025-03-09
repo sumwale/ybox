@@ -156,7 +156,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
             if not skip_desktop_files:
                 copy_type |= CopyType.DESKTOP
             if not skip_executables:
-                resp = input("Create application executable(s)? (Y/n) ") if quiet == 0 else "Y"
+                resp = input("Create wrapper(s) for application executable(s) of package "
+                             f"'{package}'? (Y/n) ") if quiet == 0 else "Y"
                 if resp.strip().lower() != "n":
                     copy_type |= CopyType.EXECUTABLE
         # TODO: wrappers for newly installed required dependencies should also be created;

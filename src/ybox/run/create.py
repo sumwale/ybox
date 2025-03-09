@@ -27,7 +27,8 @@ from ybox.filelock import FileLock
 from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
                         print_notice, print_warn)
-from ybox.run.destroy import get_all_containers, remove_orphans_from_db
+from ybox.run.destroy import (get_all_containers, remove_orphans_from_db,
+                              ybox_systemd_service_prefix)
 from ybox.run.graphics import (add_env_option, add_mount_option, enable_dri,
                                enable_nvidia, enable_wayland, enable_x11)
 from ybox.run.pkg import parse_args as pkg_parse_args
@@ -195,8 +196,10 @@ def main_argv(argv: list[str]) -> None:
     Path(f"{conf.scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o644)
     wait_msg = ("Waiting for the container to be ready "
                 f"(see ybox-logs -f {box_name}' for detailed progress)")
-    if args.systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
-            systemctl := shutil.which("systemctl", path=sys_path)):
+    if not args.skip_systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
+            systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
+                [systemctl, "--user", "--quiet", "is-enabled", "default.target"],
+                exit_on_error=False) == 0:
         create_and_start_service(box_name, env, systemctl, sys_path, wait_msg)
     else:
         start_container(docker_cmd, conf)
@@ -268,9 +271,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-n", "--name", type=str,
                         help="name of the ybox; default is ybox-<distribution>_<profile> "
                              "if not provided (removing the .ini suffix from <profile> file)")
-    parser.add_argument("-S", "--systemd-service", action="store_true",
-                        help="create/overwrite user systemd service file for the container in "
-                             "~/.config/systemd/user and enable it by default")
+    parser.add_argument("-S", "--skip-systemd-service", action="store_true",
+                        help="skip creation of user systemd service file for the ybox container; "
+                             "by default a user systemd service file is created and enabled in "
+                             "~/.config/systemd/user with the name 'ybox-<name>.service' if the "
+                             "<name> does not begin with 'ybox-' prefix else '<name>.service' if "
+                             "it already has 'ybox-' prefix")
     parser.add_argument("-F", "--force-own-orphans", action="store_true",
                         help="force ownership of orphan packages on the same shared root even "
                              "if container configuration does not match, meaning the packages "
@@ -1138,8 +1144,8 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
         programs from less secure containers; the `ybox-pkg` tool provided a convenient high-level
         package manager that users should use for managing packages in the containers which will
         help in exposing packages only in designated containers
-      * systemd user service file can be generated for podman/docker to start the container
-        automatically on user login when -S/--systemd-service option has been provided
+      * systemd user service file is generated for podman/docker to start the container
+        automatically on user login (in absence of -S/--skip-systemd-service option)
 
     :param docker_full_cmd: the `docker`/`podman run -itd` command with all the options filled
                             in from the container profile specification as a list of string
@@ -1214,8 +1220,9 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
         manager_name = "Docker"
         docker_requires = "After=docker.service\nRequires=docker.service\n"
     systemd_dir = f"{env.home}/.config/systemd/user"
-    ybox_svc = f"ybox-{box_name}.service"
-    ybox_env = f".ybox-{box_name}.env"
+    ybox_svc_prefix = ybox_systemd_service_prefix(box_name)
+    ybox_svc = f"{ybox_svc_prefix}.service"
+    ybox_env = f".{ybox_svc_prefix}.env"
     formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
     svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
                                   manager_name=manager_name, docker_requires=docker_requires,

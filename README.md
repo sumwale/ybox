@@ -54,8 +54,8 @@ So, for example, if you want to run the latest and greatest Intellij IDEA commun
 to do is:
 
 ```sh
-# create an Arch Linux based container (and generate systemd service file with the -S option)
-ybox-create -S arch
+# create an Arch Linux based container and generate systemd service file (if possible)
+ybox-create arch
 # then select an appropriate built-in profile e.g. "dev.ini" from the menu
 
 # then install the Arch package in the container
@@ -152,7 +152,8 @@ to point to the full path of the podman or docker executable.
 ybox-create
 ```
 
-Add `-S` option (or `--systemd-service`) to also generate user systemd service file.
+By default this will also generate a user systemd service if possible (add `-S` or
+  `--skip-systemd-service` option to skip creation of a user systemd service).
 This will allow choosing from supported distributions, then from the available profiles.
 You can start with the Arch Linux distribution and `apps.ini` profile to try it out. The container
 will have a name like `ybox-<distribution>_<profile>` by default like `ybox-arch_apps` for the
@@ -400,12 +401,13 @@ containers so that the container applications are available on login and are sto
 session logout. All the tested Linux distributions support this and provide for user
 systemd daemon on user login.
 
-The `ybox-create` command provides the `-S` or `--systemd-service` option to autogenerate
-the systemd service file (which is also removed by `ybox-destroy` automatically).
-The name of the generated service is `ybox-<NAME>` where `<NAME>` is the name of the container.
+The `ybox-create` command  autogenerates the systemd service file (in absence of `-S` or
+  `--skip-systemd-service` option) which is also removed by `ybox-destroy` automatically.
+The name of the generated service is `ybox-<NAME>` where `<NAME>` is the name of the
+container if `<NAME>` does not start with `ybox-` prefix, else it is just `<NAME>`.
 
 With a user service installed, the `systemctl` commands can be used to control the
-ybox container (`<SERVICE_NAME>` is `ybox-<NAME>` mentioned above):
+ybox container (`<SERVICE_NAME>` is `ybox-<NAME>/<NAME>` mentioned above):
 
 ```sh
 systemctl --user status <SERVICE_NAME>  # show status of the service
