@@ -202,6 +202,10 @@ def main_argv(argv: list[str]) -> None:
                 exit_on_error=False) == 0:
         create_and_start_service(box_name, env, systemctl, sys_path, wait_msg)
     else:
+        if not args.skip_systemd_service:
+            print_warn("Skipping user systemd service generation due to missing systemctl in "
+                       f"PATH={os.pathsep.join(Consts.sys_bin_dirs())} or failure in "
+                       "'systemctl --user is-enabled default.target'")
         start_container(docker_cmd, conf)
         print_info(wait_msg)
         wait_for_ybox_container(docker_cmd, conf, 120)
@@ -1224,9 +1228,16 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
     ybox_svc = f"{ybox_svc_prefix}.service"
     ybox_env = f".{ybox_svc_prefix}.env"
     formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
+    # get the path of ybox-control and replace $HOME by %h to keep it generic
+    if ybox_ctrl_path := shutil.which("ybox-control"):
+        ybox_dir = os.path.dirname(ybox_ctrl_path)
+        if ybox_dir.startswith(env.home + "/"):
+            ybox_dir = f"%h{ybox_dir[len(env.home):]}"
+    else:
+        ybox_dir = "%h/.local/bin"
     svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
                                   manager_name=manager_name, docker_requires=docker_requires,
-                                  sys_path=sys_path, env_file=ybox_env)
+                                  sys_path=sys_path, ybox_dir=ybox_dir, env_file=ybox_env)
     env_content = f"""
         SLEEP_SECS={{sleep_secs}}
         # set the container manager to the one configured during ybox-create
