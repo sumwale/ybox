@@ -392,11 +392,11 @@ def add_mark(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-e", "--explicit", action="store_true",
                            help="mark the package as explicitly installed; the package will "
                                 "henceforth be managed by `ybox-pkg` if not already; "
-                                "exactly one of -e or -D option must be specified")
-    subparser.add_argument("-D", "--dependency-of", type=str,
+                                "exactly one of -e or -d option must be specified")
+    subparser.add_argument("-d", "--dependency-of", type=str,
                            help="mark the package as a dependency of given package; both the "
                                 "packages will henceforth be managed by `ybox-pkg` if not "
-                                "already; exactly one of -e or -D option must be specified")
+                                "already; exactly one of -e or -d option must be specified")
     subparser.add_argument("package", type=str, help="the package to be marked")
     subparser.set_defaults(func=mark_package)
 

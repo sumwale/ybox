@@ -694,12 +694,10 @@ def enable_dbus(docker_args: list[str], sys_enable: bool, env: Environ) -> None:
         add_mount_option(docker_args, dbus_user, replace_target_dir(dbus_user))
         add_env_option(docker_args, "DBUS_SESSION_BUS_ADDRESS", replace_target_dir(dbus_session))
     if sys_enable:
-        dbus_sys = "/run/dbus/system_bus_socket"
-        dbus_sys2 = "/var/run/dbus/system_bus_socket"
-        if os.access(dbus_sys, os.W_OK):
-            add_mount_option(docker_args, dbus_sys, dbus_sys)
-        elif os.access(dbus_sys2, os.W_OK):
-            add_mount_option(docker_args, dbus_sys2, dbus_sys)
+        for dbus_sys in ("/run/dbus/system_bus_socket", "/var/run/dbus/system_bus_socket"):
+            if os.access(dbus_sys, os.W_OK):
+                add_mount_option(docker_args, dbus_sys, dbus_sys)
+                break
 
 
 def add_multi_opt(docker_args: list[str], opt: str, val: Optional[str]) -> None:
@@ -927,11 +925,13 @@ def copytree(src_path: str, dest: str, hardlink: bool = False,
     Note: this function only handles regular files and directories (and hard/symbolic links to
     them) and will skip special files like device files, fifos etc.
 
-    :param src_path: the resolved source directory (using `os.path.realpath` or `Path.resolve`)
+    :param src_path: the source directory to be copied (should have been resolved using
+                     `os.path.realpath` or `Path.resolve` if `src_root` argument is not supplied)
     :param dest: the destination directory which should exist
     :param hardlink: if True then create hard links to the files in the source (so it should
                        be in the same filesystem) else copy the files, defaults to False
-    :param src_root: the resolved root source directory (same as `src_path` if `None`)
+    :param src_root: the resolved root source directory (same as `src_path` if `None` which is
+                     assumed to have been resolved using `os.path.realpath` or `Path.resolve`)
     """
     src_root = src_root or src_path
     os.mkdir(dest, mode=stat.S_IMODE(os.stat(src_path).st_mode))

@@ -275,7 +275,7 @@ ybox-pkg mark firefox -e
 
 Mark a package as a dependency of another (also registers with `ybox-pkg` if not present):
 ```sh
-ybox-pkg mark qt5ct -D zoom  # mark qt5ct as an optional dependency of zoom
+ybox-pkg mark qt5ct -d zoom  # mark qt5ct as an optional dependency of zoom
 ```
 
 Repair package installation after a failure or interrupt:

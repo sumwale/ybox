@@ -30,7 +30,7 @@ def mark_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str
     mark_explicit: bool = args.explicit
     mark_dependency_of: str = args.dependency_of or ""
     if not mark_explicit ^ bool(mark_dependency_of):
-        print_error("ybox-pkg mark: exactly one of -e or -D option must be specified "
+        print_error("ybox-pkg mark: exactly one of -e or -d option must be specified "
                     f"(explicit={mark_explicit}, dependency-of={mark_dependency_of})")
         return 1
     # check that the package(s) are installed and replace with actual installed name
