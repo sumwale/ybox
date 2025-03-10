@@ -944,6 +944,7 @@ def copytree(src_path: str, dest: str, hardlink: bool = False,
                      assumed to have been resolved using `os.path.realpath` or `Path.resolve`)
     """
     src_root = src_root or src_path
+    src_root = src_root.rstrip("/")
     os.mkdir(dest, mode=stat.S_IMODE(os.stat(src_path).st_mode))
     # follow symlink if it leads to outside the "src" tree, else copy as a symlink which
     # ensures that all destination files are always accessible regardless of source going
@@ -961,7 +962,7 @@ def copytree(src_path: str, dest: str, hardlink: bool = False,
                         os.symlink(l_name, dest_path)
                         continue
                     entry_path = os.path.realpath(entry.path)
-                    if entry_path.startswith(src_root) and entry_path[len(src_root)] == "/":
+                    if entry_path.startswith(src_root + "/"):
                         rpath = entry_path[len(src_root) + 1:]
                         os.symlink(("../" * rpath.count("/")) + rpath, dest_path)
                         continue
@@ -1230,14 +1231,14 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
     formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
     # get the path of ybox-control and replace $HOME by %h to keep it generic
     if ybox_ctrl_path := shutil.which("ybox-control"):
-        ybox_dir = os.path.dirname(ybox_ctrl_path)
-        if ybox_dir.startswith(env.home + "/"):
-            ybox_dir = f"%h{ybox_dir[len(env.home):]}"
+        ybox_bin_dir = os.path.dirname(ybox_ctrl_path)
+        if ybox_bin_dir.startswith(env.home + "/"):
+            ybox_bin_dir = f"%h{ybox_bin_dir[len(env.home):]}"
     else:
-        ybox_dir = "%h/.local/bin"
+        ybox_bin_dir = "%h/.local/bin"
     svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
                                   manager_name=manager_name, docker_requires=docker_requires,
-                                  sys_path=sys_path, ybox_dir=ybox_dir, env_file=ybox_env)
+                                  sys_path=sys_path, ybox_bin_dir=ybox_bin_dir, env_file=ybox_env)
     env_content = f"""
         SLEEP_SECS={{sleep_secs}}
         # set the container manager to the one configured during ybox-create

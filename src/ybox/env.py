@@ -60,34 +60,41 @@ class Environ:
         :param home_dir: if a non-default user home directory has to be set
         """
         self._home_dir = home_dir or os.path.expanduser("~")
+        self._home_dir = self._home_dir.rstrip("/")
         self._docker_cmd = docker_cmd or get_docker_command()
         cmd_version = subprocess.check_output([self._docker_cmd, "--version"])
         self._uses_podman = "podman" in cmd_version.decode("utf-8").lower()
         # local user home might be in a different location than /home but target user in the
         # container will always be in /home with podman else /root for the root user with docker
         # as ensured by entrypoint-base.sh script
-        target_uid = 0
+        current_user = getpass.getuser()
+        current_uid = pwd.getpwnam(current_user).pw_uid
         if self._uses_podman:
-            self._target_user = getpass.getuser()
-            target_uid = pwd.getpwnam(self._target_user).pw_uid
+            self._target_user = current_user
+            target_uid = current_uid
             self._target_home = f"/home/{self._target_user}"
         else:
             self._target_user = "root"
+            target_uid = 0
             self._target_home = "/root"
             # confirm that docker is being used in rootless mode (not required for podman because
             #   it runs as rootless when run by a non-root user in any case without explicit sudo
             #   which the ybox tools don't use)
             if (docker_ctx := subprocess.check_output(
                     [self._docker_cmd, "context", "show"]).decode("utf-8")).strip() != "rootless":
-                raise NotSupportedError("docker should use the rootless mode (see "
-                                        "https://docs.docker.com/engine/security/rootless/) "
-                                        f"but the current context is '{docker_ctx}'")
+                # check for DOCKER_HOST environment variable
+                expected_docker_host = f"unix:///run/user/{current_uid}/docker.sock"
+                if not docker_ctx or os.environ.get("DOCKER_HOST", "") != expected_docker_host:
+                    raise NotSupportedError("docker should use the rootless mode (see "
+                                            "https://docs.docker.com/engine/security/rootless/) "
+                                            f"but the current context is '{docker_ctx}' and "
+                                            f"$DOCKER_HOST is not set to '{expected_docker_host}'")
         os.environ["TARGET_HOME"] = self._target_home
         self._user_base = user_base = site.getuserbase()
         target_user_base = f"{self._target_home}/.local"
         self._data_dir = f"{user_base}/share/ybox"
         self._target_data_dir = f"{target_user_base}/share/ybox"
-        self._xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "")
+        self._xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "").rstrip("/")
         # the container user's one can be different because it is the root user for docker
         self._target_xdg_rt_dir = f"/run/user/{target_uid}"
         self._now = datetime.now()

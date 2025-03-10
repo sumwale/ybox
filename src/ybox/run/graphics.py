@@ -87,7 +87,7 @@ def enable_x11(docker_args: list[str], env: Environ) -> None:
         # check if parent_dir is in $XDG_RUNTIME_DIR or /tmp
         if not env.xdg_rt_dir:
             parent_dirs = {parent_dir, "/tmp"}
-        elif xauth.startswith(f"{env.xdg_rt_dir}/") or xauth.startswith("/tmp/"):
+        elif xauth.startswith(env.xdg_rt_dir + "/") or xauth.startswith("/tmp/"):
             parent_dirs = (env.xdg_rt_dir, "/tmp")
             parent_dir = "/tmp" if parent_dir.startswith("/tmp") else env.xdg_rt_dir
         else:
