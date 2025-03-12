@@ -155,6 +155,10 @@ class Environ:
         """if podman is the container manager being used"""
         return self._uses_podman
 
+    def systemd_user_conf_dir(self) -> str:
+        """standard configuration directory location of user specific systemd services"""
+        return f"{self._home_dir}/.config/systemd/user"
+
     @property
     def target_user(self) -> str:
         """username of the container user (which is the same as the current user for podman

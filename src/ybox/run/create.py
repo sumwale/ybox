@@ -1224,7 +1224,7 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
     else:
         manager_name = "Docker"
         docker_requires = "After=docker.service\nRequires=docker.service\n"
-    systemd_dir = f"{env.home}/.config/systemd/user"
+    systemd_dir = env.systemd_user_conf_dir()
     ybox_svc_prefix = ybox_systemd_service_prefix(box_name)
     ybox_svc = f"{ybox_svc_prefix}.service"
     ybox_env = f".{ybox_svc_prefix}.env"

@@ -5,6 +5,7 @@ Code for the `ybox-destroy` script that is used to destroy an active or stopped 
 import argparse
 import os
 import shutil
+import subprocess
 import sys
 
 from ybox.cmd import check_ybox_exists, parser_version_check, run_command
@@ -36,16 +37,12 @@ def main_argv(argv: list[str]) -> None:
     check_ybox_exists(docker_cmd, container_name, exit_on_error=True)
     print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
     # check if there is a systemd service for the container
-    systemd_dir = f"{env.home}/.config/systemd/user"
     ybox_svc_prefix = ybox_systemd_service_prefix(container_name)
     ybox_svc = f"{ybox_svc_prefix}.service"
-    ybox_svc_path = ""
-    if (systemctl := shutil.which("systemctl", path=os.pathsep.join(Consts.sys_bin_dirs()))) and \
-            not os.access(ybox_svc_path := f"{systemd_dir}/{ybox_svc}", os.R_OK):
-        ybox_svc_path = ""
+    systemctl = check_systemd_service_present(ybox_svc)
 
     # continue even if this fails since the container may already be in stopped state
-    if systemctl and ybox_svc_path:
+    if systemctl:
         run_command([systemctl, "--user", "stop", ybox_svc],
                     exit_on_error=False, error_msg=f"stopping '{container_name}'")
     else:
@@ -60,10 +57,14 @@ def main_argv(argv: list[str]) -> None:
     run_command(rm_args, error_msg=f"removing '{container_name}'")
 
     # remove systemd service file and reload daemon
-    if systemctl and ybox_svc_path:
+    if systemctl:
         print_color(f"Removing systemd service '{ybox_svc}' and reloading daemon", fg=fgcolor.cyan)
         run_command([systemctl, "--user", "disable", ybox_svc], exit_on_error=False)
-        os.unlink(ybox_svc_path)
+        systemd_dir = env.systemd_user_conf_dir()
+        try:
+            os.unlink(f"{systemd_dir}/{ybox_svc}")
+        except OSError:
+            pass
         try:
             os.unlink(f"{systemd_dir}/.{ybox_svc_prefix}.env")
         except OSError:
@@ -101,6 +102,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def ybox_systemd_service_prefix(container_name: str) -> str:
     """systemd service name prefix for given ybox container name"""
     return container_name if container_name.startswith("ybox-") else f"ybox-{container_name}"
+
+
+def check_systemd_service_present(user_svc: str) -> str:
+    """
+    Check if the given user systemd service is present and return the PATH of system installed
+    `systemctl` tool if true, else return empty string.
+
+    :param user_svc: name the user systemd service file
+    :return: full path of `systemctl` if installed and user systemd service is available else empty
+    """
+    if (systemctl := shutil.which("systemctl", path=os.pathsep.join(Consts.sys_bin_dirs()))) and \
+            subprocess.run([systemctl, "--user", "--quiet", "list-unit-files", user_svc],
+                           check=False, capture_output=True).returncode == 0:
+        return systemctl
+    return ""
 
 
 def get_all_containers(docker_cmd: str) -> list[str]:
