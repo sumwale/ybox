@@ -46,7 +46,8 @@ def add_env_option(docker_args: list[str], env_var: str, env_val: Optional[str] 
         docker_args.append(f"-e={env_var}={env_val}")
 
 
-def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "") -> None:
+def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "",
+                     check_exists: bool = False) -> None:
     """
     Add option to the list of podman/docker arguments to bind mount a source directory to
     given destination directory.
@@ -55,11 +56,40 @@ def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "
     :param src: the source directory in the host system
     :param dest: the destination directory in the container
     :param flags: any additional flags to be passed to `-v` podman/docker argument, defaults to ""
+    :param check_exists: check if the bind mount was already added (and skip if so)
     """
-    if flags:
-        docker_args.append(f"-v={src}:{dest}:{flags}")
+    mount_arg = f"-v={src}:{dest}:{flags}" if flags else f"-v={src}:{dest}"
+    if not check_exists or mount_arg not in docker_args:
+        docker_args.append(mount_arg)
+
+
+def handle_variable_mount(docker_args: list[str], env: Environ, mount_path: str) -> str:
+    """
+    Handle the case where a mount point may change in different starts or even within the same
+    started container instance. In these cases the "base" directory of the mount point is
+    mounted instead which should normally be `/tmp` or `$XDG_RUNTIME_DIR`. The variable values
+    are assumed to lie between these two, or the parent directory of the mount point if it does
+    not lie within these two base directories. The actual passing of the required environment
+    variable (that can change) is handled by the `run-in-dir` script that will adjust the variable
+    value to reflect that mount point added by this method.
+
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
+    :param env: an instance of the current :class:`Environ`
+    :param mount_path: the variable path which is usually the value of an environment variable
+    :return: the result mount point inside the container for the `mount_path`
+    """
+    base_dir = os.path.dirname(mount_path)
+    # check if parent_dir is in $XDG_RUNTIME_DIR or /tmp
+    if not env.xdg_rt_dir:
+        base_dirs = {base_dir, "/tmp"}
+    elif mount_path.startswith(env.xdg_rt_dir + "/") or mount_path.startswith("/tmp/"):
+        base_dirs = (env.xdg_rt_dir, "/tmp")
+        base_dir = "/tmp" if base_dir.startswith("/tmp") else env.xdg_rt_dir
     else:
-        docker_args.append(f"-v={src}:{dest}")
+        base_dirs = (base_dir, env.xdg_rt_dir, "/tmp")
+    for b_dir in base_dirs:
+        add_mount_option(docker_args, b_dir, f"{b_dir}-host", "ro", check_exists=True)
+    return mount_path.replace(base_dir, f"{base_dir}-host")
 
 
 def enable_x11(docker_args: list[str], env: Environ) -> None:
@@ -83,18 +113,7 @@ def enable_x11(docker_args: list[str], env: Environ) -> None:
         # parent can cause trouble if one changes the display manager, for example, which
         # uses an entirely different mount point (e.g. gdm uses /run/user/... while sddm
         #   uses /tmp)
-        parent_dir = os.path.dirname(xauth)
-        # check if parent_dir is in $XDG_RUNTIME_DIR or /tmp
-        if not env.xdg_rt_dir:
-            parent_dirs = {parent_dir, "/tmp"}
-        elif xauth.startswith(env.xdg_rt_dir + "/") or xauth.startswith("/tmp/"):
-            parent_dirs = (env.xdg_rt_dir, "/tmp")
-            parent_dir = "/tmp" if parent_dir.startswith("/tmp") else env.xdg_rt_dir
-        else:
-            parent_dirs = (parent_dir, env.xdg_rt_dir, "/tmp")
-        for p_dir in parent_dirs:
-            add_mount_option(docker_args, p_dir, f"{p_dir}-host", "ro")
-        target_xauth = xauth.replace(parent_dir, f"{parent_dir}-host")
+        target_xauth = handle_variable_mount(docker_args, env, xauth)
         add_env_option(docker_args, "XAUTHORITY", target_xauth)
         add_env_option(docker_args, "XAUTHORITY_ORIG", target_xauth)
 

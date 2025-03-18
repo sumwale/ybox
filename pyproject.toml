@@ -30,7 +30,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-keywords = ["Linux in container", "toolbox"]
+keywords = ["Linux in container", "toolbox", "distrobox"]
 
 [project.urls]
 Homepage = "https://github.com/sumwale/ybox"

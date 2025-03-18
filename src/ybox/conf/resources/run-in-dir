@@ -9,24 +9,29 @@ if [ -n "$dir" -a -d "$dir" ]; then
   cd "$dir"
 fi
 
-# XAUTHORITY file can change after a re-login or a restart, so search for the passed one
-# by podman/docker exec in the mount point of its parent directory
-if [ -n "$XAUTHORITY" -a -n "$XAUTHORITY_ORIG" -a ! -r "$XAUTHORITY" ]; then
-  # XAUTHORITY is assumed to be either in /run/user or in /tmp
-  run_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-  if [[ "$XAUTHORITY" == $run_dir/* ]]; then
-    host_dir="$run_dir"
-  elif [[ "$XAUTHORITY" == /tmp/* ]]; then
-    host_dir=/tmp
-  else
-    host_dir="$(dirname "$XAUTHORITY")"
+# XAUTHORITY, SSH_AUTH_SOCK and GPG_AGENT_INFO files can change after a re-login or a restart,
+# so search for the passed one by podman/docker exec in the mount point of its parent directory
+for env_var in XAUTHORITY SSH_AUTH_SOCK GPG_AGENT_INFO; do
+  env_var_orig=${env_var}_ORIG
+  var_val=${!env_var}
+  var_val_orig=${!env_var_orig}
+  if [ -n "$var_val" -a -n "$var_val_orig" -a ! -r "$var_val" ]; then
+    # the value should be in /run/user/<uid> or in /tmp, or else the parent directory is used
+    run_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    if [[ "$var_val" == $run_dir/* ]]; then
+      host_dir="$run_dir"
+    elif [[ "$var_val" == /tmp/* ]]; then
+      host_dir=/tmp
+    else
+      host_dir="$(dirname "$var_val")"
+    fi
+    new_val="${var_val/#$host_dir/${host_dir}-host}" # replace $host_dir by ${host_dir}-host
+    if [ ! -r "$new_val" ]; then
+      new_val="$var_val_orig"
+    fi
+    export $env_var="$new_val"
   fi
-  XAUTHORITY="${XAUTHORITY/#$host_dir/${host_dir}-host}" # replace $host_dir by ${host_dir}-host
-  if [ ! -r "$XAUTHORITY" ]; then
-    XAUTHORITY="$XAUTHORITY_ORIG"
-  fi
-  export XAUTHORITY
-fi
+done
 
 # In case NVIDIA driver has been updated, the updated libraries and other files may need to be
 # linked again, so check for a missing library file and invoke the setup script if present

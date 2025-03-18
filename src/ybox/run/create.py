@@ -30,7 +30,8 @@ from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
 from ybox.run.destroy import (get_all_containers, remove_orphans_from_db,
                               ybox_systemd_service_prefix)
 from ybox.run.graphics import (add_env_option, add_mount_option, enable_dri,
-                               enable_nvidia, enable_wayland, enable_x11)
+                               enable_nvidia, enable_wayland, enable_x11,
+                               handle_variable_mount)
 from ybox.run.pkg import parse_args as pkg_parse_args
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 from ybox.util import (EnvInterpolation, config_reader,
@@ -617,6 +618,12 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
         elif key == "dbus":
             if _get_boolean(val):
                 enable_dbus(docker_args, base_section.getboolean("dbus_sys", fallback=False), env)
+        elif key == "ssh_agent":
+            if _get_boolean(val):
+                enable_ssh_agent(docker_args, env)
+        elif key == "gpg_agent":
+            if _get_boolean(val):
+                enable_gpg_agent(docker_args, env)
         elif key == "dri":
             dri = _get_boolean(val)
         elif key == "nvidia":
@@ -695,19 +702,51 @@ def enable_dbus(docker_args: list[str], sys_enable: bool, env: Environ) -> None:
                        to the user dbus message bus
     :param env: an instance of the current :class:`Environ`
     """
-    def replace_target_dir(src: str) -> str:
-        return src.replace(f"{env.xdg_rt_dir}/", f"{env.target_xdg_rt_dir}/")
     if dbus_session := os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
         dbus_user = dbus_session[dbus_session.find("=") + 1:]
         if (dbus_opts_idx := dbus_user.find(",")) != -1:
             dbus_user = dbus_user[:dbus_opts_idx]
-        add_mount_option(docker_args, dbus_user, replace_target_dir(dbus_user))
-        add_env_option(docker_args, "DBUS_SESSION_BUS_ADDRESS", replace_target_dir(dbus_session))
+        add_mount_option(docker_args, dbus_user, _replace_xdg_rt_dir(dbus_user, env))
+        add_env_option(docker_args, "DBUS_SESSION_BUS_ADDRESS",
+                       _replace_xdg_rt_dir(dbus_session, env))
     if sys_enable:
         for dbus_sys in ("/run/dbus/system_bus_socket", "/var/run/dbus/system_bus_socket"):
             if os.access(dbus_sys, os.W_OK):
                 add_mount_option(docker_args, dbus_sys, dbus_sys)
                 break
+
+
+def enable_ssh_agent(docker_args: list[str], env: Environ) -> None:
+    """
+    Append options to podman/docker arguments to share host machine's ssh agent socket
+    with the new ybox container.
+
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
+    :param env: an instance of the current :class:`Environ`
+    """
+    if ssh_auth_sock := os.environ.get("SSH_AUTH_SOCK"):
+        target_ssh_auth_sock = handle_variable_mount(docker_args, env, ssh_auth_sock)
+        add_env_option(docker_args, "SSH_AUTH_SOCK", target_ssh_auth_sock)
+        add_env_option(docker_args, "SSH_AUTH_SOCK_ORIG", target_ssh_auth_sock)
+
+
+def enable_gpg_agent(docker_args: list[str], env: Environ) -> None:
+    """
+    Append options to podman/docker arguments to share host machine's gpg agent sockets
+    with the new ybox container.
+
+    :param docker_args: list of podman/docker arguments to which the options have to be appended
+    :param env: an instance of the current :class:`Environ`
+    """
+    if gpg_agent_info := os.environ.get("GPG_AGENT_INFO"):
+        target_gpg_agent_info = handle_variable_mount(docker_args, env, gpg_agent_info)
+        add_env_option(docker_args, "GPG_AGENT_INFO", target_gpg_agent_info)
+        add_env_option(docker_args, "GPG_AGENT_INFO_ORIG", target_gpg_agent_info)
+
+
+def _replace_xdg_rt_dir(src: str, env: Environ) -> str:
+    """replace host's $XDG_RUNTIME_DIR in `src` with that of container user's $XDG_RUNTIME_DIR"""
+    return src.replace(env.xdg_rt_dir + "/", env.target_xdg_rt_dir + "/")
 
 
 def add_multi_opt(docker_args: list[str], opt: str, val: Optional[str]) -> None:
@@ -1254,9 +1293,9 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
     run_command([systemctl, "--user", "enable", ybox_svc], exit_on_error=True)
     print_info(wait_msg)
     run_command([systemctl, "--user", "start", ybox_svc], exit_on_error=True)
-    # change SLEEP_SECS to 7 for subsequent starts
+    # change SLEEP_SECS to 5 for subsequent starts
     with open(f"{systemd_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
-        env_fd.write(dedent(env_content.format(sleep_secs=7)))
+        env_fd.write(dedent(env_content.format(sleep_secs=5)))
 
 
 def start_container(docker_cmd: str, conf: StaticConfiguration) -> None:

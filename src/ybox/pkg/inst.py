@@ -29,6 +29,7 @@ _EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)\s*(.*?)\s*$")
 _FLAGS_RE = re.compile("![ap]")
 # environment variables passed through from host environment to podman/docker executable
 _PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "WAYLAND_DISPLAY", "FREETYPE_PROPERTIES",
+                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO",
                         "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
                         "__VK_LAYER_NV_optimus", "VK_ICD_FILES", "VK_ICD_FILENAMES")
 
@@ -437,9 +438,9 @@ def docker_cp_action(docker_cmd: str, box_name: str, src: str,
 def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
                        app_flags: dict[str, str], wrapper_files: list[str]) -> None:
     """
-    For a desktop file, add "podman/docker exec ..." to its Exec/TryExec lines. Also read
-    the additional flags for the command passed in `app_flags` and add them to an appropriate
-    position in the Exec/TryExec lines.
+    For a desktop file, add "podman/docker exec ..." to its `Exec` lines. Also read the additional
+    flags for the command passed in `app_flags` and add them to an appropriate position in the
+    `Exec` lines. Also removes the `TryExec` lines that do not work in some desktop environments.
 
     :param filename: name of the desktop file being wrapped
     :param file: full path of the desktop file being wrapped
@@ -453,6 +454,9 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
     wrapper_name = f"ybox.{conf.box_name}.{filename}"
 
     def replace_executable(match: re.Match[str]) -> str:
+        # remove TryExec lines that don't work in some desktop environments (like KDE plasma 5)
+        if match.group(2):
+            return ""
         program = match.group(3)
         args = match.group(4)
         # check for additional flags to be added

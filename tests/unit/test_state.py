@@ -92,7 +92,7 @@ def test_initialization(g_env: Environ, state: YboxStateManagement):
 
 
 @pytest.mark.parametrize(
-    "old_version", ["0.9.0", "0.9.1", "0.9.2", "0.9.5", "0.9.6", "0.9.7", "0.9.8"])
+    "old_version", ["0.9.0", "0.9.1", "0.9.2", "0.9.5", "0.9.6", "0.9.7", "0.9.10"])
 def test_migration(g_env: Environ, old_version: str):
     """
     Test migration of state database from older product version to current.
