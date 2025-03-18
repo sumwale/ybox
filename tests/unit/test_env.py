@@ -48,6 +48,8 @@ def test_data_dirs(g_env: Environ):
 
 def test_other_vars(g_env: Environ):
     """check other misc variables set in `Environ`"""
+    assert g_env.systemd_user_conf_dir() == str(Path(os.environ["HOME"],
+                                                     ".config", "systemd", "user"))
     try:
         rt_dir = os.environ["XDG_RUNTIME_DIR"]
     except KeyError:
