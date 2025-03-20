@@ -15,21 +15,26 @@ for env_var in XAUTHORITY SSH_AUTH_SOCK GPG_AGENT_INFO; do
   env_var_orig=${env_var}_ORIG
   var_val=${!env_var}
   var_val_orig=${!env_var_orig}
-  if [ -n "$var_val" -a -n "$var_val_orig" -a ! -r "$var_val" ]; then
-    # the value should be in /run/user/<uid> or in /tmp, or else the parent directory is used
-    run_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    if [[ "$var_val" == $run_dir/* ]]; then
-      host_dir="$run_dir"
-    elif [[ "$var_val" == /tmp/* ]]; then
-      host_dir=/tmp
-    else
-      host_dir="$(dirname "$var_val")"
+  if [ -n "$var_val" -a -n "$var_val_orig" ]; then
+    if [ ! -r "$var_val" ]; then
+      # the value should be in /run/user/<uid> or in /tmp, or else the parent directory is used
+      run_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+      if [[ "$var_val" == $run_dir/* ]]; then
+        host_dir="$run_dir"
+      elif [[ "$var_val" == /tmp/* ]]; then
+        host_dir=/tmp
+      else
+        host_dir="$(dirname "$var_val")"
+      fi
+      new_val="${var_val/#$host_dir/${host_dir}-host}" # replace $host_dir by ${host_dir}-host
+      if [ ! -r "$new_val" ]; then
+        new_val="$var_val_orig"
+      fi
+      export $env_var="$new_val"
     fi
-    new_val="${var_val/#$host_dir/${host_dir}-host}" # replace $host_dir by ${host_dir}-host
-    if [ ! -r "$new_val" ]; then
-      new_val="$var_val_orig"
-    fi
-    export $env_var="$new_val"
+  else
+    # remove unset variable in the container else apps can misbehave
+    unset $env_var
   fi
 done
 

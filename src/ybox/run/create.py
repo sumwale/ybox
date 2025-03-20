@@ -889,7 +889,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
                 print_warn(f"Skipping inaccessible configuration path '{src_path}'")
     print_info("DONE.")
     # finally mount the configs directory to corresponding directory in the target container
-    add_mount_option(docker_args, conf.configs_dir, conf.target_configs_dir, "ro")
+    add_mount_option(docker_args, conf.configs_dir, conf.target_configs_dir)
 
 
 def process_env_section(env_section: SectionProxy, docker_args: list[str]) -> None:
