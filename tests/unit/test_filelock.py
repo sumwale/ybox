@@ -3,7 +3,6 @@
 import errno
 import fcntl
 import multiprocessing
-import multiprocessing.context
 import os
 import time
 from datetime import datetime
