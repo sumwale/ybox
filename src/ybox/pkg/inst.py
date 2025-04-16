@@ -557,8 +557,8 @@ def _copy_app_icons(selected_icons: dict[str, tuple[float, str]], docker_cmd: st
         # copy from temporary file over the existing one, if any, to overwrite rather than move
         # (which will preserve all of its hard links, for example)
         exists = os.path.exists(target_icon_path)
-        if docker_cp_action(docker_cmd, conf.box_name, icon_path,
-                            lambda src, dest=target_icon_path: shutil.copy2(src, dest)) == 0:
+        if docker_cp_action(docker_cmd, conf.box_name, icon_path, lambda src, dest=target_icon_path:
+                            None if shutil.copy2(src, dest) else None) == 0:  # "if" for pyright
             # skip registration of icon file it already existed and was overwritten so that
             # it is not removed on package uninstall
             if not exists:
