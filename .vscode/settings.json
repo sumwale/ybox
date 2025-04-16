@@ -5,9 +5,9 @@
         "source.unusedImports": "always"
     },
     "editor.rulers": [
-        99
+        100
     ],
-    "editor.wordWrapColumn": 99,
+    "editor.wordWrapColumn": 100,
     "python.testing.cwd": "${workspaceFolder}",
     "python.testing.pytestArgs": [
         "-s"

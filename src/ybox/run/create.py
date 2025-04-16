@@ -646,6 +646,9 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
                         (re.match("^--log-opt=path=(.*)/.*$", path) for path in docker_args) if mt]
             for log_dir in log_dirs:
                 os.makedirs(log_dir, mode=Consts.default_directory_mode(), exist_ok=True)
+        elif key == "devices":
+            if val:
+                add_multi_opt(docker_args, "device", val)
         elif key not in ("name", "dbus_sys", "includes"):
             raise NotSupportedError(f"Unknown key '{key}' in the [base] of {profile} "
                                     "or its includes")
@@ -759,7 +762,7 @@ def add_multi_opt(docker_args: list[str], opt: str, val: Optional[str]) -> None:
     """
     if val:
         for opt_val in val.split(","):
-            docker_args.append(f"--{opt}={opt_val}")
+            docker_args.append(f"--{opt}={opt_val.strip()}")
 
 
 def process_security_section(sec_section: SectionProxy, profile: PathName,

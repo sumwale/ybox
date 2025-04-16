@@ -24,7 +24,11 @@ from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
 from ybox.util import check_package, ini_file_reader, select_item_from_menu
 
 # match both "Exec=" and "TryExec=" lines (don't capture trailing newline)
-_EXEC_RE = re.compile(r"^(\s*(Try)?Exec\s*=\s*)(\S+)\s*(.*?)\s*$")
+_EXEC_PATTERN = r"\s*((Try)?Exec\s*=\s*)(\S+)\s*(.*?)\s*"
+# pattern to match icons with absolute paths and change them to just names
+_ICON_PATH_PATTERN = r"\s*Icon\s*=\s*(/usr/share/(icons|pixmaps)/\S+)\s*"
+# regex to match either of the two above
+_EXEC_ICON_RE = re.compile(f"^{_EXEC_PATTERN}|{_ICON_PATH_PATTERN}$")
 # match !p and !a to replace executable program (third group above) and arguments respectively
 _FLAGS_RE = re.compile("![ap]")
 # environment variables passed through from host environment to podman/docker executable
@@ -453,7 +457,10 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
     # container name is added to desktop file to make it unique
     wrapper_name = f"ybox.{conf.box_name}.{filename}"
 
-    def replace_executable(match: re.Match[str]) -> str:
+    def replace_exec_icon(match: re.Match[str]) -> str:
+        """replace Exec, TryExec and Icon lines appropriately for the host system"""
+        if not (exec_word := match.group(1)):  # check for the case of `Icon=/usr/...`
+            return f"Icon={os.path.basename(match.group(5))}\n"
         # remove TryExec lines that don't work in some desktop environments (like KDE plasma 5)
         if match.group(2):
             return ""
@@ -469,7 +476,7 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
             full_cmd = program
         # pseudo-tty cannot be allocated with rootless docker outside of a terminal app
         env_vars = " -e=".join(_PASSTHROUGH_ENVVARS)
-        return (f'{match.group(1)}{docker_cmd} exec -e={env_vars} {conf.box_name} '
+        return (f'{exec_word}{docker_cmd} exec -e={env_vars} {conf.box_name} '
                 f'/usr/local/bin/run-in-dir "" {full_cmd}\n')
 
     # the destination will be $HOME/.local/share/applications
@@ -481,7 +488,7 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
     def write_desktop_file(src: str) -> None:
         with open(wrapper_file, "w", encoding="utf-8") as wrapper_fd:
             with open(src, "r", encoding="utf-8") as src_fd:
-                wrapper_fd.writelines(_EXEC_RE.sub(replace_executable, line) for line in src_fd)
+                wrapper_fd.writelines(_EXEC_ICON_RE.sub(replace_exec_icon, line) for line in src_fd)
     if docker_cp_action(docker_cmd, conf.box_name, file, write_desktop_file) == 0:
         wrapper_files.append(wrapper_file)
 
