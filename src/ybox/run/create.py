@@ -837,8 +837,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
     # this is refreshed on every container start
 
     # always recreate the directory to pick up any changes
-    if os.path.isdir(conf.configs_dir):
-        shutil.rmtree(conf.configs_dir)
+    shutil.rmtree(conf.configs_dir, ignore_errors=True)
     os.makedirs(conf.configs_dir, mode=Consts.default_directory_mode(), exist_ok=True)
     if config_hardlinks:
         print_info("Creating hard links to paths specified in [configs]  ...")
@@ -859,10 +858,7 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
             dest_path = f"{conf.configs_dir}/{dest_rel_path}"
             if os.access(src_path, os.R_OK):
                 if os.path.exists(dest_path):
-                    if os.path.isdir(dest_path):
-                        shutil.rmtree(dest_path)
-                    else:
-                        os.unlink(dest_path)
+                    shutil.rmtree(dest_path, ignore_errors=True)
                 else:
                     os.makedirs(os.path.dirname(dest_path),
                                 mode=Consts.default_directory_mode(), exist_ok=True)
@@ -976,7 +972,7 @@ def copytree(src_path: str, dest: str, hardlink: bool = False,
 
     :param src_path: the source directory to be copied (should have been resolved using
                      `os.path.realpath` or `Path.resolve` if `src_root` argument is not supplied)
-    :param dest: the destination directory which should exist
+    :param dest: the destination directory which should not already exist (but its parent should)
     :param hardlink: if True then create hard links to the files in the source (so it should
                        be in the same filesystem) else copy the files, defaults to False
     :param src_root: the resolved root source directory (same as `src_path` if `None` which is
@@ -1024,6 +1020,8 @@ def copytree(src_path: str, dest: str, hardlink: bool = False,
             except OSError as err:
                 # ignore permission and related errors and continue
                 print_warn(f"Skipping copy/link of '{entry_path}' due to error: {err}")
+        # TODO: SW: check for success in all copytree's else return False, then check at caller
+        # to print a bold warning
 
 
 def setup_ybox_scripts(conf: StaticConfiguration, distro_config: ConfigParser) -> None:

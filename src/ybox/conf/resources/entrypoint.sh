@@ -47,25 +47,6 @@ function show_usage() {
   echo "  -h               show this help message and exit"
 }
 
-# TODO: why copy is being created for configs (changing on host does not change inside the
-#   container). Reason is due to different filesystems in my setup.
-# 1) when config_hardlinks is false then mount the configs directory as read-write
-# 2) better yet, remove read-only mount completely and directly copy to $TARGET_HOME/.config
-#    cutting out the middle configs directory -- no need for read-only mounting
-#    (edit: this is undesirable because the current impl also works when home is not bind mount
-#           rather is completely ephemeral, and don't want to change that so keep the intermediate
-#           directory which is also easier to manage/reason, but make it read-write for all cases)
-# 3) for the case when there are a lot of cross-filesystem links that need to be converted to copy,
-#    there are two cases:
-#    a) top-level spec itself is outside, then directly mount source on target location
-#    b) some sub-dir or file itself is symlink which is outside, then just go ahead with a copy
-#    For above, another option is to find common parent for such cases and if it is not $HOME
-#    then ask user if that directory should be mounted and symlinked to target users' $HOME.
-#    Otherwise the number of bind mounts can become really huge (can cause perf or hit some limit?)
-# Remove the :copy and :dir specs with above changes to reduce complexity.
-# (edit: keep these two which can be useful for cases where one wants a mix of linked and copied
-#        config files; users can ignore if they have no special needs)
-
 # copy/link the configuration files in HOME to the target directory having the required files
 function replicate_config_files() {
   # line is of the form <src> -> <dest>; pattern below matches this while trimming spaces
@@ -76,19 +57,12 @@ function replicate_config_files() {
       home_file="$HOME/${BASH_REMATCH[2]}"
       dest_file="$config_dir/${BASH_REMATCH[2]}"
       # only replace the file if it is already a link (assuming the link target may
-      #   have changed in the config_list file), or a directory containing links
+      #   have changed in the config_list file), or a directory containing only links
       if [ -e "$dest_file" ]; then
         if [ -L "$home_file" ]; then
           rm -f "$home_file"
         elif [ -d "$home_file" ]; then
-          do_rmdir=true
-          for f in "$home_file"/*; do
-            if [ -e "$f" -a ! -L "$f" ]; then
-              do_rmdir=false
-              break
-            fi
-          done
-          if [ "$do_rmdir" = true ]; then
+          if [ -z $(find "$home_file" -type f -print -quit) ]; then
             rm -rf "$home_file"
           fi
         fi
