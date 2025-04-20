@@ -24,11 +24,11 @@ from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
 from ybox.util import check_package, ini_file_reader, select_item_from_menu
 
 # match both "Exec=" and "TryExec=" lines (don't capture trailing newline)
-_EXEC_PATTERN = r"\s*((Try)?Exec\s*=\s*)(\S+)\s*(.*?)\s*"
+_EXEC_PATTERN = r"^\s*((Try)?Exec\s*=\s*)(\S+)\s*(.*?)\s*$"
 # pattern to match icons with absolute paths and change them to just names
-_ICON_PATH_PATTERN = r"\s*Icon\s*=\s*(/usr/share/(icons|pixmaps)/\S+)\s*"
+_ICON_PATH_PATTERN = r"^\s*Icon\s*=\s*(/usr/share/(icons|pixmaps)/\S+)\s*$"
 # regex to match either of the two above
-_EXEC_ICON_RE = re.compile(f"^{_EXEC_PATTERN}|{_ICON_PATH_PATTERN}$")
+_EXEC_ICON_RE = re.compile(f"{_EXEC_PATTERN}|{_ICON_PATH_PATTERN}")
 # match !p and !a to replace executable program (third group above) and arguments respectively
 _FLAGS_RE = re.compile("![ap]")
 # environment variables passed through from host environment to podman/docker executable
