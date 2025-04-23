@@ -500,7 +500,9 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
                 process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
         elif section == "apps":
             apps_with_deps = process_apps_section(config["apps"], conf, pkgmgr)
-        elif section not in ("base", "app_flags", "startup"):
+        elif section == "startup":
+            process_startup_section(config["startup"], conf)
+        elif section not in ("base", "app_flags"):
             raise NotSupportedError(f"Unknown section [{section}] in '{profile}' "
                                     "or one of its includes")
     return shared_root, config, apps_with_deps
@@ -811,7 +813,7 @@ def process_mounts_section(mounts_section: SectionProxy, docker_args: list[str])
     """
     # keys here are only symbolic names and serve no purpose other than allowing
     # later profile files to override previous ones
-    for _, val in mounts_section.items():
+    for val in mounts_section.values():
         if val:
             if "=" in val or "," in val:
                 docker_args.append(f"--mount={val}")
@@ -939,7 +941,7 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
         return dep
 
     with open(conf.app_list, "w", encoding="utf-8") as apps_fd:
-        for _, val in apps_section.items():
+        for val in apps_section.values():
             apps = [app.strip() for app in val.split(",")]
             deps = [capture_dep(match) for dep in apps if (match := _DEP_SUFFIX.match(dep))]
             if deps:
@@ -950,6 +952,21 @@ def process_apps_section(apps_section: SectionProxy, conf: StaticConfiguration,
                 for app in apps:
                     assert apps_with_deps[app] is not None  # insert with empty list if absent
     return apps_with_deps
+
+
+def process_startup_section(startup_section: SectionProxy, conf: StaticConfiguration) -> None:
+    """
+    Process the `[startup]` section in the container profile to write the list of commands to be
+    executed (in background) in the container on startup.
+
+    :param startup_section: an object of :class:`SectionProxy` from parsing the `[startup]` section
+    :param conf: the :class:`StaticConfiguration` for the container
+    """
+    if not startup_section:
+        return
+    with open(conf.startup_list, "w", encoding="utf-8") as startup_fd:
+        for val in startup_section.values():
+            startup_fd.write(val + "\n")
 
 
 # The shutil.copytree(...) method does not work correctly for "symlinks=False" (or at least
@@ -1236,6 +1253,9 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
     if os.access(conf.app_list, os.R_OK):
         docker_full_cmd.append("-a")
         docker_full_cmd.append(f"{conf.target_scripts_dir}/app.list")
+    if os.access(conf.startup_list, os.R_OK):
+        docker_full_cmd.append("-s")
+        docker_full_cmd.append(f"{conf.target_scripts_dir}/startup.list")
     docker_full_cmd.append(conf.box_name)
 
     if (code := int(run_command(docker_full_cmd, exit_on_error=False,

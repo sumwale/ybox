@@ -44,6 +44,7 @@ class StaticConfiguration:
         self._status_file = f"{container_dir}/status"
         self._config_list = f"{self._scripts_dir}/config.list"
         self._app_list = f"{self._scripts_dir}/app.list"
+        self._startup_list = f"{self._scripts_dir}/startup.list"
 
     @property
     def env(self) -> Environ:
@@ -123,8 +124,6 @@ class StaticConfiguration:
         """local status file to communicate when the container is ready for use"""
         return self._status_file
 
-    # file containing list of configuration files to be linked on that container to host
-    # as mentioned in the [configs] section
     @property
     def config_list(self) -> str:
         """file containing list of configuration files to be linked on that container to host
@@ -135,6 +134,11 @@ class StaticConfiguration:
     def app_list(self) -> str:
         """file containing list of applications to be installed in the container"""
         return self._app_list
+
+    @property
+    def startup_list(self) -> str:
+        """file containing list of commands to be executed in the container on startup"""
+        return self._startup_list
 
 
 class Consts:

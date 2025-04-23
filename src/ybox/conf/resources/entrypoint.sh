@@ -110,11 +110,12 @@ function install_apps() {
 function invoke_startup_apps() {
   log_dir="$HOME/.local/share/ybox/logs"
   log_no=1
+  mkdir -p "$log_dir"
   # start apps in the order listed in the file
   while read -r app_line; do
-    mkdir -p "$log_dir"
     echo_color "$fg_orange" "Starting: ${app_line:0:40} ..." >> $status_file
     nohup $app_line >> "$log_dir/app-${log_no}_out.log" 2>> "$log_dir/app-${log_no}_err.log" &
+    ((log_no++))
     sleep 1
   done < "$startup_list"
 }
@@ -210,13 +211,13 @@ if [ ! -e "$SCRIPT_DIR/ybox-init.done" ]; then
 fi
 
 # process config files, application installs and invoke startup apps
-if [ -n "$config_list" ]; then
+if [ -n "$config_list" -a -s "$config_list" ]; then
   replicate_config_files
 fi
-if [ -n "$app_list" ]; then
+if [ -n "$app_list" -a -s "$app_list" ]; then
   install_apps
 fi
-if [ -n "$startup_list" ]; then
+if [ -n "$startup_list" -a -s "$startup_list" ]; then
   invoke_startup_apps
 fi
 # update the status file to indicate successful startup

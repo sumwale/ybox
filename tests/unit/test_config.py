@@ -78,6 +78,7 @@ def test_properties(env: Environ, config: static_conf):
     assert config.status_file == f"{env.data_dir}/{_TEST_CONTAINER}/status"
     assert config.config_list == f"{env.data_dir}/{_TEST_CONTAINER}/ybox-scripts/config.list"
     assert config.app_list == f"{env.data_dir}/{_TEST_CONTAINER}/ybox-scripts/app.list"
+    assert config.startup_list == f"{env.data_dir}/{_TEST_CONTAINER}/ybox-scripts/startup.list"
 
 
 def test_consts():
