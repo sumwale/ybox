@@ -454,8 +454,6 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
                       container configuration
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
-    # container name is added to desktop file to make it unique
-    wrapper_name = f"ybox.{conf.box_name}.{filename}"
 
     def replace_exec_icon(match: re.Match[str]) -> str:
         """replace Exec, TryExec and Icon lines appropriately for the host system"""
@@ -482,7 +480,10 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
     # the destination will be $HOME/.local/share/applications
     os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
                 exist_ok=True)
-    wrapper_file = f"{conf.env.user_applications_dir}/{wrapper_name}"
+    wrapper_file = f"{conf.env.user_applications_dir}/{filename}"
+    if os.path.exists(wrapper_file):
+        # container name is added to desktop file to make it unique
+        wrapper_file = f"{conf.env.user_applications_dir}/ybox.{conf.box_name}.{filename}"
     print_notice(f"Linking container desktop file {file} to {wrapper_file}")
 
     def write_desktop_file(src: str) -> None:
