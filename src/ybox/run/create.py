@@ -863,7 +863,10 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
             dest_path = f"{conf.configs_dir}/{dest_rel_path}"
             if os.access(src_path, os.R_OK):
                 if os.path.exists(dest_path):
-                    shutil.rmtree(dest_path, ignore_errors=True)
+                    if os.path.isdir(dest_path):
+                        shutil.rmtree(dest_path)
+                    else:
+                        os.unlink(dest_path)
                 else:
                     os.makedirs(os.path.dirname(dest_path),
                                 mode=Consts.default_directory_mode(), exist_ok=True)
