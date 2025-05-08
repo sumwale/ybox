@@ -132,6 +132,10 @@ def enable_wayland(docker_args: list[str], env: Environ) -> None:
         if os.access(wayland_sock, os.W_OK):
             add_mount_option(docker_args, wayland_sock,
                              f"{env.target_xdg_rt_dir}/{wayland_display}")
+        wayland_lock = wayland_sock + ".lock"
+        if os.access(wayland_lock, os.W_OK):
+            add_mount_option(docker_args, wayland_lock,
+                             f"{env.target_xdg_rt_dir}/{wayland_display}.lock")
 
 
 def enable_dri(docker_args: list[str]) -> None:
