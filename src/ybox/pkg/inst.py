@@ -33,7 +33,7 @@ _EXEC_ICON_RE = re.compile(f"{_EXEC_PATTERN}|{_ICON_PATH_PATTERN}")
 _FLAGS_RE = re.compile("![ap]")
 # environment variables passed through from host environment to podman/docker executable
 _PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "WAYLAND_DISPLAY", "FREETYPE_PROPERTIES",
-                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO",
+                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO", "QT_QPA_PLATFORM",
                         "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
                         "__VK_LAYER_NV_optimus", "VK_ICD_FILES", "VK_ICD_FILENAMES")
 
