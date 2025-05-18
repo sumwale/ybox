@@ -32,10 +32,15 @@ _EXEC_ICON_RE = re.compile(f"{_EXEC_PATTERN}|{_ICON_PATH_PATTERN}")
 # match !p and !a to replace executable program (third group above) and arguments respectively
 _FLAGS_RE = re.compile("![ap]")
 # environment variables passed through from host environment to podman/docker executable
-_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "WAYLAND_DISPLAY", "FREETYPE_PROPERTIES",
-                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO", "QT_QPA_PLATFORM",
-                        "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
+_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "FREETYPE_PROPERTIES", "SSH_AUTH_SOCK",
+                        "GPG_AGENT_INFO", "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
                         "__VK_LAYER_NV_optimus", "VK_ICD_FILES", "VK_ICD_FILENAMES")
+# environment variables passed from host to podman/docker executable with empty if not set;
+# note that these variables are assumed to have values that don't need quoting by /bin/sh
+# else code will need to be updated to quote $<var> value when passing to the shell
+_PASSTHRU_EMPTY_ENVVARS = ("WAYLAND_DISPLAY", "QT_QPA_PLATFORM")
+# characters that need to be escaped in quoted string of Exec/TryExec line
+_DESKTOP_ESCAPE_RE = re.compile(r'["`$\\]')
 
 
 def install_package(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: str,
@@ -473,9 +478,11 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
         else:
             full_cmd = program
         # pseudo-tty cannot be allocated with rootless docker outside of a terminal app
-        env_vars = " -e=".join(_PASSTHROUGH_ENVVARS)
-        return (f'{exec_word}{docker_cmd} exec -e={env_vars} {conf.box_name} '
-                f'/usr/local/bin/run-in-dir "" {full_cmd}\n')
+        ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
+        ev2 = " -e=".join((f"{k}=\\\\${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
+        full_cmd = _DESKTOP_ESCAPE_RE.sub(r'\\\g<0>', full_cmd)
+        return (f'{exec_word}/bin/sh -c "{docker_cmd} exec -e={ev1} -e={ev2} {conf.box_name} '
+                f'/usr/local/bin/run-in-dir \\\\"\\\\" {full_cmd}"\n')
 
     # the destination will be $HOME/.local/share/applications
     os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
@@ -623,9 +630,10 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
             lambda f_match: _replace_flags(f_match, flags, f'"{file}"', '"$@"'), flags)
     else:
         full_cmd = f'/usr/local/bin/run-in-dir "`pwd`" "{file}" "$@"'
-    env_vars = " -e=".join(_PASSTHROUGH_ENVVARS)
+    ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
+    ev2 = " -e=".join((f"{k}=${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
     exec_content = ("#!/bin/sh\n",
-                    f"exec {docker_cmd} exec -it -e={env_vars} {conf.box_name} ", full_cmd)
+                    f"exec {docker_cmd} exec -it -e={ev1} -e={ev2} {conf.box_name} ", full_cmd)
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)
