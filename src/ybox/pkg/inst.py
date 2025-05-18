@@ -32,8 +32,9 @@ _EXEC_ICON_RE = re.compile(f"{_EXEC_PATTERN}|{_ICON_PATH_PATTERN}")
 # match !p and !a to replace executable program (third group above) and arguments respectively
 _FLAGS_RE = re.compile("![ap]")
 # environment variables passed through from host environment to podman/docker executable
-_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "FREETYPE_PROPERTIES", "SSH_AUTH_SOCK",
-                        "GPG_AGENT_INFO", "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
+_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "XDG_SESSION_TYPE", "FREETYPE_PROPERTIES",
+                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO",
+                        "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
                         "__VK_LAYER_NV_optimus", "VK_ICD_FILES", "VK_ICD_FILENAMES")
 # environment variables passed from host to podman/docker executable with empty if not set;
 # note that these variables are assumed to have values that don't need quoting by /bin/sh
