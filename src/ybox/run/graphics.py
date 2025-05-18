@@ -126,16 +126,11 @@ def enable_wayland(docker_args: list[str], env: Environ) -> None:
     :param docker_args: list of podman/docker arguments to which the options have to be appended
     :param env: an instance of the current :class:`Environ`
     """
-    if env.xdg_rt_dir and (wayland_display := os.environ.get("WAYLAND_DISPLAY")):
-        add_env_option(docker_args, "WAYLAND_DISPLAY", wayland_display)
-        wayland_sock = f"{env.xdg_rt_dir}/{wayland_display}"
-        if os.access(wayland_sock, os.W_OK):
-            add_mount_option(docker_args, wayland_sock,
-                             f"{env.target_xdg_rt_dir}/{wayland_display}")
-        wayland_lock = wayland_sock + ".lock"
-        if os.access(wayland_lock, os.W_OK):
-            add_mount_option(docker_args, wayland_lock,
-                             f"{env.target_xdg_rt_dir}/{wayland_display}.lock")
+    if env.xdg_rt_dir:
+        add_env_option(docker_args, "WAYLAND_DISPLAY")
+        # don't bind wayland sockets rather link in entrypoint so that it works even
+        # when run in X11 setup after being created in Wayland setup
+        add_env_option(docker_args, "ENABLE_WAYLAND", "true")
 
 
 def enable_dri(docker_args: list[str]) -> None:

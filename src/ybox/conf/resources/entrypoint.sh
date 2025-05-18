@@ -177,11 +177,17 @@ done
 # change ownership of user's /run/user/<uid> tree which may have root ownership due to the
 # docker bind mounts
 run_dir=${XDG_RUNTIME_DIR:-/run/user/$uid}
+host_run_dir=${run_dir}-host
 if [ -d $run_dir ]; then
   $SUDO chown $uid:$gid $run_dir 2>/dev/null || true
 fi
 if compgen -G "$run_dir/*" >/dev/null; then
   $SUDO chown $uid:$gid $run_dir/* 2>/dev/null || true
+fi
+
+# link wayland sockets/locks if enabled
+if [ "$ENABLE_WAYLAND" = true ] && compgen -G "$host_run_dir/wayland-*" >/dev/null; then
+  ln -sf $host_run_dir/wayland-* $run_dir/.
 fi
 
 # run actions requiring root access
