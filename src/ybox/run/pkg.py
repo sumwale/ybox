@@ -376,7 +376,8 @@ def add_clean(subparser: argparse.ArgumentParser) -> None:
 
     :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
     """
-    subparser.set_defaults(needs_state=False)
+    subparser.add_argument("-A", "--ask", action="store_true",
+                           help="ask before each action else silently clean everything")
     subparser.set_defaults(group_by_shared_root=True)
     subparser.set_defaults(func=clean_cache)
 
