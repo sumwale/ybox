@@ -494,7 +494,7 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
         elif section == "mounts":
             process_mounts_section(config["mounts"], docker_args)
         elif section == "env":
-            process_env_section(config["env"], docker_args)
+            process_env_section(config["env"], conf, docker_args)
         elif section == "configs":
             if config_hardlinks is not None:
                 process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
@@ -896,15 +896,27 @@ def process_configs_section(configs_section: SectionProxy, config_hardlinks: boo
     add_mount_option(docker_args, conf.configs_dir, conf.target_configs_dir)
 
 
-def process_env_section(env_section: SectionProxy, docker_args: list[str]) -> None:
+def process_env_section(env_section: SectionProxy, conf: StaticConfiguration,
+                        docker_args: list[str]) -> None:
     """
     Process the `[env]` section in the container profile to append required podman/docker
     options in the list that has been passed.
 
     :param env_section: an object of :class:`SectionProxy` from parsing the `[env]` section
+    :param conf: the :class:`StaticConfiguration` for the container
     :param docker_args: list of podman/docker arguments to which required options as per the
                         configuration in the `[env]` section are appended
     """
+    # add a TMPDIR to share between host and container since some apps require TMPDIR to be
+    # visible on the host (e.g. electron uses it to expose the app/tray icon available via dbus)
+    if "TMPDIR" not in env_section:
+        # use /var/tmp rather than /tmp since latter is a tmpfs system in many setups that will not
+        # retain the created tmpdir after a reboot
+        tmpdir = f"/var/tmp/ybox.{conf.box_name}"
+        os.makedirs(tmpdir, exist_ok=True)
+        os.chmod(tmpdir, 0o1777)
+        add_mount_option(docker_args, tmpdir, tmpdir)
+        add_env_option(docker_args, "TMPDIR", tmpdir)
     for key, val in env_section.items():
         add_env_option(docker_args, key, val)
 
