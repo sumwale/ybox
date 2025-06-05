@@ -362,9 +362,9 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
                     # clear EXECUTABLE mask so that no wrapper executable is created
                     copy_type &= ~CopyType.EXECUTABLE
 
-    # the "-it" flag is used for both desktop file and executable for podman/docker exec
-    # since it is safe (unless the app may need stdin in which case Terminal must be true
-    #   in its desktop file in which case a terminal will be opened during execution)
+    # the "-i" flag is used in the wrapper executable for podman/docker exec which is safe;
+    # if the app needs stdin then Terminal must be true in its desktop file in which case
+    # a terminal will be opened during execution
     for file_dir, filename, file in file_paths:
         # check if this is a .desktop directory and copy it over adding appropriate
         # "docker exec" prefix to the command
@@ -482,6 +482,7 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
         ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
         ev2 = " -e=".join((f"{k}=\\\\${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
         full_cmd = _DESKTOP_ESCAPE_RE.sub(r'\\\g<0>', full_cmd)
+        # TODO: SW: add "-i" flag if Terminal is true
         return (f'{exec_word}/bin/sh -c "{docker_cmd} exec -e={ev1} -e={ev2} {conf.box_name} '
                 f'/usr/local/bin/run-in-dir \\\\"\\\\" {full_cmd}"\n')
 
@@ -634,7 +635,7 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
     ev2 = " -e=".join((f"{k}=${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
     exec_content = ("#!/bin/sh\n",
-                    f"exec {docker_cmd} exec -it -e={ev1} -e={ev2} {conf.box_name} ", full_cmd)
+                    f"exec {docker_cmd} exec -i -e={ev1} -e={ev2} {conf.box_name} ", full_cmd)
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
         wrapper_fd.writelines(exec_content)
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)
