@@ -2,6 +2,8 @@
 Code for the `ybox-create` script that is used to create and configure a new ybox container.
 """
 
+# TODO: SW: add a "custom_flags" key in [base] to pass extra options
+
 import argparse
 import getpass
 import grp
@@ -491,6 +493,8 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
     for section in config.sections():
         if section == "security":
             process_security_section(config["security"], profile, docker_args)
+        elif section == "network":
+            process_network_section(config["network"], profile, docker_args)
         elif section == "mounts":
             process_mounts_section(config["mounts"], docker_args)
         elif section == "env":
@@ -652,7 +656,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
             if val:
                 add_multi_opt(docker_args, "device", val)
         elif key not in ("name", "dbus_sys", "includes"):
-            raise NotSupportedError(f"Unknown key '{key}' in the [base] of {profile} "
+            raise NotSupportedError(f"Unknown key '{key}' in the [base] section of {profile} "
                                     "or its includes")
     if config_locale:
         for lang_var in ("LANG", "LANGUAGE"):
@@ -798,7 +802,38 @@ def process_security_section(sec_section: SectionProxy, profile: PathName,
             if _get_boolean(val):
                 docker_args.append("--security-opt=no-new-privileges")
         else:
-            raise NotSupportedError(f"Unknown key '{key}' in the [security] of {profile} "
+            raise NotSupportedError(f"Unknown key '{key}' in the [security] section of {profile} "
+                                    "or its includes")
+
+
+def process_network_section(net_section: SectionProxy, profile: PathName,
+                            docker_args: list[str]) -> None:
+    """
+    Process the `[network]` section in the container profile to append required podman/docker
+    options in the list that has been passed.
+
+    :param net_section: an object of :class:`SectionProxy` from parsing the `[network]` section
+    :param profile: the profile file returned by :func:`select_profile` to use for ybox container
+                    configuration as a `Path` or resource file from importlib (`Traversable`)
+    :param docker_args: list of podman/docker arguments to which required options as per the
+                        configuration in the `[network]` section are appended
+    :raises NotSupportedError: if there is an unknown key in the `[network]` section
+    """
+    net_options = {"mode": "network", "host": "hostname", "dns": "dns", "dns_option": "dns-option",
+                   "dns_search": "dns-search", "ip": "ip", "ip6": "ip6", "mac": "mac-address",
+                   "alias": "network-alias"}
+    multi_options = {"expose": "expose", "publish": "publish"}
+    for key, val in net_section.items():
+        if opt := net_options.get(key):
+            if val:
+                docker_args.append(f"--{opt}={val}")
+        elif opt := multi_options.get(key):
+            add_multi_opt(docker_args, opt, val)
+        elif key == "publish_all":
+            if not val or _get_boolean(val):  # empty value means enable
+                docker_args.append("-P")
+        else:
+            raise NotSupportedError(f"Unknown key '{key}' in the [network] section of {profile} "
                                     "or its includes")
 
 
