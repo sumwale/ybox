@@ -4,13 +4,13 @@
 max-args = 20 # EDIT: increased from 5 to 20
 
 # Maximum number of locals for function / method body.
-max-locals = 40 # EDIT: increased from 15 to 40
+max-locals = 50 # EDIT: increased from 15 to 50
 
 # Maximum number of return / yield for function / method body.
 max-returns=11 # EDIT: increased from 6 to 11
 
 # Maximum number of branch for function / method body.
-max-branches = 40 # EDIT: increased from 12 to 40
+max-branches = 50 # EDIT: increased from 12 to 50
 
 # Maximum number of statements in function / method body.
 max-statements = 100 # EDIT: increased from 50 to 100

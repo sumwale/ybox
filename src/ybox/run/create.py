@@ -2,14 +2,13 @@
 Code for the `ybox-create` script that is used to create and configure a new ybox container.
 """
 
-# TODO: SW: add a "custom_flags" key in [base] to pass extra options
-
 import argparse
 import getpass
 import grp
 import os
 import pwd
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -655,6 +654,9 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
         elif key == "devices":
             if val:
                 add_multi_opt(docker_args, "device", val)
+        elif key == "custom_options":
+            if val:
+                docker_args.extend(shlex.split(val))
         elif key not in ("name", "dbus_sys", "includes"):
             raise NotSupportedError(f"Unknown key '{key}' in the [base] section of {profile} "
                                     "or its includes")
