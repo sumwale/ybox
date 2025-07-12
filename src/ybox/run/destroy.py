@@ -56,6 +56,11 @@ def main_argv(argv: list[str]) -> None:
     rm_args.append(container_name)
     run_command(rm_args, error_msg=f"removing '{container_name}'")
 
+    # remove shared TMPDIR if present
+    tmpdir = f"/var/tmp/ybox.{container_name}"
+    if os.path.isdir(tmpdir) and os.access(tmpdir, os.W_OK):
+        shutil.rmtree(tmpdir)
+
     # remove systemd service file and reload daemon
     if systemctl:
         print_color(f"Removing systemd service '{ybox_svc}' and reloading daemon", fg=fgcolor.cyan)
