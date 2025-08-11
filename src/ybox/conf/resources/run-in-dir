@@ -64,7 +64,6 @@ if [ -e "$nvidia_setup" ]; then
         sudo /bin/bash "$nvidia_setup" || /bin/true
       fi
     ) 100>"$lock_file"
-    break
   fi
 fi
 

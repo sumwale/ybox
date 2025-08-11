@@ -634,6 +634,8 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
         full_cmd = f'/usr/local/bin/run-in-dir "`pwd`" "{file}" "$@"'
     ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
     ev2 = " -e=".join((f"{k}=${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
+    # TODO: some apps like those asking for password from terminal (e.g. ssh/ykman) also
+    # need pseudo-terminal i.e. "-t", so allow for an cmdline option to add "-t" here
     exec_content = ("#!/bin/sh\n",
                     f"exec {docker_cmd} exec -i -e={ev1} -e={ev2} {conf.box_name} ", full_cmd)
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
