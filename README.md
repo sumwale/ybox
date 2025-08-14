@@ -96,20 +96,35 @@ First install the requirements:
     where `1000` is the current user's ID (output of `id -u`).
   * For docker follow the instructions in the official [docs](https://docs.docker.com/engine/security/rootless/).
 
-Finally install the `ybox` package for the current user using `pip` (`pip` is installed
-    on most Linux distributions by default, or install from your distribution's
-    repository e.g. `python3-pip` for Debian/Ubuntu based distros, `python-pip` on Arch):
+Finally install the `ybox` package for the current user using `pipx` or `pip`
+(install `pipx`/`pip` from your distribution's repository e.g. `pipx` and `python3-pip`
+ respectively for Debian/Ubuntu based distros, `python-pipx` and `python-pip` on Arch):
 
 ```sh
-pip install ybox --user
+pipx install ybox
+```
+
+This will link the binaries in user's `$HOME/.local/bin` (`$HOME` can be abbreviated to
+   `~` in most shells). Newer versions of `pipx` also allow installing packages globally:
+
+```sh
+pipx install --global ybox
+```
+
+This will install the binaries in `/usr/local/bin`. On older distributions where `pipx`
+is not available or if you prefer using `pip` directly:
+
+```sh
+pip install --user ybox
 ```
 
 Note that newer versions of `pip` disallow installing packages directly and instead
 require you to install in a custom virtual environment which can be done manually
 (e.g. bash/zsh: `python3 -m venv ybox-venv && source ybox-env/bin/activate`,
- fish: `python3 -m venv ybox-venv && source ybox-env/bin/activate.fish`)
-or automatically using `pipx`. Alternatively you can add `--break-system-packages`
-flag to the `pip` command above or add it globally for all future packages using
+ fish: `python3 -m venv ybox-venv && source ybox-env/bin/activate.fish`).
+This is automatically done by `pipx` so always prefer using it instead.
+Alternatively you can add `--break-system-packages` flag to the `pip` command above or
+add it globally for all future packages using
 `python3 -m pip config set global.break-system-packages true`. This alternative
 approach works well for `ybox` which has a very minimal set of dependencies which will
 not conflict with system packages (rather work with whatever system version is installed),
@@ -117,7 +132,7 @@ but if you prefer keeping the installation separate then use `pipx` or
 a manual virtual environment.
 
 Now you can run the `ybox-create` and other utilities that are normally installed
-in your `~/.local/bin` directory which should be in PATH for modern Linux distributions.
+in your `~/.local/bin` directory which should be in PATH on modern Linux distributions.
 If not, then add it to your PATH in your `.bashrc` (for bash) or the configuration
 file of your login shell.
 
