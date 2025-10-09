@@ -239,9 +239,10 @@ def main_argv(argv: list[str]) -> None:
                 # skip all questions for -q/--quiet (equivalent to -qq to `ybox-pkg install`)
                 quiet = 2 if args.quiet else 0
                 # box_conf can be skipped in new state.db but not for pre 0.9.3 having empty flags
-                if local_copies := wrap_container_files(package, copy_type, app_flags, list_cmd,
-                                                        docker_cmd, conf, box_conf, shared_root,
-                                                        quiet):
+                keep_ambient_caps = app_flags.get(package + ":ambient_caps", "") == "keep"
+                if local_copies := wrap_container_files(package, copy_type, app_flags,
+                                                        keep_ambient_caps, list_cmd, docker_cmd,
+                                                        conf, box_conf, shared_root, quiet):
                     # register the package again with the local_copies (no change to package_deps)
                     state.register_package(box_name, package, local_copies, copy_type, app_flags,
                                            shared_root, dep_type=None, dep_of="")
@@ -1246,10 +1247,9 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
         enforce the primary group in that option so that the container user can belong to other
         secondary groups that is required for some applications
       * as a result of above, applications that need user namespace support (like Steam) need
-        to be started with explicit elevated capabilities e.g. using `setpriv --ambient-caps -all`
-        (this can be specified in `[app_flags]` section of the container profile or when installing
-         the application using `ybox-pkg install` which will add the same to the wrapper executable
-         and desktop files)
+        to be started with cleared ambient capabilities e.g. using `setpriv --ambient-caps -all`
+        (this is added to all executables and desktop files by default now which can be skipped
+         in `ybox-pkg install` using the `-K/--keep-ambient-caps` flag)
       * containers with the same configured `shared_root` will share the system installation
         so any changes to system directories in one container will reflect in all others;
         such a configuration reduces memory and disk overheads of multiple containers significantly

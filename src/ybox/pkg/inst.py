@@ -178,8 +178,11 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
             for flag in args.app_flags.split(","):
                 if (split_idx := flag.find("=")) != -1:
                     app_flags[flag[:split_idx]] = flag[split_idx + 1:]
-        local_copies = wrap_container_files(package, copy_type, app_flags, list_cmd,
-                                            docker_cmd, conf, rt_conf.ini_config,
+        # add an entry in app_flags for keep_ambient_caps so that it is also stored in the database
+        if args.keep_ambient_caps:
+            app_flags[package + ":ambient_caps"] = "keep"
+        local_copies = wrap_container_files(package, copy_type, app_flags, args.keep_ambient_caps,
+                                            list_cmd, docker_cmd, conf, rt_conf.ini_config,
                                             rt_conf.shared_root, quiet)
         dep_type, dep_of = (DependencyType.OPTIONAL, args.package) if opt_dep_install else (
             None, "")
@@ -306,9 +309,9 @@ def select_optional_deps(package: str, deps: list[tuple[str, str, int]]) -> list
 
 
 def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str, str],
-                         list_cmd: str, docker_cmd: str, conf: StaticConfiguration,
-                         box_conf: Union[str, ConfigParser], shared_root: str,
-                         quiet: int) -> list[str]:
+                         keep_ambient_caps: bool, list_cmd: str, docker_cmd: str,
+                         conf: StaticConfiguration, box_conf: Union[str, ConfigParser],
+                         shared_root: str, quiet: int) -> list[str]:
     """
     Create wrappers in host environment to invoke container's desktop files and executables.
 
@@ -316,6 +319,8 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     :param copy_type: the `CopyType` to tell whether to create wrapper .desktop files and/or
                       wrapper executables that invoke corresponding ones of the container
     :param app_flags: application flags that have been explicitly specified with --app-flags
+    :param keep_ambient_caps: don't drop ambient capabilities for the program which is otherwise
+                              required for executables that need explicit namespace support
     :param list_cmd: command to list files for an installed package read from `distro.ini`
     :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
@@ -370,13 +375,15 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
         # "docker exec" prefix to the command
         if copy_type & CopyType.DESKTOP:
             if file_dir in desktop_dirs:
-                _wrap_desktop_file(filename, file, docker_cmd, conf, app_flags, wrapper_files)
+                _wrap_desktop_file(filename, file, docker_cmd, conf, app_flags, keep_ambient_caps,
+                                   wrapper_files)
                 continue  # if it is a .desktop file, then skip executable check
             if _select_app_icon(file_dir, filename, file, icon_dir_pattern, selected_icons):
                 continue  # if it is an icon file, then skip executable check
         if copy_type & CopyType.EXECUTABLE:
             if file_dir in executable_dirs:
-                _wrap_executable(filename, file, docker_cmd, conf, app_flags, wrapper_files)
+                _wrap_executable(filename, file, docker_cmd, conf, app_flags, keep_ambient_caps,
+                                 wrapper_files)
             elif shared_root and man_dir_pattern.match(file_dir):
                 _link_man_page(file, shared_root, conf, wrapper_files)
     if selected_icons:
@@ -446,7 +453,8 @@ def docker_cp_action(docker_cmd: str, box_name: str, src: str,
 
 
 def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
-                       app_flags: dict[str, str], wrapper_files: list[str]) -> None:
+                       app_flags: dict[str, str], keep_ambient_caps: bool,
+                       wrapper_files: list[str]) -> None:
     """
     For a desktop file, add "podman/docker exec ..." to its `Exec` lines. Also read the additional
     flags for the command passed in `app_flags` and add them to an appropriate position in the
@@ -458,6 +466,8 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
     :param conf: the :class:`StaticConfiguration` for the container
     :param app_flags: map of executable file name to the value from [app_flags] section from the
                       container configuration
+    :param keep_ambient_caps: don't drop ambient capabilities for the program which is otherwise
+                              required for executables that need explicit namespace support
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
 
@@ -482,9 +492,13 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
         ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
         ev2 = " -e=".join((f"{k}=\\\\${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
         full_cmd = _DESKTOP_ESCAPE_RE.sub(r'\\\g<0>', full_cmd)
+        # clear ambient capabilities by default to support running executables that
+        # invoke bubblewrap or equivalent for namespaces (e.g. steam or usage of glycin
+        #   by recent gdk-pixbuf releases or otherwise)
+        ambient_caps = "" if keep_ambient_caps else "/usr/bin/setpriv --ambient-caps -all "
         # TODO: SW: add "-i" flag if Terminal is true
         return (f'{exec_word}/bin/sh -c "{docker_cmd} exec -e={ev1} -e={ev2} {conf.box_name} '
-                f'/usr/local/bin/run-in-dir \\\\"\\\\" {full_cmd}"\n')
+                f'/usr/local/bin/run-in-dir \\\\"\\\\" {ambient_caps}{full_cmd}"\n')
 
     # the destination will be $HOME/.local/share/applications
     os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
@@ -609,7 +623,8 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
 
 
 def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
-                     app_flags: dict[str, str], wrapper_files: list[str]) -> None:
+                     app_flags: dict[str, str], keep_ambient_caps: bool,
+                     wrapper_files: list[str]) -> None:
     """
     For an executable, create a wrapper executable that invokes "podman/docker exec".
 
@@ -619,6 +634,8 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     :param conf: the :class:`StaticConfiguration` for the container
     :param app_flags: map of executable file name to the value from [app_flags] section from the
                       container configuration
+    :param keep_ambient_caps: don't drop ambient capabilities for the program which is otherwise
+                              required for executables that need explicit namespace support
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
     os.makedirs(conf.env.user_executables_dir, mode=Consts.default_directory_mode(),
@@ -627,15 +644,16 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     print_notice(f"Linking container executable {file} to {wrapper_exec}")
     # ensure to change working directory to same on as on host if possible using `run-in-dir`
     # check for additional flags to be added
+    ambient_caps = "" if keep_ambient_caps else "/usr/bin/setpriv --ambient-caps -all "
     if flags := app_flags.get(filename, ""):
-        full_cmd = '/usr/local/bin/run-in-dir "`pwd`" ' + _FLAGS_RE.sub(
+        full_cmd = '/usr/local/bin/run-in-dir "`pwd`" ' + ambient_caps + _FLAGS_RE.sub(
             lambda f_match: _replace_flags(f_match, flags, f'"{file}"', '"$@"'), flags)
     else:
-        full_cmd = f'/usr/local/bin/run-in-dir "`pwd`" "{file}" "$@"'
+        full_cmd = f'/usr/local/bin/run-in-dir "`pwd`" {ambient_caps}"{file}" "$@"'
     ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
     ev2 = " -e=".join((f"{k}=${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
     # TODO: some apps like those asking for password from terminal (e.g. ssh/ykman) also
-    # need pseudo-terminal i.e. "-t", so allow for an cmdline option to add "-t" here
+    # need pseudo-terminal i.e. "-t", so allow for a cmdline option to add "-t" here
     exec_content = ("#!/bin/sh\n",
                     f"exec {docker_cmd} exec -i -e={ev1} -e={ev2} {conf.box_name} ", full_cmd)
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:

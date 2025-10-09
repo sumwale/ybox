@@ -234,6 +234,13 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-f", "--app-flags", type=str,
                            help="comma separated key-value pairs for the flags to be used when "
                                 "invoking the container executables (e.g. 'chromium=...,...'")
+    subparser.add_argument("-K", "--keep-ambient-caps", action="store_true",
+                           help="skip adding 'setpriv --ambient-caps -all' to the executable that "
+                                "drops ambient capabilities; the default adds the 'setpriv' call "
+                                "to enable setting explicit namespaces for an application sandbox "
+                                "using bubblewrap or equivalent (e.g. done by glycin used by "
+                                "recent gdk-pixbuf releases), so this should be skipped only if "
+                                "no such capabilities are required by the executable")
     subparser.add_argument("-l", "--add-dep-wrappers", action="store_true",
                            help="create local wrapper desktop and executables for the newly "
                                 "installed package dependencies too (both required and optional)")
