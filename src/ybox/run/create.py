@@ -239,10 +239,9 @@ def main_argv(argv: list[str]) -> None:
                 # skip all questions for -q/--quiet (equivalent to -qq to `ybox-pkg install`)
                 quiet = 2 if args.quiet else 0
                 # box_conf can be skipped in new state.db but not for pre 0.9.3 having empty flags
-                keep_ambient_caps = app_flags.get(package + ":ambient_caps", "") == "keep"
-                if local_copies := wrap_container_files(package, copy_type, app_flags,
-                                                        keep_ambient_caps, list_cmd, docker_cmd,
-                                                        conf, box_conf, shared_root, quiet):
+                if local_copies := wrap_container_files(package, copy_type, app_flags, list_cmd,
+                                                        docker_cmd, conf, box_conf, shared_root,
+                                                        quiet):
                     # register the package again with the local_copies (no change to package_deps)
                     state.register_package(box_name, package, local_copies, copy_type, app_flags,
                                            shared_root, dep_type=None, dep_of="")

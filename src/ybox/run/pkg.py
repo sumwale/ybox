@@ -234,6 +234,13 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("-f", "--app-flags", type=str,
                            help="comma separated key-value pairs for the flags to be used when "
                                 "invoking the container executables (e.g. 'chromium=...,...'")
+    subparser.add_argument("-t", "--tty", action="store_true",
+                           help="allocate a pseudo-tty to run a command-line application that "
+                                "requires a TTY like applications that can ask for a password "
+                                "(e.g. ssh, ykman); note that this flag prevents redirection of "
+                                "the standard output and combines STDOUT and STDERR which can hang "
+                                "pipes among others, so should only be used for running "
+                                "applications interactively in a terminal")
     subparser.add_argument("-K", "--keep-ambient-caps", action="store_true",
                            help="skip adding 'setpriv --ambient-caps -all' to the executable that "
                                 "drops ambient capabilities; the default adds the 'setpriv' call "
