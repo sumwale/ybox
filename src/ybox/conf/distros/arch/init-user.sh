@@ -7,24 +7,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
 current_user="$(id -un)"
-# install binaries for paru from paru-bin (paru takes too long to compile)
-PARU="paru --noconfirm"
-echo_color "$fg_cyan" "Installing AUR helper 'paru'" >> $status_file
+# install AUR helper yay (original preference was paru whose development is sporadic)
+YAY="yay --noconfirm"
+echo_color "$fg_cyan" "Installing AUR helper 'yay'" >> $status_file
 export HOME=$(getent passwd "$current_user" | cut -d: -f6)
 cd "$HOME"
-rm -rf paru-bin
-git clone https://aur.archlinux.org/paru-bin.git
-cd paru-bin
+rm -rf yay
+git clone https://aur.archlinux.org/yay.git
+cd yay
 makepkg --noconfirm -si
 cd ..
 if [ -n "$EXTRA_PKGS" ]; then
   echo_color "$fg_cyan" "Installing $EXTRA_PKGS" >> $status_file
-  $PARU -S --needed $EXTRA_PKGS
+  $YAY -S --needed $EXTRA_PKGS
+fi
+orphans=$($YAY -Qdtq)
+if [ -n "$orphans" ]; then
+  $YAY -Rn $orphans
 fi
 echo_color "$fg_cyan" "Clearing package cache and updating packages" >> $status_file
-yes | paru -Sccd
-$PARU -Syu
-rm -rf paru-bin
+yes | yay -Sccd
+$YAY -Syu
+rm -rf yay "$HOME/.cache/go-build" "$HOME/.config/go"
 
 # add current user to realtime group (if present)
 # (does not work with rootless docker and is likely ineffective even if it does seem to work)
