@@ -13,6 +13,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
@@ -171,9 +172,15 @@ def main_argv(argv: list[str]) -> None:
                                           shared_root_dirs, conf, args.quiet)
                 remove_container(docker_cmd, conf)
     else:
-        # for no shared_root case, its best to refresh the local image
-        run_command([docker_cmd, "pull", base_image_name],
-                    error_msg="fetching container base image")
+        # for no shared_root case, its best to refresh the local image -- retry a few times
+        for _ in range(3):
+            if int(run_command([docker_cmd, "pull", base_image_name], exit_on_error=False,
+                               error_msg="fetching container base image")) == 0:
+                break
+            time.sleep(5)
+        else:
+            run_command([docker_cmd, "pull", base_image_name],
+                        error_msg="fetching container base image")
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
         run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
