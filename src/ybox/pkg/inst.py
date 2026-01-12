@@ -16,7 +16,8 @@ from typing import Callable, Optional, Union
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
-from ybox.cmd import PkgMgr, build_shell_command, run_command
+from ybox.cmd import (PkgMgr, build_shell_command, populate_exec_cmdline,
+                      run_command)
 from ybox.config import Consts, StaticConfiguration
 from ybox.print import print_error, print_info, print_notice, print_warn
 from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
@@ -33,15 +34,6 @@ _EXEC_ICON_RE = re.compile(f"{_EXEC_PATTERN}|{_ICON_PATH_PATTERN}")
 _NEEDS_TERMINAL_RE = re.compile(r"\s*Terminal\s*=\s*true\s*")
 # match !p and !a to replace executable program (third group above) and arguments respectively
 _FLAGS_RE = re.compile("![ap]")
-# environment variables passed through from host environment to podman/docker executable
-_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "XDG_SESSION_TYPE", "FREETYPE_PROPERTIES",
-                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO",
-                        "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
-                        "__VK_LAYER_NV_optimus", "VK_ICD_FILES", "VK_ICD_FILENAMES")
-# environment variables passed from host to podman/docker executable with empty if not set;
-# note that these variables are assumed to have values that don't need quoting by /bin/sh
-# else code will need to be updated to quote $<var> value when passing to the shell
-_PASSTHRU_EMPTY_ENVVARS = ("WAYLAND_DISPLAY", "QT_QPA_PLATFORM")
 # characters that need to be escaped in quoted string of Exec/TryExec line
 _DESKTOP_ESCAPE_RE = re.compile(r'["`$\\]')
 
@@ -486,26 +478,26 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
             return ""
         program = match.group(3)
         args = match.group(4)
-        # check for additional flags to be added
-        if flags := app_flags.get(os.path.basename(program), ""):
-            full_cmd = _FLAGS_RE.sub(
-                lambda f_match: _replace_flags(f_match, flags, program, args), flags)
-        elif args:
-            full_cmd = f"{program} {args}"
-        else:
-            full_cmd = program
+        cmdline = [str(exec_word), '/bin/sh -c "']
         # pseudo-tty cannot be allocated with rootless docker outside of a terminal app
-        ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
-        ev2 = " -e=".join((f"{k}=\\\\${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
-        full_cmd = _DESKTOP_ESCAPE_RE.sub(r'\\\g<0>', full_cmd)
+        populate_exec_cmdline(docker_cmd, conf.box_name, r'\\', needs_terminal, needs_tty,
+                              (), "", cmdline)
         # clear ambient capabilities by default to support running executables that
         # invoke bubblewrap or equivalent for namespaces (e.g. steam or usage of glycin
         #   by recent gdk-pixbuf releases or otherwise)
-        interactive = " -i" if needs_terminal else ""
-        tty = " -t" if needs_terminal and needs_tty else ""
-        ambient_caps = "" if keep_ambient_caps else "/usr/bin/setpriv --ambient-caps -all "
-        return (f'{exec_word}/bin/sh -c "{docker_cmd} exec{interactive}{tty} -e={ev1} -e={ev2} '
-                f'{conf.box_name} /usr/local/bin/run-in-dir \\\\"\\\\" {ambient_caps}{full_cmd}"\n')
+        if not keep_ambient_caps:
+            cmdline.append("/usr/bin/setpriv --ambient-caps -all ")
+        # check for additional flags to be added
+        if flags := app_flags.get(os.path.basename(program), ""):
+            exec_cmd = _FLAGS_RE.sub(
+                lambda f_match: _replace_flags(f_match, flags, program, args), flags)
+            cmdline.append(_DESKTOP_ESCAPE_RE.sub(r'\\\g<0>', exec_cmd))
+        elif args:
+            cmdline.extend((program, " ", _DESKTOP_ESCAPE_RE.sub(r'\\\g<0>', args)))
+        else:
+            cmdline.append(program)
+        cmdline.append('"\n')
+        return "".join(cmdline)
 
     # the destination will be $HOME/.local/share/applications
     os.makedirs(conf.env.user_applications_dir, mode=Consts.default_directory_mode(),
@@ -654,23 +646,20 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
                 exist_ok=True)
     wrapper_exec = _get_wrapper_executable(filename, conf)
     print_notice(f"Linking container executable {file} to {wrapper_exec}")
+    exec_content = ["#!/bin/sh\nexec "]
     # ensure to change working directory to same on as on host if possible using `run-in-dir`
+    populate_exec_cmdline(docker_cmd, conf.box_name, "", True, needs_tty, (), "`pwd`", exec_content)
+    # check if ambient capabilities have to be cleared
+    if not keep_ambient_caps:
+        exec_content.append("/usr/bin/setpriv --ambient-caps -all ")
     # check for additional flags to be added
-    ambient_caps = "" if keep_ambient_caps else "/usr/bin/setpriv --ambient-caps -all "
     if flags := app_flags.get(filename, ""):
-        full_cmd = '/usr/local/bin/run-in-dir "`pwd`" ' + ambient_caps + _FLAGS_RE.sub(
-            lambda f_match: _replace_flags(f_match, flags, f'"{file}"', '"$@"'), flags)
+        exec_content.append(_FLAGS_RE.sub(
+            lambda f_match: _replace_flags(f_match, flags, f'"{file}"', '"$@"'), flags))
     else:
-        full_cmd = f'/usr/local/bin/run-in-dir "`pwd`" {ambient_caps}"{file}" "$@"'
-    ev1 = " -e=".join(_PASSTHROUGH_ENVVARS)
-    ev2 = " -e=".join((f"{k}=${k}" for k in _PASSTHRU_EMPTY_ENVVARS))
-    # some apps like those asking for password from terminal (e.g. ssh/ykman) also
-    # need a pseudo-terminal
-    tty = " -t" if needs_tty else ""
-    exec_content = ("#!/bin/sh\n",
-                    f"exec {docker_cmd} exec -i{tty} -e={ev1} -e={ev2} {conf.box_name} ", full_cmd)
+        exec_content.extend(('"', file, '" "$@"'))
     with open(wrapper_exec, "w", encoding="utf-8") as wrapper_fd:
-        wrapper_fd.writelines(exec_content)
+        wrapper_fd.write("".join(exec_content))
     os.chmod(wrapper_exec, mode=0o755, follow_symlinks=True)
     wrapper_files.append(wrapper_exec)
 

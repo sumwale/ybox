@@ -3,9 +3,10 @@ Code for the `ybox-cmd` script that is used to execute programs in an active ybo
 """
 
 import argparse
+import os
 import sys
 
-from ybox.cmd import parser_version_check, run_command
+from ybox.cmd import parser_version_check, populate_exec_cmdline, run_command
 from ybox.env import get_docker_command
 
 
@@ -24,17 +25,26 @@ def main_argv(argv: list[str]) -> None:
     """
     args = parse_args(argv)
     docker_cmd = get_docker_command()
-    container_name = args.container_name
+    container_name = str(args.container_name)
 
-    docker_args = [docker_cmd, "exec"]
-    if not args.skip_terminal:
-        docker_args.append("-it")
-    docker_args.append(container_name)
+    exec_cmd: list[str] = []
+    needs_tty = not args.skip_terminal
+    env = ()
+    if args.env:
+        env = list[str]([])
+        for kv in args.env:
+            env.append("-e")
+            env.append(kv)
+    populate_exec_cmdline(docker_cmd, container_name, "", needs_tty, needs_tty, env,
+                          os.getcwd(), exec_cmd)
     if isinstance(args.command, str):
-        docker_args.append(args.command)
+        exec_cmd.append(args.command)
     else:
-        docker_args.extend(args.command)
-    run_command(docker_args, error_msg=f"{args.command} execution on '{container_name}'")
+        for cmd in args.command:
+            exec_cmd.append(" ")
+            exec_cmd.append(cmd)
+    run_command(["/bin/sh", "-c", "".join(exec_cmd)],
+                error_msg=f"{args.command} execution on '{container_name}'")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -45,6 +55,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     :return: the result of parsing using the `argparse` library as a :class:`argparse.Namespace`
     """
     parser = argparse.ArgumentParser(description="Run a command on an active ybox container")
+    parser.add_argument("-e", "--env", action="append", type=str,
+                        help="set environment variables for the command in the container; "
+                             "the environment variable can be specified with a value in the form "
+                             "VAR=VALUE or without =VALUE in which case the value of the variable "
+                             "is passed through from the host environment (which will be unset if "
+                             "unset in the host); this option can be repeated multiple times")
     parser.add_argument("-s", "--skip-terminal", action="store_true",
                         help="skip interactive pseudo-terminal for the command "
                              "(i.e. skip -it options to podman/docker)")

@@ -15,6 +15,16 @@ from ybox.config import Consts
 
 from .print import print_error, print_info, print_notice, print_warn
 
+# environment variables passed through from host environment to podman/docker executable
+_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "XDG_SESSION_TYPE", "FREETYPE_PROPERTIES",
+                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO", "__NV_PRIME_RENDER_OFFLOAD",
+                        "__GLX_VENDOR_LIBRARY_NAME", "__VK_LAYER_NV_optimus",
+                        "VK_DRIVER_FILES", "VK_ICD_FILES", "VK_ICD_FILENAMES")
+# environment variables passed from host to podman/docker executable with empty if not set;
+# note that these variables are assumed to have values that don't need quoting by /bin/sh
+# else code will need to be updated to quote $<var> value when passing to the shell
+_PASSTHRU_EMPTY_ENVVARS = ("WAYLAND_DISPLAY", "QT_QPA_PLATFORM")
+
 
 class PkgMgr(str, Enum):
     """
@@ -321,3 +331,48 @@ def page_command(cmd: Union[str, list[str]], pager: str, error_msg: Optional[str
     result_bytes = transform(result).encode("utf-8") if transform else result.encode("utf-8")
     output = (header.encode("utf-8"), result_bytes) if header else (result_bytes,)
     return page_output(output, pager)
+
+
+def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_interactive: bool,
+                          needs_tty: bool, extra_args: Iterable[str], working_dir: str,
+                          cmd: list[str]) -> None:
+    """
+    Append the podman/docker command-line arguments for execution of a command that includes
+    environment variables to be passed through from the host environment to the container which
+    should be executed by a bourne compatible shell. The actual command to be run in the container
+    including its arguments should be appended after this method call which will append a trailing
+    whitespace at the end.
+
+    :param docker_cmd: the podman/docker executable to use
+    :param box_name: name of the ybox container
+    :param escape_str: escape string required before special characters (`$` and `"` in this case)
+    :param is_interactive: true for an interactive application where standard input is kept open
+    :param needs_tty: allocate a pseudo-tty when running the application in a terminal
+    :param extra_args: extra arguments to be passed to podman/docker exec as an `Iterable` of
+                       strings that will be expanded by /bin/sh
+    :param working_dir: the working directory in the container to use for the command; this can be
+                        a bourne-shell compatible expression
+    :param cmd: existing command-line as a list of strings that should be concatenated without any
+                separator; this will be populated with the arguments required for podman/docker
+                execution including the environment variables to be passed through from the host
+    """
+    cmd.append(docker_cmd)
+    cmd.append(" exec")
+    # check for interative apps usually running in a terminal
+    if is_interactive:
+        cmd.append(" -i")
+    # some apps like those asking for password from terminal (e.g. ssh/ykman) also
+    # need a pseudo-terminal
+    if needs_tty:
+        cmd.append(" -t")
+    for e_var in _PASSTHROUGH_ENVVARS:
+        cmd.extend(" -e ")
+        cmd.append(e_var)
+    for e_var in _PASSTHRU_EMPTY_ENVVARS:
+        cmd.extend((" -e ", e_var, "=", escape_str, "$", e_var))
+    if extra_args:
+        for arg in extra_args:
+            cmd.append(" ")
+            cmd.append(arg)
+    cmd.extend((" ", box_name, " /usr/local/bin/run-in-dir ", escape_str, '"', working_dir,
+                escape_str, '" '))
