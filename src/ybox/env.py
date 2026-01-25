@@ -9,17 +9,16 @@ import site
 import subprocess
 import sys
 from datetime import datetime
-
-if sys.version_info >= (3, 11):
-    from importlib.resources.abc import Traversable
-else:
-    from importlib.abc import Traversable
-
 from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Union
 
 from .print import print_error, print_notice
+
+if sys.version_info >= (3, 11):
+    from importlib.resources.abc import Traversable
+else:
+    from importlib.abc import Traversable
 
 PathName = Union[Path, Traversable]
 
