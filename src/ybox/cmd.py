@@ -257,7 +257,7 @@ def parse_opt_deps_args(argv: list[str]) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         description="Recursively find optional dependencies of a package")
-    # default separator is something that does not appear in descriptions (at least so far)
+    # default separator is something that does not appear in descriptions
     parser.add_argument("-s", "--separator", type=str, default="::::",
                         help="separator to use between the columns")
     parser.add_argument("-p", "--prefix", type=str, default="",
@@ -266,7 +266,9 @@ def parse_opt_deps_args(argv: list[str]) -> argparse.Namespace:
                         help="header line to print before the results (without trailing newline)")
     parser.add_argument("-l", "--level", type=int, default=2,
                         help="maximum level to search for optional dependencies")
-    parser.add_argument("package", type=str, help="name of the package")
+    parser.add_argument("packages", nargs="+", type=str,
+                        help="names of the packages with optional comparison using one of the "
+                        "operators =/==, <, <=, >, >=, <>/!= against a version (e.g. <pkg> >= 1.1)")
     return parser.parse_args(argv)
 
 

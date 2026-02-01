@@ -17,7 +17,6 @@ from typing import Iterable, Iterator, Optional, Union
 from uuid import uuid4
 
 from packaging.version import Version
-from packaging.version import parse as parse_version
 
 from ybox import __version__ as product_version
 
@@ -99,9 +98,9 @@ class YboxStateManagement:
     """
 
     # last version when versioning and schema migration did not exist
-    _PRE_SCHEMA_VERSION = parse_version("0.9.0")
+    _PRE_SCHEMA_VERSION = Version("0.9.0")
     # last version when container versioning did not exist
-    _PRE_CONTAINER_VERSION = parse_version("0.9.5")
+    _PRE_CONTAINER_VERSION = Version("0.9.5")
     # pattern to match "source '<file>'" in SQL script -- doesn't allow a quote in file name
     _SOURCE_SQLCMD_RE = re.compile(r"^\s*source\s*'([^']+)'\s*;\s*", re.IGNORECASE)
     # SQL to start an EXCLUSIVE transaction
@@ -138,7 +137,7 @@ class YboxStateManagement:
             self._conn.create_function("JSON_FROM_CSV", 1, self.json_from_csv, deterministic=True)
             self._conn.create_function("EQUIV_CONFIG", 2, self.equivalent_configuration,
                                        deterministic=True)
-            self._version = parse_version(product_version)
+            self._version = Version(product_version)
             self._init_schema(cursor)
             self._internal_commit()
 
@@ -196,7 +195,7 @@ class YboxStateManagement:
             # check version and run migration scripts if required
             if self._table_exists("schema", cursor):  # version > 0.9.0
                 cursor.execute("SELECT version FROM schema")
-                old_version = parse_version(cursor.fetchone()[0])
+                old_version = Version(cursor.fetchone()[0])
             else:  # version = 0.9.0
                 old_version = self._PRE_SCHEMA_VERSION
             if version != old_version:
@@ -238,13 +237,13 @@ class YboxStateManagement:
             part1, _, part2 = file.removesuffix(suffix).partition(sep)
             part1_1, _, part1_2 = part1.partition("-")
             if part1_2:
-                return parse_version(part1_1) <= old_version <= parse_version(part1_2) < \
-                    parse_version(part2) <= new_version
-            return old_version <= parse_version(part1) < parse_version(part2) <= new_version
+                return Version(part1_1) <= old_version <= Version(part1_2) < \
+                    Version(part2) <= new_version
+            return old_version <= Version(part1) < Version(part2) <= new_version
 
         version_files = [file for file in file_iter if file.is_file() and check_version(file.name)]
         if len(version_files) > 1:
-            version_files.sort(key=lambda f: parse_version(f.name[:f.name.find(sep)]))
+            version_files.sort(key=lambda f: Version(f.name[:f.name.find(sep)]))
         return version_files
 
     @staticmethod
@@ -339,7 +338,7 @@ class YboxStateManagement:
                               distribution's `distro.ini`
         """
         # pylint: disable=exec-used
-        old_version = parse_version(container_version) if container_version \
+        old_version = Version(container_version) if container_version \
             else self._PRE_CONTAINER_VERSION
         if self._version == old_version:
             return

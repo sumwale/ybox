@@ -1,5 +1,5 @@
 """
-Migrate from 0.9.0 upwards to 0.9.7 that requires copying updated scripts to the container.
+Migrate from 0.9.0 upwards to 0.9.10 that requires copying updated scripts to the container.
 
 Invoke this script using `exec` passing the `StaticConfiguration` object as `conf` local variable
 and parsed distribution configuration `ConfigParser` object as `distro_config` local variable.

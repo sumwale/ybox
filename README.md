@@ -11,7 +11,7 @@ of the container including directories to be shared, logging etc.
 Special emphasis is given on security where users can choose to lock down
 or open up the container as required with reasonable defaults out of the
 box. There is no sharing of HOME or no privileged mode container. This sets
-it apart from other similar solutions like distrobox/toolbx and the reason
+it apart from other similar solutions like distrobox and the reason
 for starting this project since those other solutions don't care about
 security/sandboxing at all and share the entire HOME while running the
 containers in privileged mode. The other problem with those solutions is that

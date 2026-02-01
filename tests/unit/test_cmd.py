@@ -277,11 +277,13 @@ def test_parse_opt_deps_args():
     assert args.prefix == ""
     assert args.header == ""
     assert args.level == 2
-    args = parse_opt_deps_args(["-s", ";", "-pPKG:", "-H", "START", "-l1", "firefox"])
+    assert args.packages == ["firefox"]
+    args = parse_opt_deps_args(["-s", ";", "-pPKG:", "-H", "START", "-l1", "firefox", "chromium"])
     assert args.separator == ";"
     assert args.prefix == "PKG:"
     assert args.header == "START"
     assert args.level == 1
+    assert args.packages == ["firefox", "chromium"]
 
 
 def test_page_output(capfd: pytest.CaptureFixture[str]):
