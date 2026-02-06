@@ -4,6 +4,7 @@ with a main stub that uses `ybox.resolve.ResolvePackage` to print the optional d
 given packages as expected by `ybox-pkg`.
 """
 
+import platform
 import sys
 from typing import Iterable, Optional, cast
 
@@ -21,6 +22,7 @@ class APTPackageMap(PackageMap):
         apt_pkg.init()
         self._cache = apt_pkg.Cache()
         self._records = apt_pkg.PackageRecords(self._cache)
+        self._platform_arch = apt_pkg.config.find("APT::Architecture") or platform.uname().machine
 
     def finalize_package_desc(self, pkg: Package) -> None:
         if pkg.desc and not isinstance(pkg.desc, str):
@@ -32,14 +34,18 @@ class APTPackageMap(PackageMap):
     def _transform_or_deps(self, all_deps: dict[str, list[list[apt_pkg.Dependency]]],
                            dep_type: str) -> OrPackageConditions:
         if deps := all_deps.get(dep_type):
-            return [[PackageCondition(dep.target_pkg.name, dep.target_ver, dep.comp_type)
+            return [[PackageCondition(dep.target_pkg.name,
+                                      dep.target_pkg.architecture or self._platform_arch,
+                                      dep.target_ver, dep.comp_type)
                      for dep in or_deps] for or_deps in deps]
         return None
 
     def _transform_deps(self, all_deps: dict[str, list[list[apt_pkg.Dependency]]],
                         dep_type: str) -> Optional[list[PackageCondition]]:
         if deps := all_deps.get(dep_type):
-            return [PackageCondition(dep.target_pkg.name, dep.target_ver, dep.comp_type)
+            return [PackageCondition(dep.target_pkg.name,
+                                     dep.target_pkg.architecture or self._platform_arch,
+                                     dep.target_ver, dep.comp_type)
                     for or_deps in deps if (dep := or_deps[0])]
         return None
 
@@ -58,8 +64,17 @@ class APTPackageMap(PackageMap):
             pkg.conflicts = conflicts
             pkg.transformed = True
 
+    def platform_architecture(self) -> str:
+        return self._platform_arch
+
     def version_compare(self, v1: str, v2: str) -> int:
         return apt_pkg.version_compare(v1, v2)
+
+    @staticmethod
+    def parsed_tuple_to_condition(parsed: tuple[str, str, str], pkg_arch: str) -> PackageCondition:
+        if (c_index := (name_arch := parsed[0]).find(":")) == -1:
+            return PackageCondition(name_arch, pkg_arch, parsed[1], parsed[2])
+        return PackageCondition(name_arch[:c_index], name_arch[c_index + 1:], parsed[1], parsed[2])
 
     def build_package_map(self, conflicts: ConflictMap,
                           resolve_pkgs: Iterable[PackageCondition]) -> CandidatePackages:
@@ -73,16 +88,16 @@ class APTPackageMap(PackageMap):
                 arch = section["Architecture"]
                 pkg_all_conflicts = ()
                 if pkg_conflicts := section.get("Conflicts"):
-                    pkg_all_conflicts = apt_pkg.parse_depends(pkg_conflicts, strip_multi_arch=False)
+                    pkg_all_conflicts = apt_pkg.parse_depends(pkg_conflicts)
                 if pkg_conflicts := section.get("Breaks"):
-                    pkg_breaks = apt_pkg.parse_depends(pkg_conflicts, strip_multi_arch=False)
+                    pkg_breaks = apt_pkg.parse_depends(pkg_conflicts)
                     if pkg_all_conflicts:
                         pkg_all_conflicts.extend(pkg_breaks)
                     else:
                         pkg_all_conflicts = pkg_breaks
                 if pkg_all_conflicts:
                     # conflicts will never have ORed conditions
-                    pkg_all_conflicts = [PackageCondition(tuples[0][0], tuples[0][1], tuples[0][2])
+                    pkg_all_conflicts = [self.parsed_tuple_to_condition(tuples[0], arch)
                                          for tuples in pkg_all_conflicts]
                 self.add_conflicts(Package(name, arch, version, "", True,
                                            conflicts=pkg_all_conflicts), conflicts)
@@ -100,7 +115,8 @@ class APTPackageMap(PackageMap):
             and inst_ver.arch == ver.arch
         all_deps = ver.depends_list
         provides = ver.provides_list
-        provides = [PackageCondition(p[0], p[1], "=") for p in provides] if provides else None
+        provides = [PackageCondition(p[0], ver.arch, p[1], "=")
+                    for p in provides] if provides else None
         return Package(name, ver.arch, ver.ver_str, ver.translated_description.file_list,
                        installed, all_deps, None, None, None, provides)
 

@@ -22,20 +22,21 @@ VersionCompare = Callable[[Any, Any], bool]
 @dataclass
 class PackageCondition:
     name: Final[str]
-    # TODO: SW: add architecture field and checks
-    version: Final[str] = ""  # optionally a version to be compared against
-    version_cmp: Final[str] = ""  # comparison against the version e.g. <pkg> >= 1.1
+    arch: Final[str]
+    version: Final[str]  # optionally a version to be compared against
+    version_cmp: Final[str]  # comparison against the version e.g. <pkg> >= 1.1
     _version_cmp_op: Optional[VersionCompare] = None  # function equivalent of `version_cmp`
 
     def __hash__(self) -> int:
         return hash((self.name, self.version, self.version_cmp))
 
     def __eq__(self, other: Any) -> bool:
-        return isinstance(other, PackageCondition) and self.name == other.name \
-            and self.version == other.version and self.version_cmp == other.version_cmp
+        return isinstance(other, PackageCondition) and self.name == other.name and self.arch == \
+            other.arch and self.version == other.version and self.version_cmp == other.version_cmp
 
     def __str__(self) -> str:
-        return f"{self.name}{self.version_cmp}{self.version}" if self.version else self.name
+        name_arch = f"{self.name}:{self.arch}" if self.arch else self.name
+        return f"{name_arch}{self.version_cmp}{self.version}" if self.version else name_arch
 
     __repr__ = __str__
 
@@ -115,8 +116,12 @@ CandidatePackages = list[tuple[PackageCondition, list[Package]]]
 
 class BasePackageCollection(ABC):
 
-    # split package name and its comparison against a version
-    PKG_COND_RE = re.compile(r"\s*([^=<>!]+)\s*(([=<>!]+)\s*(\S+)\s*)?")
+    # split package name, architecture and its comparison against a version
+    PKG_COND_RE = re.compile(r"\s*([^=<>!:\s]+)(:[^=<>!:\s]+)?\s*(([=<>!]+)\s*(\S+)\s*)?")
+
+    @abstractmethod
+    def platform_architecture(self) -> str:
+        ...
 
     @abstractmethod
     def version_compare(self, v1: str, v2: str) -> int:
@@ -125,25 +130,40 @@ class BasePackageCollection(ABC):
     def cannonical_name(self, pkg: str) -> str:
         return pkg
 
-    def parse_package_condition(self, pkg_dep: str,
-                                pkg_cond: re.Pattern[str] = PKG_COND_RE) -> PackageCondition:
-        if match := pkg_cond.fullmatch(pkg_dep):
-            return PackageCondition(self.cannonical_name(match.group(1)),
-                                    match.group(4), match.group(3))
+    def package_condition_has_arch(self) -> bool:
+        return True
+
+    def parse_package_condition(self, pkg_dep: str, pkg_cond: re.Pattern[str] = PKG_COND_RE,
+                                default_arch: str = "") -> PackageCondition:
+        if mt := pkg_cond.fullmatch(pkg_dep):
+            index_inc = 0
+            if self.package_condition_has_arch():
+                index_inc = 1
+                if arch := mt.group(2):
+                    arch = arch[1:]  # strip off the leading colon
+                default_arch = arch or default_arch
+            return PackageCondition(self.cannonical_name(mt.group(1)),
+                                    default_arch or self.platform_architecture(),
+                                    mt.group(4 + index_inc) or "", mt.group(3 + index_inc) or "")
         print_warn(f"Found dependency with an unknown format [{pkg_dep}]")
-        return PackageCondition(self.cannonical_name(pkg_dep.strip()))
+        return PackageCondition(self.cannonical_name(pkg_dep.strip()),
+                                default_arch or self.platform_architecture(), "", "")
 
 
 class PackageMap(BasePackageCollection):
 
-    def version_compare_op(self, v1: str, v2: str, cmp: Optional[VersionCompare]) -> bool:
-        return not v2 or (cmp is not None and cmp(self.version_compare(v1, v2), 0))
-
     def add_conflicts(self, pkg: Package, conflicts: ConflictMap) -> None:
-        conflicts[pkg.name].append(PackageCondition(pkg.name, pkg.version, "=", operator.eq))
+        conflicts[pkg.name].append(PackageCondition(pkg.name, pkg.arch, pkg.version,
+                                                    "=", operator.eq))
         if pkg.conflicts:
             for conflict in pkg.conflicts:
                 conflicts[conflict.name].append(conflict)
+
+    def verify_package_condition(self, pkg: Package, pkg_cond: PackageCondition) -> bool:
+        cmp = pkg_cond.version_cmp_op
+        return (pkg.arch == pkg_cond.arch or pkg.arch == "all" or pkg.arch == "any") and (
+            not pkg_cond.version or (cmp is not None and cmp(
+                self.version_compare(pkg.version, pkg_cond.version), 0)))
 
     def _check_packages_in_map(self, resolve_pkgs: Iterable[PackageCondition],
                                resolved: CandidatePackages) -> Iterable[PackageCondition]:
@@ -152,7 +172,7 @@ class PackageMap(BasePackageCollection):
             candidates: Optional[list[Package]] = None
             installed: Optional[list[Package]] = None
             for candidate in self.lookup(pkg.name):
-                if self.version_compare_op(candidate.version, pkg.version, pkg.version_cmp_op):
+                if self.verify_package_condition(candidate, pkg):
                     if candidate.installed:
                         if installed:
                             installed.append(candidate)
@@ -216,13 +236,14 @@ class DistributionPackages(BasePackageCollection):
         return desc
 
     @abstractmethod
-    def transform_package_conditions(self, pkg_conds: Any,
+    def transform_package_conditions(self, pkg: Package, pkg_conds: Any,
                                      dep_type: DependencyType) -> Iterable[PackageCondition]:
         ...
 
     @abstractmethod
     def transform_or_package_conditions(
-            self, pkg_conds: Any, dep_type: DependencyType) -> Iterable[Iterable[PackageCondition]]:
+            self, pkg: Package, pkg_conds: Any,
+            dep_type: DependencyType) -> Iterable[Iterable[PackageCondition]]:
         ...
 
 
@@ -231,6 +252,9 @@ class DistributionPackageMap(PackageMap):
     def __init__(self, distro_pkgs: DistributionPackages):
         self._distro_pkgs = distro_pkgs
         self._package_map = defaultdict[str, list[Package]](list[Package])
+
+    def platform_architecture(self) -> str:
+        return self._distro_pkgs.platform_architecture()
 
     def version_compare(self, v1: str, v2: str) -> int:
         return self._distro_pkgs.version_compare(v1, v2)
@@ -248,7 +272,7 @@ class DistributionPackageMap(PackageMap):
                     print_error(f"Unexpected provides '{prv}' with version comparison "
                                 f"operator '{prv.version_cmp}'")
                     continue
-                provide_pkg = Package(prv.name, pkg.arch, prv.version, "",
+                provide_pkg = Package(prv.name, prv.arch or pkg.arch, prv.version, "",
                                       installed=pkg.installed, provided_by=pkg)
                 self._package_map[provide_pkg.name].append(provide_pkg)
 
@@ -271,12 +295,12 @@ class DistributionPackageMap(PackageMap):
 
     def _transform_or_deps(self, pkg: Package, deps: OrPackageConditions,
                            dep_type: DependencyType) -> OrPackageConditions:
-        return self._distro_pkgs.transform_or_package_conditions(deps, dep_type) \
+        return self._distro_pkgs.transform_or_package_conditions(pkg, deps, dep_type) \
             if not pkg.transformed and deps else deps
 
     def _transform_deps(self, pkg: Package, deps: PackageConditions,
                         dep_type: DependencyType) -> PackageConditions:
-        return self._distro_pkgs.transform_package_conditions(deps, dep_type) \
+        return self._distro_pkgs.transform_package_conditions(pkg, deps, dep_type) \
             if not pkg.transformed and deps else deps
 
     def finalize_package_desc(self, pkg: Package) -> None:
@@ -313,8 +337,7 @@ class ResolvePackage:
         # recommended and suggested deps recursively
         if matches := conflicts.get(pkg.name):
             for conflict in matches:
-                if self._package_map.version_compare_op(pkg.version, conflict.version,
-                                                        conflict.version_cmp_op):
+                if self._package_map.verify_package_condition(pkg, conflict):
                     print_warn(f"Skipping [{pkg}] that conflicts with [{conflict}]")
                     return True
         return False
@@ -339,9 +362,8 @@ class ResolvePackage:
                         self._package_map.finalize_package_desc(dep_pkg)
                         dep_alternate_list.append((dep_pkg.name, dep_pkg.version,
                                                    dep_pkg.desc, for_suggests, True))
-                    elif not has_installed and self._package_map.version_compare_op(
-                        pkg.version, dep.version, dep.version_cmp_op) \
-                            and dep_pkg.name not in included_pkg_names \
+                    elif not has_installed and self._package_map.verify_package_condition(
+                        pkg, dep) and dep_pkg.name not in included_pkg_names \
                             and not self.has_conflict(pkg, conflicts):
                         self._package_map.finalize_package_desc(dep_pkg)
                         dep_alternate_list.append((dep_pkg.name, dep_pkg.version,

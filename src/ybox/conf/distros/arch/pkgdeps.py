@@ -6,6 +6,7 @@ given packages as expected by `ybox-pkg`.
 
 import gzip
 import os
+import platform
 import re
 import sys
 import time
@@ -83,10 +84,11 @@ class ArchPackages(DistributionPackages):
                     # arch linux packages are always lower case which is enforced below
                     # (no architecture information in AUR metadata)
                     provides_list = pkg.get("Provides")
-                    provides = [self.parse_package_condition(s, self._PKG_COND_RE)
+                    # AUR packages don't have an architecture and can be built for multi-platforms
+                    provides = [self.parse_package_condition(s, self._PKG_COND_RE, "any")
                                 for s in provides_list] if provides_list else None
                     package_map.add_package(Package(
-                        pkg.get("Name").lower(), "", pkg.get("Version"),
+                        pkg.get("Name").lower(), "any", pkg.get("Version"),
                         pkg.get("Description") or "", False, pkg.get("Depends"),
                         pkg.get("OptDepends"), None, pkg.get("Conflicts"), provides), None)
                 return True
@@ -98,10 +100,11 @@ class ArchPackages(DistributionPackages):
     def _to_package(self, pkg: pyalpm.Package, installed: bool, convert_conflicts: bool) -> Package:
         # Arch package descriptions don't have ORed dependency alternatives
         # Arch linux packages are always lower case which is enforced below
-        provides = [self.parse_package_condition(s, self._PKG_COND_RE) for s in pkg.provides] \
-            if pkg.provides else None
-        conflicts = [self.parse_package_condition(s, self._PKG_COND_RE) for s in pkg.conflicts] \
-            if convert_conflicts and pkg.conflicts else pkg.conflicts
+        provides = [self.parse_package_condition(s, self._PKG_COND_RE, pkg.arch)
+                    for s in pkg.provides] if pkg.provides else None
+        conflicts = [self.parse_package_condition(s, self._PKG_COND_RE, pkg.arch)
+                     for s in pkg.conflicts] if convert_conflicts and pkg.conflicts \
+            else pkg.conflicts
         return Package(pkg.name.lower(), pkg.arch, pkg.version, pkg.desc, installed, pkg.depends,
                        pkg.optdepends, None, conflicts, provides)
 
@@ -157,22 +160,29 @@ class ArchPackages(DistributionPackages):
             self._refresh_aur_metadata(raise_error=True)
             self._populate_aur_packages(package_map, raise_error=True)
 
+    def platform_architecture(self) -> str:
+        return platform.uname().machine
+
     def version_compare(self, v1: str, v2: str) -> int:
         return pyalpm.vercmp(v1, v2)
 
     def cannonical_name(self, pkg: str) -> str:
         return pkg.lower()
 
-    def transform_package_conditions(self, pkg_conds: Any,
+    def package_condition_has_arch(self) -> bool:
+        return False
+
+    def transform_package_conditions(self, pkg: Package, pkg_conds: Any,
                                      dep_type: DependencyType) -> Iterable[PackageCondition]:
-        return [self.parse_package_condition(s, self._PKG_COND_RE) for s in pkg_conds] \
-            if isinstance(pkg_conds[0], str) else pkg_conds
+        return [self.parse_package_condition(s, self._PKG_COND_RE, pkg.arch)
+                for s in pkg_conds] if isinstance(pkg_conds[0], str) else pkg_conds
 
     def transform_or_package_conditions(
-            self, pkg_conds: Any, dep_type: DependencyType) -> Iterable[Iterable[PackageCondition]]:
+            self, pkg: Package, pkg_conds: Any,
+            dep_type: DependencyType) -> Iterable[Iterable[PackageCondition]]:
         # Arch packages do not have multiple ORed conditions
-        return [(self.parse_package_condition(s, self._PKG_COND_RE),) for s in pkg_conds] \
-            if isinstance(pkg_conds[0], str) else pkg_conds
+        return [(self.parse_package_condition(s, self._PKG_COND_RE, pkg.arch),)
+                for s in pkg_conds] if isinstance(pkg_conds[0], str) else pkg_conds
 
 
 if __name__ == "__main__":
