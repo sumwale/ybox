@@ -90,7 +90,7 @@ class Package:
     recommends: OrPackageConditions = None
     suggests: OrPackageConditions = None
     conflicts: PackageConditions = None
-    provides: Optional[list[PackageCondition]] = None  # parsed upfront for the full package map
+    provides: PackageConditions = None  # required upfront by `DistributionPackageMap` for all
     provided_by: Final[Optional['Package']] = None
     transformed: bool = False
 

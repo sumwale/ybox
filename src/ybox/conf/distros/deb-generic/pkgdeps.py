@@ -62,6 +62,8 @@ class APTPackageMap(PackageMap):
                 else:
                     conflicts = breaks
             pkg.conflicts = conflicts
+            pkg.provides = [PackageCondition(t[0], pkg.arch, t[1], "=") for p in pkg.provides
+                            if (t := cast(tuple[str, str, str], p))] if pkg.provides else None
             pkg.transformed = True
 
     def platform_architecture(self) -> str:
@@ -114,11 +116,8 @@ class APTPackageMap(PackageMap):
         installed = inst_ver is not None and inst_ver.ver_str == ver.ver_str \
             and inst_ver.arch == ver.arch
         all_deps = ver.depends_list
-        provides = ver.provides_list
-        provides = [PackageCondition(p[0], ver.arch, p[1], "=")
-                    for p in provides] if provides else None
         return Package(name, ver.arch, ver.ver_str, ver.translated_description.file_list,
-                       installed, all_deps, None, None, None, provides)
+                       installed, all_deps, None, None, None, ver.provides_list)
 
     def lookup(self, pkg_name: str) -> Iterable[Package]:
         try:
