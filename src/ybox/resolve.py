@@ -4,15 +4,16 @@ selection during package installation.
 """
 
 import operator
+import re
 import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import (Any, Callable, Final, Iterable, MutableSequence, Optional,
-                    Union, cast, final)
+from enum import Enum
+from typing import Any, Callable, Final, Iterable, Optional, Union, cast
 
 from ybox.cmd import parse_opt_deps_args
-from ybox.print import print_error, print_notice
+from ybox.print import fgcolor, print_color, print_error, print_warn
 
 # a function from the `operator` module
 VersionCompare = Callable[[Any, Any], bool]
@@ -34,7 +35,9 @@ class PackageCondition:
             and self.version == other.version and self.version_cmp == other.version_cmp
 
     def __str__(self) -> str:
-        return f"{self.name} {self.version_cmp} {self.version}" if self.version else self.name
+        return f"{self.name}{self.version_cmp}{self.version}" if self.version else self.name
+
+    __repr__ = __str__
 
     @property
     def version_cmp_op(self) -> Optional[VersionCompare]:
@@ -60,11 +63,19 @@ class PackageCondition:
 
 
 # Package conditions that are ANDed (e.g. <pkg1> = 1.1, <pkg2> >= 2.0)
-# These are initially unprocessed strings which are transformed to `PackageCondition`s when required
-PackageConditions = Optional[Union[list[str], list[PackageCondition]]]
+# These are initially unprocessed objects which are transformed to `PackageCondition`s when required
+PackageConditions = Union[Any, Iterable[PackageCondition]]
 # ORed sets of package conditions that are ANDed (e.g. <pkg1> = 1.1 | <pkg11>, <pkg2> >= 2.0)
-OrPackageConditions = Optional[Union[list[str], list[Iterable[PackageCondition]]]]
+OrPackageConditions = Union[Any, Iterable[Iterable[PackageCondition]]]
 OrDependencies = list[Iterable[PackageCondition]]
+
+
+class DependencyType(str, Enum):
+    """Different types of package dependencies in the fields of `Package` class."""
+    DEPENDS = "Depends"
+    RECOMMENDS = "Recommends"
+    SUGGESTS = "Suggests"
+    CONFLICTS = "Conflicts"
 
 
 @dataclass
@@ -72,74 +83,40 @@ class Package:
     name: Final[str]
     arch: Final[str]
     version: Final[str]
-    desc: Final[str] = ""
-    requires: OrPackageConditions = None
+    desc: Any
+    installed: bool = False
+    depends: OrPackageConditions = None
     recommends: OrPackageConditions = None
     suggests: OrPackageConditions = None
     conflicts: PackageConditions = None
-    provides: Optional[list[PackageCondition]] = None
+    provides: Optional[list[PackageCondition]] = None  # parsed upfront for the full package map
     provided_by: Final[Optional['Package']] = None
-    _transformed: bool = False
+    transformed: bool = False
 
     def __hash__(self) -> int:
-        return hash((self.name, self.version))
+        return hash((self.name, self.arch, self.version))
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, Package) and self.name == other.name \
-            and self.version == other.version
+            and self.arch == other.arch and self.version == other.version
 
-    def transform_multi_deps(self, deps: OrPackageConditions,
-                             distro_packages: 'DistributionPackages') -> OrPackageConditions:
-        if not self._transformed and deps and isinstance(deps[0], str):
-            return [distro_packages.parse_package_conditions(cast(str, s)) for s in deps]
-        return deps
-
-    def transform_deps(self, deps: PackageConditions,
-                       distro_packages: 'DistributionPackages') -> PackageConditions:
-        if not self._transformed and deps and isinstance(deps[0], str):
-            return [distro_packages.parse_package_condition(cast(str, s)) for s in deps]
-        return deps
-
-    def transform_all(self, distro_packages: 'DistributionPackages') -> None:
-        if not self._transformed:
-            self.requires = self.transform_multi_deps(self.requires, distro_packages)
-            self.recommends = self.transform_multi_deps(self.recommends, distro_packages)
-            self.suggests = self.transform_multi_deps(self.suggests, distro_packages)
-            self.conflicts = self.transform_deps(self.conflicts, distro_packages)
-            self._transformed = True
+    def __str__(self) -> str:
+        if self.provided_by:
+            return f"[{self.provided_by} provides {self.name}={self.version}]" if self.version \
+                else f"[{self.provided_by} provides {self.name}]"
+        installed_str = "(installed)" if self.installed else ""
+        return f"{self.name}:{self.arch}={self.version}{installed_str}" if self.arch \
+            else f"{self.name}={self.version}{installed_str}"
 
 
-class DistributionPackages(ABC):
+ConflictMap = defaultdict[str, list[PackageCondition]]
+CandidatePackages = list[tuple[PackageCondition, list[Package]]]
 
-    @abstractmethod
-    def list_installed(self) -> Iterable[Package]:
-        ...
 
-    @staticmethod
-    def add_package_to_map(pkg: Package, pkg_map: defaultdict[str, list[Package]]) -> None:
-        pkg_map[pkg.name].append(pkg)
-        if pkg.provides:
-            for provide in pkg.provides:
-                if provide.version and provide.version_cmp != "=" and provide.version_cmp != "==":
-                    print_error(f"Unexpected provides '{provide}' with version comparison "
-                                f"operator '{provide.version_cmp}'")
-                    continue
-                provide_pkg = Package(provide.name, pkg.arch, provide.version, provided_by=pkg)
-                pkg_map[provide_pkg.name].append(provide_pkg)
+class BasePackageCollection(ABC):
 
-    @abstractmethod
-    def populate_primary_packages(self, resolve_pkgs: Iterable[PackageCondition],
-                                  pkg_map: defaultdict[str, list[Package]]) -> None:
-        ...
-
-    @abstractmethod
-    def has_extra_packages(self) -> bool:
-        ...
-
-    @abstractmethod
-    def populate_extra_packages(self, resolve_pkgs: Iterable[PackageCondition],
-                                pkg_map: defaultdict[str, list[Package]]) -> None:
-        ...
+    # split package name and its comparison against a version
+    PKG_COND_RE = re.compile(r"\s*([^=<>!]+)\s*(([=<>!]+)\s*(\S+)\s*)?")
 
     @abstractmethod
     def version_compare(self, v1: str, v2: str) -> int:
@@ -148,78 +125,181 @@ class DistributionPackages(ABC):
     def cannonical_name(self, pkg: str) -> str:
         return pkg
 
+    def parse_package_condition(self, pkg_dep: str,
+                                pkg_cond: re.Pattern[str] = PKG_COND_RE) -> PackageCondition:
+        if match := pkg_cond.fullmatch(pkg_dep):
+            return PackageCondition(self.cannonical_name(match.group(1)),
+                                    match.group(4), match.group(3))
+        print_warn(f"Found dependency with an unknown format [{pkg_dep}]")
+        return PackageCondition(self.cannonical_name(pkg_dep.strip()))
+
+
+class PackageMap(BasePackageCollection):
+
+    def version_compare_op(self, v1: str, v2: str, cmp: Optional[VersionCompare]) -> bool:
+        return not v2 or (cmp is not None and cmp(self.version_compare(v1, v2), 0))
+
+    def add_conflicts(self, pkg: Package, conflicts: ConflictMap) -> None:
+        conflicts[pkg.name].append(PackageCondition(pkg.name, pkg.version, "=", operator.eq))
+        if pkg.conflicts:
+            for conflict in pkg.conflicts:
+                conflicts[conflict.name].append(conflict)
+
+    def _check_packages_in_map(self, resolve_pkgs: Iterable[PackageCondition],
+                               resolved: CandidatePackages) -> Iterable[PackageCondition]:
+        remaining_pkgs = ()
+        for pkg in resolve_pkgs:
+            candidates: Optional[list[Package]] = None
+            installed: Optional[list[Package]] = None
+            for candidate in self.lookup(pkg.name):
+                if self.version_compare_op(candidate.version, pkg.version, pkg.version_cmp_op):
+                    if candidate.installed:
+                        if installed:
+                            installed.append(candidate)
+                        else:
+                            installed = [candidate]
+                    elif candidates:
+                        candidates.append(candidate)
+                    else:
+                        candidates = [candidate]
+            if installed:
+                print_color(f"Skipping {pkg} which is already installed: " +
+                            ", ".join(str(p) for p in installed), fgcolor.cyan)
+            elif candidates:
+                resolved.append((pkg, candidates))
+            elif remaining_pkgs:
+                remaining_pkgs.append(pkg)
+            else:
+                remaining_pkgs = [pkg]
+        return remaining_pkgs
+
     @abstractmethod
-    def parse_package_condition(self, pkg_dep: str) -> PackageCondition:
+    def build_package_map(self, conflicts: ConflictMap,
+                          resolve_pkgs: Iterable[PackageCondition]) -> CandidatePackages:
         ...
 
     @abstractmethod
-    def parse_package_conditions(self, pkg_dep: str) -> Iterable[PackageCondition]:
+    def lookup(self, pkg_name: str) -> Iterable[Package]:
         ...
+
+    @abstractmethod
+    def finalize_package_desc(self, pkg: Package) -> None:
+        ...
+
+    @abstractmethod
+    def finalize_package_deps(self, pkg: Package) -> None:
+        ...
+
+    @abstractmethod
+    def clear(self) -> None:
+        ...
+
+
+class DistributionPackages(BasePackageCollection):
+
+    @abstractmethod
+    def populate_primary_packages(self, package_map: 'DistributionPackageMap',
+                                  conflicts: ConflictMap,
+                                  resolve_pkgs: Iterable[PackageCondition]) -> None:
+        ...
+
+    @abstractmethod
+    def has_extra_packages(self) -> bool:
+        ...
+
+    @abstractmethod
+    def populate_extra_packages(self, package_map: 'DistributionPackageMap', conflicts: ConflictMap,
+                                resolve_pkgs: Iterable[PackageCondition]) -> None:
+        ...
+
+    def transform_description(self, desc: Any) -> Any:
+        return desc
+
+    @abstractmethod
+    def transform_package_conditions(self, pkg_conds: Any,
+                                     dep_type: DependencyType) -> Iterable[PackageCondition]:
+        ...
+
+    @abstractmethod
+    def transform_or_package_conditions(
+            self, pkg_conds: Any, dep_type: DependencyType) -> Iterable[Iterable[PackageCondition]]:
+        ...
+
+
+class DistributionPackageMap(PackageMap):
+
+    def __init__(self, distro_pkgs: DistributionPackages):
+        self._distro_pkgs = distro_pkgs
+        self._package_map = defaultdict[str, list[Package]](list[Package])
+
+    def version_compare(self, v1: str, v2: str) -> int:
+        return self._distro_pkgs.version_compare(v1, v2)
+
+    def cannonical_name(self, pkg: str) -> str:
+        return self._distro_pkgs.cannonical_name(pkg)
+
+    def add_package(self, pkg: Package, conflicts: Optional[ConflictMap]) -> None:
+        self._package_map[pkg.name].append(pkg)
+        if conflicts and pkg.installed:
+            self.add_conflicts(pkg, conflicts)
+        if pkg.provides:
+            for prv in pkg.provides:
+                if prv.version and prv.version_cmp != "=" and prv.version_cmp != "==":
+                    print_error(f"Unexpected provides '{prv}' with version comparison "
+                                f"operator '{prv.version_cmp}'")
+                    continue
+                provide_pkg = Package(prv.name, pkg.arch, prv.version, "",
+                                      installed=pkg.installed, provided_by=pkg)
+                self._package_map[provide_pkg.name].append(provide_pkg)
+
+    def build_package_map(self, conflicts: ConflictMap,
+                          resolve_pkgs: Iterable[PackageCondition]) -> CandidatePackages:
+        resolved: CandidatePackages = []
+        self._distro_pkgs.populate_primary_packages(self, conflicts, resolve_pkgs)
+        # check for extra packages only if a given package is not found in the current package map
+        if (remaining := self._check_packages_in_map(resolve_pkgs, resolved)) and \
+                self._distro_pkgs.has_extra_packages():
+            self._distro_pkgs.populate_extra_packages(self, conflicts, remaining)
+            remaining = self._check_packages_in_map(remaining, resolved)
+        if remaining:
+            print_error(f"Packages [{', '.join([str(p) for p in remaining])}] not found")
+            sys.exit(1)
+        return resolved
+
+    def lookup(self, pkg_name: str) -> Iterable[Package]:
+        return self._package_map.get(pkg_name, ())
+
+    def _transform_or_deps(self, pkg: Package, deps: OrPackageConditions,
+                           dep_type: DependencyType) -> OrPackageConditions:
+        return self._distro_pkgs.transform_or_package_conditions(deps, dep_type) \
+            if not pkg.transformed and deps else deps
+
+    def _transform_deps(self, pkg: Package, deps: PackageConditions,
+                        dep_type: DependencyType) -> PackageConditions:
+        return self._distro_pkgs.transform_package_conditions(deps, dep_type) \
+            if not pkg.transformed and deps else deps
+
+    def finalize_package_desc(self, pkg: Package) -> None:
+        pkg.desc = self._distro_pkgs.transform_description(pkg.desc)
+
+    def finalize_package_deps(self, pkg: Package) -> None:
+        if not pkg.transformed:
+            pkg.depends = self._transform_or_deps(pkg, pkg.depends, DependencyType.DEPENDS)
+            pkg.recommends = self._transform_or_deps(pkg, pkg.recommends, DependencyType.RECOMMENDS)
+            pkg.suggests = self._transform_or_deps(pkg, pkg.suggests, DependencyType.SUGGESTS)
+            pkg.conflicts = self._transform_deps(pkg, pkg.conflicts, DependencyType.CONFLICTS)
+            pkg.transformed = True
+
+    def clear(self) -> None:
+        self._package_map.clear()
 
 
 class ResolvePackage:
 
-    def __init__(self, distro_pkgs: DistributionPackages):
-        self._distro_pkgs = distro_pkgs
+    def __init__(self, pkg_map: PackageMap):
+        self._package_map = pkg_map
 
-    def version_compare_op(self, v1: str, v2: str, cmp: Optional[VersionCompare]) -> bool:
-        return not v2 or (cmp is not None and cmp(self._distro_pkgs.version_compare(v1, v2), 0))
-
-    @final
-    def _add_conflicts(self, pkg: Package,
-                       conflicts: defaultdict[str, list[PackageCondition]]) -> None:
-        conflicts[pkg.name].append(PackageCondition(pkg.name, pkg.version, "=", operator.eq))
-        if pkg.conflicts:
-            pkg.conflicts = pkg.transform_deps(pkg.conflicts, self._distro_pkgs)
-            for conflict in cast(list[PackageCondition], pkg.conflicts):
-                conflicts[conflict.name].append(conflict)
-
-    def build_installed_package_map(self, conflicts: defaultdict[str, list[PackageCondition]]) -> \
-            dict[str, Package]:
-        installed_pkgs: dict[str, Package] = {}
-        for pkg in self._distro_pkgs.list_installed():
-            self._add_conflicts(pkg, conflicts)
-            installed_pkgs[pkg.name] = pkg
-        return installed_pkgs
-
-    def _check_packages_in_map(self, resolve_pkgs: Iterable[PackageCondition],
-                               package_map: defaultdict[str, list[Package]],
-                               conflicts: defaultdict[str, list[PackageCondition]],
-                               resolved: MutableSequence[Package]) -> Iterable[PackageCondition]:
-        remaining_pkgs = ()
-        for pkg in resolve_pkgs:
-            for candidate in package_map.get(pkg.name, ()):
-                if self.version_compare_op(candidate.version, pkg.version, pkg.version_cmp_op) \
-                        and not self.has_conflict(candidate, conflicts):
-                    resolved.append(candidate)
-                    break
-            else:
-                if remaining_pkgs:
-                    remaining_pkgs.append(pkg)
-                else:
-                    remaining_pkgs = [pkg]
-        return remaining_pkgs
-
-    def build_package_map(self, resolve_pkgs: Iterable[PackageCondition],
-                          conflicts: defaultdict[str, list[PackageCondition]],
-                          resolved: MutableSequence[Package]) -> dict[str, list[Package]]:
-        pkg_map = defaultdict[str, list[Package]](list[Package])
-        self._distro_pkgs.populate_primary_packages(resolve_pkgs, pkg_map)
-        # check for extra packages only if a given package is not found in the current package map
-        if remaining := self._check_packages_in_map(resolve_pkgs, pkg_map, conflicts, resolved):
-            if self._distro_pkgs.has_extra_packages():
-                self._distro_pkgs.populate_extra_packages(remaining, pkg_map)
-                if remaining := self._check_packages_in_map(resolve_pkgs, pkg_map, conflicts,
-                                                            resolved):
-                    print_error(f"Packages [{', '.join([str(p) for p in remaining])}] not found")
-                    sys.exit(1)
-            else:
-                print_error(f"Packages [{', '.join([str(p) for p in remaining])}] not found")
-                sys.exit(1)
-        return pkg_map
-
-    def has_conflict(self, pkg: Package,
-                     conflicts: defaultdict[str, list[PackageCondition]]) -> bool:
+    def has_conflict(self, pkg: Package, conflicts: ConflictMap) -> bool:
         # TODO: SW: do a proper conflict resolution with a conflict map initially populated
         # with the conflicts from all installed packages;
         # if no alternative satisfies due to conflicts then it can be skipped entirely for
@@ -233,62 +313,84 @@ class ResolvePackage:
         # recommended and suggested deps recursively
         if matches := conflicts.get(pkg.name):
             for conflict in matches:
-                if self.version_compare_op(pkg.version, conflict.version, conflict.version_cmp_op):
-                    print_notice(f"Skipping [{pkg}] that conflicts with [{conflict}]")
+                if self._package_map.version_compare_op(pkg.version, conflict.version,
+                                                        conflict.version_cmp_op):
+                    print_warn(f"Skipping [{pkg}] that conflicts with [{conflict}]")
                     return True
         return False
 
     def _loop_package_deps(self, deps: OrDependencies, for_suggests: bool,
-                           package_map: dict[str, list[Package]], included_pkg_names: set[str],
-                           installed_pkgs: dict[str, Package],
-                           conflicts: defaultdict[str, list[PackageCondition]],
+                           included_pkg_names: set[str], conflicts: ConflictMap,
                            dep_list: list[list[tuple[str, str, str, bool, bool]]]) -> None:
         for dep_alternates in deps:
             dep_alternate_list: list[tuple[str, str, str, bool, bool]] = []
             for dep in dep_alternates:
-                for pkg in package_map.get(dep.name, ()):
+                has_installed = False
+                for pkg in self._package_map.lookup(dep.name):
                     dep_pkg = pkg.provided_by if pkg.provided_by else pkg
                     # if any dependency among a set of alternatives is installed, then skip the set
-                    if dep_pkg.name in installed_pkgs:
-                        dep_alternate_list.clear()
+                    if dep_pkg.installed:
+                        # TODO: SW: it is possible that dep is a provided one with version that does
+                        # not match dep_pkg, and there is another separate package that provides
+                        # dep and does not conflict with installed dep_pkg; also arch check
+                        if not has_installed:
+                            has_installed = True
+                            dep_alternate_list.clear()
+                        self._package_map.finalize_package_desc(dep_pkg)
                         dep_alternate_list.append((dep_pkg.name, dep_pkg.version,
                                                    dep_pkg.desc, for_suggests, True))
-                        break  # this breaks the inner loop as well as the outer loop
-                    if self.version_compare_op(pkg.version, dep.version, dep.version_cmp_op) \
+                    elif not has_installed and self._package_map.version_compare_op(
+                        pkg.version, dep.version, dep.version_cmp_op) \
                             and dep_pkg.name not in included_pkg_names \
                             and not self.has_conflict(pkg, conflicts):
+                        self._package_map.finalize_package_desc(dep_pkg)
                         dep_alternate_list.append((dep_pkg.name, dep_pkg.version,
                                                    dep_pkg.desc, for_suggests, False))
-                else:
-                    continue
-                break  # break outer loop in case a dependency is found to be in installed_pkgs
+                        included_pkg_names.add(dep_pkg.name)
             if dep_alternate_list:
                 dep_list.append(dep_alternate_list)
-                if len(dep_alternate_list) == 1:
-                    # don't show a package multiple times if there is only one choice
-                    included_pkg_names.add(dep_alternate_list[0][0])
 
-    def find_optional_deps(self, packages: Iterable[Package], package_map: dict[str, list[Package]],
-                           installed_pkgs: dict[str, Package],
-                           conflicts: defaultdict[str, list[PackageCondition]],
+    def select_packages(self, resolved: CandidatePackages, conflicts: ConflictMap) -> list[Package]:
+        selected: list[Package] = []
+        for pkg, candidates in resolved:
+            preferred: Optional[Package] = None
+            for candidate in candidates:
+                # TODO: SW: add full conflict resolution based on depends that will select other
+                # potential candidates after backtracking and even offer to uninstall
+                if not self.has_conflict(candidate, conflicts):
+                    candidate_pkg = candidate.provided_by if candidate.provided_by else candidate
+                    if pkg.name == candidate_pkg.name:
+                        preferred = candidate_pkg
+                        break
+                    if not preferred:
+                        preferred = candidate_pkg
+            if not preferred:
+                print_error(f"No candidate found for {pkg} among "
+                            f"[{', '.join(str(p) for p in candidates)}] due to conflicts")
+                sys.exit(1)
+            if pkg.name != preferred.name:
+                print_color(f"Selected package {preferred} for {pkg}", fgcolor.cyan)
+            selected.append(preferred)
+        return selected
+
+    def find_optional_deps(self, packages: list[Package], conflicts: ConflictMap,
                            include_suggests: bool) -> list[list[tuple[str, str, str, bool, bool]]]:
         all_recommends: OrDependencies = []
         all_suggests: OrDependencies = []
         for selected in packages:
-            selected.transform_all(self._distro_pkgs)
-            installed_pkgs[selected.name] = selected  # put to-be-installed packages in installed
-            self._add_conflicts(selected, conflicts)
+            self._package_map.finalize_package_deps(selected)
+            selected.installed = True  # mark to-be-installed packages as installed
+            self._package_map.add_conflicts(selected, conflicts)
             if selected.recommends:
                 all_recommends.extend(cast(OrDependencies, selected.recommends))
             if include_suggests and selected.suggests:
                 all_suggests.extend(cast(OrDependencies, selected.suggests))
         included_pkg_names = set[str]()
         optional_deps: list[list[tuple[str, str, str, bool, bool]]] = []
-        self._loop_package_deps(all_recommends, False, package_map, included_pkg_names,
-                                installed_pkgs, conflicts, optional_deps)
+        self._loop_package_deps(all_recommends, False, included_pkg_names, conflicts, optional_deps)
         if include_suggests:
-            self._loop_package_deps(all_suggests, True, package_map, included_pkg_names,
-                                    installed_pkgs, conflicts, optional_deps)
+            self._loop_package_deps(all_suggests, True, included_pkg_names, conflicts,
+                                    optional_deps)
         return optional_deps
 
     def exec_cmdline(self, argv: list[str]) -> None:
@@ -301,16 +403,14 @@ class ResolvePackage:
         args = parse_opt_deps_args(argv)
 
         # build the installed package map and the full package map
-        conflicts = defaultdict[str, list[PackageCondition]](list[PackageCondition])
-        installed_pkgs = self.build_installed_package_map(conflicts)
-        resolved_pkgs: list[Package] = []
+        conflicts = ConflictMap(list[PackageCondition])
         new_pkgs: list[str] = args.packages
-        install_pkgs = [self._distro_pkgs.parse_package_condition(pkg) for pkg in new_pkgs]
-        package_map = self.build_package_map(install_pkgs, conflicts, resolved_pkgs)
+        install_pkgs = [self._package_map.parse_package_condition(pkg) for pkg in new_pkgs]
+        resolved_pkgs = self._package_map.build_package_map(conflicts, install_pkgs)
 
         # finally find and print the optional dependencies as expected by `ybox-pkg`
-        if optional_deps := self.find_optional_deps(resolved_pkgs, package_map, installed_pkgs,
-                                                    conflicts, args.level > 1):
+        selected_pkgs = self.select_packages(resolved_pkgs, conflicts)
+        if optional_deps := self.find_optional_deps(selected_pkgs, conflicts, args.level > 1):
             if args.header:
                 print(str(args.header))
             order = 0
@@ -324,3 +424,9 @@ class ResolvePackage:
                     # print(f"{args.prefix}{name}{sep}{version}{sep}{level}{sep}{order}{sep}{desc}")
                     # TODO: SW: temporarily using the old format
                     print(f"{args.prefix}{name}{sep}{level}{sep}{order}{sep}{installed}{sep}{desc}")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, ex_type, ex_value, ex_traceback):  # type: ignore
+        self._package_map.clear()

@@ -10,9 +10,8 @@ import re
 import sys
 import time
 import zlib
-from collections import defaultdict
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import ijson  # type: ignore
 import pyalpm
@@ -20,8 +19,9 @@ from pyalpm import Handle
 
 from ybox.cmd import run_command
 from ybox.config import Consts
-from ybox.print import print_notice, print_warn
-from ybox.resolve import (DistributionPackages, Package, PackageCondition,
+from ybox.print import print_notice
+from ybox.resolve import (ConflictMap, DependencyType, DistributionPackageMap,
+                          DistributionPackages, Package, PackageCondition,
                           ResolvePackage)
 
 
@@ -58,25 +58,21 @@ class ArchPackages(DistributionPackages):
                 return False
         return True
 
-    def _populate_aur_packages(self, pkg_map: defaultdict[str, list[Package]],
-                               raise_error: bool) -> bool:
+    def _populate_aur_packages(self, package_map: DistributionPackageMap, raise_error: bool) -> bool:
         """
-        This will build a list of `Package` objects for all packages present in the AUR.
+        This will build a list of `Package` objects for all packages present in the AUR repository
+        and populates them in the given `DistributionPackageMap`.
 
         This uses the AUR metadata downloaded explicitly. The alternative of using paru/yay to dump
         information of all available packages is much much slower. Querying using paru/yay for
         virtual packages in AUR database does not work since they maintain just the names of AUR
         packages locally, so just cannot query the optional deps.
 
-        This returns a `list` instead of a generator to deal with unexpected exceptions while
-        reading/parsing the AUR metadata file in which case the caller can retry safely without
-        having to worry about dealing with `Package` objects that may already have been processed
-        by higher layers.
-
+        :param package_map: the instance of :class:`DistributionPackageMap` that should be populated
         :param raise_error: if True, then raise an error if there was one while reading the AUR
                             metadata else the method will return an empty list in case of failure
-        :return list: list of `Package` objects corresponding to the AUR packages or empty if there
-                      was an error in reading the fetched AUR metadata
+        :return bool: True if the map was populated successfully and False if `raise_error` was
+                      False and there was an error while reading the AUR metadata
         """
         try:
             with gzip.open(self._AUR_META_FILE, mode="rb") as aur_meta:
@@ -87,44 +83,45 @@ class ArchPackages(DistributionPackages):
                     # arch linux packages are always lower case which is enforced below
                     # (no architecture information in AUR metadata)
                     provides_list = pkg.get("Provides")
-                    provides = [self.parse_package_condition(s)
+                    provides = [self.parse_package_condition(s, self._PKG_COND_RE)
                                 for s in provides_list] if provides_list else None
-                    self.add_package_to_map(Package(
+                    package_map.add_package(Package(
                         pkg.get("Name").lower(), "", pkg.get("Version"),
-                        pkg.get("Description") or "", pkg.get("Depends"), pkg.get("OptDepends"),
-                        None, pkg.get("Conflicts"), provides), pkg_map)
+                        pkg.get("Description") or "", False, pkg.get("Depends"),
+                        pkg.get("OptDepends"), None, pkg.get("Conflicts"), provides), None)
                 return True
         except (gzip.BadGzipFile, EOFError, zlib.error, ijson.JSONError):
             if raise_error:
                 raise
         return False
 
-    def _to_package(self, pkg: pyalpm.Package) -> Package:
+    def _to_package(self, pkg: pyalpm.Package, installed: bool, convert_conflicts: bool) -> Package:
         # Arch package descriptions don't have ORed dependency alternatives
         # Arch linux packages are always lower case which is enforced below
-        provides = [self.parse_package_condition(s) for s in pkg.provides] if pkg.provides else None
-        return Package(pkg.name.lower(), pkg.arch, pkg.version, pkg.desc, pkg.depends,
-                       pkg.optdepends, None, pkg.conflicts, provides)
+        provides = [self.parse_package_condition(s, self._PKG_COND_RE) for s in pkg.provides] \
+            if pkg.provides else None
+        conflicts = [self.parse_package_condition(s, self._PKG_COND_RE) for s in pkg.conflicts] \
+            if convert_conflicts and pkg.conflicts else pkg.conflicts
+        return Package(pkg.name.lower(), pkg.arch, pkg.version, pkg.desc, installed, pkg.depends,
+                       pkg.optdepends, None, conflicts, provides)
 
-    def list_installed(self) -> Iterable[Package]:
-        localdb = self._handle.get_localdb()
-        for pkg in localdb.pkgcache:
-            if pkg.installdate != 0:
-                yield self._to_package(pkg)
-
-    def populate_primary_packages(self, resolve_pkgs: Iterable[PackageCondition],
-                                  pkg_map: defaultdict[str, list[Package]]) -> None:
+    def populate_primary_packages(self, package_map: DistributionPackageMap, conflicts: ConflictMap,
+                                  resolve_pkgs: Iterable[PackageCondition]) -> None:
         """
-        Return all packages in pacman sync repositories as an `Iterable` over `Package` objects.
-        If the target packages passed are not available in those, then also include AUR packages.
+        Populate all packages in pacman local and sync repositories into the given
+        `DistributionPackageMap`.
 
         This is actually faster than querying the sync database multiple times (at least twice)
         using pacman/expac for the package and its optional dependencies since the sync databases
         are just a tarball of the packages that have to be read in entirety either way.
 
+        :param package_map: the instance of :class:`DistributionPackageMap` that should be populated
+        :param conflicts: the map of conflicts so far which should be populated with those from
+                          the existing installed packages -- usually done by invoking the
+                          :func:`add_package_to_map` method passing it already resolved `conflicts`
+                          field of `Package` object for installed packages
         :param resolve_pkgs: the target packages (as an `Iterable` of `PackageCondition`) for which
                              packages are being fetched
-        :return: an `Iterable` over `Package` objects for each package found in the databases
         """
         for db_file in os.listdir("/var/lib/pacman/sync"):
             # assume all sync databases have already been downloaded (e.g. with `pacman -Syu`)
@@ -132,30 +129,33 @@ class ArchPackages(DistributionPackages):
                 self._handle.register_syncdb(db_file.removesuffix(".db"),
                                              pyalpm.SIG_DATABASE_OPTIONAL)
         print_notice(f"Searching packages [{', '.join([str(p) for p in resolve_pkgs])}] in repos")
+        for pkg in self._handle.get_localdb().pkgcache:
+            package_map.add_package(self._to_package(pkg, pkg.installdate != 0, True), conflicts)
         for db in self._handle.get_syncdbs():
             for pkg in db.pkgcache:
-                self.add_package_to_map(self._to_package(pkg), pkg_map)
+                package_map.add_package(self._to_package(pkg, False, False), None)
 
     def has_extra_packages(self) -> bool:
         return True
 
-    def populate_extra_packages(self, resolve_pkgs: Iterable[PackageCondition],
-                                pkg_map: defaultdict[str, list[Package]]) -> None:
+    def populate_extra_packages(self, package_map: DistributionPackageMap, conflicts: ConflictMap,
+                                resolve_pkgs: Iterable[PackageCondition]) -> None:
         """
-        Return all packages in the AUR repository as an `Iterable` over `Package` objects.
+        Populate all packages in the AUR repository into the given `DistributionPackageMap`.
 
+        :param package_map: the instance of :class:`DistributionPackageMap` that should be populated
+        :param conflicts: the map of conflicts so far which remains unchanged by this method
         :param resolve_pkgs: the target packages (as an `Iterable` of `PackageCondition`) for which
                              packages are being fetched
-        :return: an `Iterable` over `Package` objects for each package found in the AUR
         """
         print_notice(f"Searching packages [{', '.join([str(p) for p in resolve_pkgs])}] in AUR")
         # fetch AUR metadata, populate into all_packages and try again else if download
         # fails or AUR metadata file is broken, then refresh it and try again
         if not self._refresh_aur_metadata(raise_error=False) \
-                or not self._populate_aur_packages(pkg_map, raise_error=False):
+                or not self._populate_aur_packages(package_map, raise_error=False):
             Path(self._AUR_META_FILE).unlink(missing_ok=True)
             self._refresh_aur_metadata(raise_error=True)
-            self._populate_aur_packages(pkg_map, raise_error=True)
+            self._populate_aur_packages(package_map, raise_error=True)
 
     def version_compare(self, v1: str, v2: str) -> int:
         return pyalpm.vercmp(v1, v2)
@@ -163,18 +163,19 @@ class ArchPackages(DistributionPackages):
     def cannonical_name(self, pkg: str) -> str:
         return pkg.lower()
 
-    def parse_package_condition(self, pkg_dep: str) -> PackageCondition:
-        if match := self._PKG_COND_RE.fullmatch(pkg_dep):
-            return PackageCondition(self.cannonical_name(match.group(1)), match.group(4),
-                                    match.group(3))
-        print_warn(f"Found dependency with an unknown format [{pkg_dep}]")
-        return PackageCondition(self.cannonical_name(pkg_dep))
+    def transform_package_conditions(self, pkg_conds: Any,
+                                     dep_type: DependencyType) -> Iterable[PackageCondition]:
+        return [self.parse_package_condition(s, self._PKG_COND_RE) for s in pkg_conds] \
+            if isinstance(pkg_conds[0], str) else pkg_conds
 
-    def parse_package_conditions(self, pkg_dep: str) -> Iterable[PackageCondition]:
+    def transform_or_package_conditions(
+            self, pkg_conds: Any, dep_type: DependencyType) -> Iterable[Iterable[PackageCondition]]:
         # Arch packages do not have multiple ORed conditions
-        return (self.parse_package_condition(pkg_dep),)
+        return [(self.parse_package_condition(s, self._PKG_COND_RE),) for s in pkg_conds] \
+            if isinstance(pkg_conds[0], str) else pkg_conds
 
 
 if __name__ == "__main__":
-    resolver = ResolvePackage(ArchPackages())
-    resolver.exec_cmdline(sys.argv[1:])
+    package_map = DistributionPackageMap(ArchPackages())
+    with ResolvePackage(package_map) as resolver:
+        resolver.exec_cmdline(sys.argv[1:])
