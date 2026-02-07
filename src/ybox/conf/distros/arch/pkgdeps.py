@@ -39,6 +39,7 @@ class ArchPackages(DistributionPackages):
 
     def __init__(self):
         self._handle = Handle("/", "/var/lib/pacman")
+        self._platform_arch = platform.uname().machine
 
     def _refresh_aur_metadata(self, raise_error: bool) -> bool:
         """
@@ -84,11 +85,14 @@ class ArchPackages(DistributionPackages):
                     # arch linux packages are always lower case which is enforced below
                     # (no architecture information in AUR metadata)
                     provides_list = pkg.get("Provides")
-                    # AUR packages don't have an architecture and can be built for multi-platforms
-                    provides = [self.parse_package_condition(s, self._PKG_COND_RE, "any")
+                    # AUR packages don't have an architecture and can be built for different
+                    # platforms using custom compiler/cross-compiler flags but the package itself
+                    # always has the native architecture
+                    provides = [self.parse_package_condition(s, self._PKG_COND_RE,
+                                                             self._platform_arch)
                                 for s in provides_list] if provides_list else None
                     package_map.add_package(Package(
-                        pkg.get("Name").lower(), "any", pkg.get("Version"),
+                        pkg.get("Name").lower(), self._platform_arch, pkg.get("Version"),
                         pkg.get("Description") or "", False, pkg.get("Depends"),
                         pkg.get("OptDepends"), None, pkg.get("Conflicts"), provides), None)
                 return True
@@ -161,7 +165,7 @@ class ArchPackages(DistributionPackages):
             self._populate_aur_packages(package_map, raise_error=True)
 
     def platform_architecture(self) -> str:
-        return platform.uname().machine
+        return self._platform_arch
 
     def version_compare(self, v1: str, v2: str) -> int:
         return pyalpm.vercmp(v1, v2)

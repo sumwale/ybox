@@ -159,11 +159,18 @@ class PackageMap(BasePackageCollection):
             for conflict in pkg.conflicts:
                 conflicts[conflict.name].append(conflict)
 
+    def verify_package_arch(self, pkg: Package, arch: str) -> bool:
+        return pkg.arch == arch or pkg.arch == "all" or pkg.arch == "any"
+
     def verify_package_condition(self, pkg: Package, pkg_cond: PackageCondition) -> bool:
         cmp = pkg_cond.version_cmp_op
-        return (pkg.arch == pkg_cond.arch or pkg.arch == "all" or pkg.arch == "any") and (
-            not pkg_cond.version or (cmp is not None and cmp(
-                self.version_compare(pkg.version, pkg_cond.version), 0)))
+        return self.verify_package_arch(pkg, pkg_cond.arch) and (not pkg_cond.version or (
+            cmp is not None and cmp(self.version_compare(pkg.version, pkg_cond.version), 0)))
+
+    def full_package_name(self, pkg: Package) -> str:
+        if not pkg.arch or self.verify_package_arch(pkg, self.platform_architecture()):
+            return pkg.name
+        return f"{pkg.name}:{pkg.arch}"
 
     def _check_packages_in_map(self, resolve_pkgs: Iterable[PackageCondition],
                                resolved: CandidatePackages) -> Iterable[PackageCondition]:
@@ -183,7 +190,7 @@ class PackageMap(BasePackageCollection):
                     else:
                         candidates = [candidate]
             if installed:
-                print_color(f"Skipping {pkg} which is already installed: " +
+                print_color(f"Skipping dependency selection of {pkg} which is already installed: " +
                             ", ".join(str(p) for p in installed), fgcolor.cyan)
             elif candidates:
                 resolved.append((pkg, candidates))
@@ -350,24 +357,22 @@ class ResolvePackage:
             for dep in dep_alternates:
                 has_installed = False
                 for pkg in self._package_map.lookup(dep.name):
+                    if not self._package_map.verify_package_condition(pkg, dep):
+                        continue
                     dep_pkg = pkg.provided_by if pkg.provided_by else pkg
                     # if any dependency among a set of alternatives is installed, then skip the set
                     if dep_pkg.installed:
-                        # TODO: SW: it is possible that dep is a provided one with version that does
-                        # not match dep_pkg, and there is another separate package that provides
-                        # dep and does not conflict with installed dep_pkg; also arch check
                         if not has_installed:
                             has_installed = True
                             dep_alternate_list.clear()
                         self._package_map.finalize_package_desc(dep_pkg)
-                        dep_alternate_list.append((dep_pkg.name, dep_pkg.version,
-                                                   dep_pkg.desc, for_suggests, True))
-                    elif not has_installed and self._package_map.verify_package_condition(
-                        pkg, dep) and dep_pkg.name not in included_pkg_names \
+                        dep_alternate_list.append((self._package_map.full_package_name(
+                            pkg), dep_pkg.version, dep_pkg.desc, for_suggests, True))
+                    elif not has_installed and dep_pkg.name not in included_pkg_names \
                             and not self.has_conflict(pkg, conflicts):
                         self._package_map.finalize_package_desc(dep_pkg)
-                        dep_alternate_list.append((dep_pkg.name, dep_pkg.version,
-                                                   dep_pkg.desc, for_suggests, False))
+                        dep_alternate_list.append((self._package_map.full_package_name(
+                            pkg), dep_pkg.version, dep_pkg.desc, for_suggests, False))
                         included_pkg_names.add(dep_pkg.name)
             if dep_alternate_list:
                 dep_list.append(dep_alternate_list)
@@ -440,12 +445,10 @@ class ResolvePackage:
             for deps in optional_deps:
                 order += 1
                 for alt_dep in deps:
-                    name, _, desc, suggests, installed = alt_dep
+                    name, version, desc, suggests, installed = alt_dep
                     level = 2 if suggests else 1
-                    # columns below are expected by ybox-pkg
-                    # print(f"{args.prefix}{name}{sep}{version}{sep}{level}{sep}{order}{sep}{desc}")
-                    # TODO: SW: temporarily using the old format
-                    print(f"{args.prefix}{name}{sep}{level}{sep}{order}{sep}{installed}{sep}{desc}")
+                    print(f"{args.prefix}{name}{sep}{version}{sep}{level}{sep}{order}{sep}"
+                          f"{installed}{sep}{desc}")
 
     def __enter__(self):
         return self

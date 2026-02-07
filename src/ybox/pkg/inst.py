@@ -113,7 +113,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
     """
     # need to determine optional dependencies before installation else second level or higher
     # dependencies will never be found (as the dependencies are already installed)
-    optional_deps: list[tuple[str, str, int]] = []
+    optional_deps: list[tuple[str, str, str, int, int]] = []
     installed_optional_deps: set[str] = set()
     if opt_dep_install:
         resolved_install_cmd = install_cmd.format(opt_dep=opt_dep_flag)
@@ -138,6 +138,11 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                     package = selected_pkg
                 else:
                     return 1
+        # get optional deps even if args.skip_opt_deps is true to obtain installed_optional_deps
+        # which need to be registered against this package too (state.register_dependency below)
+        if not opt_dep_install:
+            optional_deps, installed_optional_deps = get_optional_deps(package, docker_cmd,
+                                                                       conf.box_name, opt_deps_cmd)
         if not quiet:
             print_info(f"Installing '{package}' in '{conf.box_name}'")
         code = int(run_command(build_shell_command(
@@ -183,11 +188,6 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
             None, "")
         state.register_package(conf.box_name, package, local_copies, copy_type, app_flags,
                                rt_conf.shared_root, dep_type, dep_of)
-        # get optional deps even if args.skip_opt_deps is true to obtain installed_optional_deps
-        # which need to be registered against this package too (state.register_dependency below)
-        if not opt_dep_install:
-            optional_deps, installed_optional_deps = get_optional_deps(package, docker_cmd,
-                                                                       conf.box_name, opt_deps_cmd)
         # register the recorded optional dependencies for this package too
         if recorded_deps := state.check_packages(conf.box_name, installed_optional_deps):
             for dep in recorded_deps:
@@ -204,7 +204,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
 
 
 def get_optional_deps(package: str, docker_cmd: str, container_name: str,
-                      opt_deps_cmd: str) -> tuple[list[tuple[str, str, int]], set[str]]:
+                      opt_deps_cmd: str) -> tuple[list[tuple[str, str, str, int, int]], set[str]]:
     """
     Find the optional dependencies recursively, removing the ones already installed.
 
@@ -219,7 +219,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
               second part of the tuple is the set of optional dependencies of the package that
               are already installed and registered as dependency in state.db for some other package
     """
-    optional_deps: list[tuple[str, str, int]] = []
+    optional_deps: list[tuple[str, str, str, int, int]] = []
     installed_optional_deps: set[str] = set()
     pkg_start = "Found optional dependencies"
     pkg_prefix = "PKG:"
@@ -270,12 +270,13 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
             # there can be a trailing '\n' from the loop before due to '\r\n' ending
             if output == "\n":
                 continue
-            name, level, installed, desc = output[len(pkg_prefix):].split(pkg_sep, maxsplit=3)
+            name, version, level, order, installed, desc = output[len(pkg_prefix):].split(
+                pkg_sep, maxsplit=5)
             desc = desc.rstrip()
             if installed.strip().lower() == "true":
                 installed_optional_deps.add(name)
             else:
-                optional_deps.append((name, desc, int(level)))
+                optional_deps.append((name, version, desc, int(level), int(order)))
 
         if deps_result.wait(60) != 0:
             print_warn(f"FAILED to determine optional dependencies of {package} -- "
@@ -285,7 +286,7 @@ def get_optional_deps(package: str, docker_cmd: str, container_name: str,
     return optional_deps, installed_optional_deps
 
 
-def select_optional_deps(package: str, deps: list[tuple[str, str, int]]) -> list[str]:
+def select_optional_deps(package: str, deps: list[tuple[str, str, str, int, int]]) -> list[str]:
     """
     Show a selection menu to the user having optional dependencies of a package to be installed.
 
@@ -293,7 +294,9 @@ def select_optional_deps(package: str, deps: list[tuple[str, str, int]]) -> list
     :param deps: list of dependencies as tuples from :func:`get_optional_deps`
     :return: list of names of the selected optional dependencies (or empty list for no selection)
     """
-    menu_options = [f"{'*' if level <= 1 else ''} {name} ({desc})" for name, desc, level in deps]
+    p_o = -1
+    menu_options = [f"{'|-' if p_o == order else (p_o := order) and ('*' if level <= 1 else '')} "
+                    f"{name} {version} ({desc})" for name, version, desc, level, order in deps]
     print_info(f"Select optional dependencies of {package} "
                "(starred ones are the immediate dependencies):")
     # don't select on <Enter> (multi_select_select_on_accept) and allow for empty selection
