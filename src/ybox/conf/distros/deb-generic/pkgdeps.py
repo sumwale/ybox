@@ -11,9 +11,8 @@ from typing import Iterable, Optional, cast
 import apt_pkg
 
 from ybox.print import print_error, print_notice
-from ybox.resolve import (CandidatePackages, ConflictMap, OrPackageConditions,
-                          Package, PackageCondition, PackageMap,
-                          ResolvePackage)
+from ybox.resolve import (CandidatePackages, ConflictMap, Package,
+                          PackageCondition, PackageMap, ResolvePackage)
 
 
 class APTPackageMap(PackageMap):
@@ -32,7 +31,7 @@ class APTPackageMap(PackageMap):
             pkg.desc = self._records.short_desc
 
     def _transform_or_deps(self, all_deps: dict[str, list[list[apt_pkg.Dependency]]],
-                           dep_type: str) -> OrPackageConditions:
+                           dep_type: str) -> Optional[list[list[PackageCondition]]]:
         if deps := all_deps.get(dep_type):
             return [[PackageCondition(dep.target_pkg.name,
                                       dep.target_pkg.architecture or self._platform_arch,
@@ -53,6 +52,10 @@ class APTPackageMap(PackageMap):
         if not pkg.transformed:
             all_deps = cast(dict[str, list[list[apt_pkg.Dependency]]], pkg.depends)
             pkg.depends = self._transform_or_deps(all_deps, "Depends")
+            # note that the official field name in package is "Pre-Depends" but apt_pkg always
+            # uses "PreDepends" (confirmed from python-apt sources for both 3.x and 2.x codebases)
+            if pre_depends := self._transform_or_deps(all_deps, "PreDepends"):
+                pkg.depends = pre_depends.extend(pkg.depends) if pkg.depends else pre_depends
             pkg.recommends = self._transform_or_deps(all_deps, "Recommends")
             pkg.suggests = self._transform_or_deps(all_deps, "Suggests")
             conflicts = self._transform_deps(all_deps, "Conflicts")
