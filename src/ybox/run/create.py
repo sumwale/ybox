@@ -496,24 +496,27 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
     apps_with_deps: dict[str, list[str]] = {}
     # finally process all the sections and the keys forming the podman/docker command-line
     for section in config.sections():
-        if section == "security":
-            process_security_section(config["security"], profile, docker_args)
-        elif section == "network":
-            process_network_section(config["network"], profile, docker_args)
-        elif section == "mounts":
-            process_mounts_section(config["mounts"], docker_args)
-        elif section == "env":
-            process_env_section(config["env"], conf, docker_args)
-        elif section == "configs":
-            if config_hardlinks is not None:
-                process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
-        elif section == "apps":
-            apps_with_deps = process_apps_section(config["apps"], conf, pkgmgr)
-        elif section == "startup":
-            process_startup_section(config["startup"], conf)
-        elif section not in ("base", "app_flags"):
-            raise NotSupportedError(f"Unknown section [{section}] in '{profile}' "
-                                    "or one of its includes")
+        match section:
+            case "security":
+                process_security_section(config["security"], profile, docker_args)
+            case "network":
+                process_network_section(config["network"], profile, docker_args)
+            case "mounts":
+                process_mounts_section(config["mounts"], docker_args)
+            case "env":
+                process_env_section(config["env"], conf, docker_args)
+            case "configs":
+                if config_hardlinks is not None:
+                    process_configs_section(config["configs"], config_hardlinks, conf, docker_args)
+            case "apps":
+                apps_with_deps = process_apps_section(config["apps"], conf, pkgmgr)
+            case "startup":
+                process_startup_section(config["startup"], conf)
+            case "base" | "app_flags":
+                pass
+            case _:
+                raise NotSupportedError(f"Unknown section [{section}] in '{profile}' "
+                                        "or one of its includes")
     return shared_root, config, apps_with_deps
 
 
@@ -603,69 +606,73 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
     nvidia = False
     nvidia_ctk = False
     for key, val in base_section.items():
-        if key == "home":
-            if val:
-                # create the source directory if it does not exist
-                os.makedirs(val, mode=Consts.default_directory_mode(), exist_ok=True)
-                add_mount_option(docker_args, val, env.target_home)
-        elif key == "shared_root":
-            shared_root = val or ""
-        elif key == "config_hardlinks":
-            if val:
-                config_hardlinks = _get_boolean(val)
-            else:
-                config_hardlinks = None
-        elif key == "config_locale":
-            config_locale = _get_boolean(val)
-        elif key == "x11":
-            if _get_boolean(val):
-                enable_x11(docker_args, env)
-        elif key == "wayland":
-            if _get_boolean(val):
-                enable_wayland(docker_args, env)
-        elif key == "pulseaudio":
-            if _get_boolean(val):
-                enable_pulse(docker_args, env)
-        elif key == "dbus":
-            if _get_boolean(val):
-                enable_dbus(docker_args, base_section.getboolean("dbus_sys", fallback=False), env)
-        elif key == "ssh_agent":
-            if _get_boolean(val):
-                enable_ssh_agent(docker_args, env)
-        elif key == "gpg_agent":
-            if _get_boolean(val):
-                enable_gpg_agent(docker_args, env)
-        elif key == "dri":
-            dri = _get_boolean(val)
-        elif key == "nvidia":
-            nvidia = _get_boolean(val)
-        elif key == "nvidia_ctk":
-            nvidia_ctk = _get_boolean(val)
-        elif key == "shm_size":
-            if val:
-                docker_args.append(f"--shm-size={val}")
-        elif key == "pids_limit":
-            if val:
-                docker_args.append(f"--pids-limit={val}")
-        elif key == "log_driver":
-            if val:
-                docker_args.append(f"--log-driver={val}")
-        elif key == "log_opts":
-            add_multi_opt(docker_args, "log-opt", val)
-            # create the log directory if required
-            log_dirs = [mt.group(1) for mt in
-                        (re.match("^--log-opt=path=(.*)/.*$", path) for path in docker_args) if mt]
-            for log_dir in log_dirs:
-                os.makedirs(log_dir, mode=Consts.default_directory_mode(), exist_ok=True)
-        elif key == "devices":
-            if val:
-                add_multi_opt(docker_args, "device", val)
-        elif key == "custom_options":
-            if val:
-                docker_args.extend(shlex.split(val))
-        elif key not in ("name", "dbus_sys", "includes"):
-            raise NotSupportedError(f"Unknown key '{key}' in the [base] section of {profile} "
-                                    "or its includes")
+        match key:
+            case "home":
+                if val:
+                    # create the source directory if it does not exist
+                    os.makedirs(val, mode=Consts.default_directory_mode(), exist_ok=True)
+                    add_mount_option(docker_args, val, env.target_home)
+            case "shared_root":
+                shared_root = val or ""
+            case "config_hardlinks":
+                if val:
+                    config_hardlinks = _get_boolean(val)
+                else:
+                    config_hardlinks = None
+            case "config_locale":
+                config_locale = _get_boolean(val)
+            case "x11":
+                if _get_boolean(val):
+                    enable_x11(docker_args, env)
+            case "wayland":
+                if _get_boolean(val):
+                    enable_wayland(docker_args, env)
+            case "pulseaudio":
+                if _get_boolean(val):
+                    enable_pulse(docker_args, env)
+            case "dbus":
+                if _get_boolean(val):
+                    enable_dbus(docker_args, base_section.getboolean(
+                        "dbus_sys", fallback=False), env)
+            case "ssh_agent":
+                if _get_boolean(val):
+                    enable_ssh_agent(docker_args, env)
+            case "gpg_agent":
+                if _get_boolean(val):
+                    enable_gpg_agent(docker_args, env)
+            case "dri":
+                dri = _get_boolean(val)
+            case "nvidia":
+                nvidia = _get_boolean(val)
+            case "nvidia_ctk":
+                nvidia_ctk = _get_boolean(val)
+            case "shm_size":
+                if val:
+                    docker_args.append(f"--shm-size={val}")
+            case "pids_limit":
+                if val:
+                    docker_args.append(f"--pids-limit={val}")
+            case "log_driver":
+                if val:
+                    docker_args.append(f"--log-driver={val}")
+            case "log_opts":
+                add_multi_opt(docker_args, "log-opt", val)
+                # create the log directory if required
+                log_dirs = [mt.group(1) for mt in (re.match("^--log-opt=path=(.*)/.*$", path)
+                                                   for path in docker_args) if mt]
+                for log_dir in log_dirs:
+                    os.makedirs(log_dir, mode=Consts.default_directory_mode(), exist_ok=True)
+            case "devices":
+                if val:
+                    add_multi_opt(docker_args, "device", val)
+            case "custom_options":
+                if val:
+                    docker_args.extend(shlex.split(val))
+            case "name" | "dbus_sys" | "includes":
+                pass
+            case _:
+                raise NotSupportedError(f"Unknown key '{key}' in the [base] section of {profile} "
+                                        "or its includes")
     if config_locale:
         for lang_var in ("LANG", "LANGUAGE"):
             add_env_option(docker_args, lang_var)
