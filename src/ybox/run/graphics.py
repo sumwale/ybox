@@ -6,7 +6,7 @@ import glob
 import os
 from itertools import chain
 from os.path import realpath
-from typing import Iterable, Optional
+from typing import Iterable
 
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ
@@ -31,7 +31,7 @@ _NVIDIA_DATA_PATTERNS = ["/usr/share/nvidia", "/usr/local/share/nvidia", "/lib/f
 _LD_SO_CONF = "/etc/ld.so.conf"
 
 
-def add_env_option(docker_args: list[str], env_var: str, env_val: Optional[str] = None) -> None:
+def add_env_option(docker_args: list[str], env_var: str, env_val: str | None = None) -> None:
     """
     Add option to the list of podman/docker arguments to set an environment variable.
 

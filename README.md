@@ -77,7 +77,7 @@ behave quite like a full Linux installation apart from missing system-level stuf
 
 First install the requirements:
 
-- Python version 3.9 or higher. All recent Linux distributions should satisfy
+- Python version 3.10 or higher. All recent Linux distributions should satisfy
   this but still confirm with `python3 --version`.
 - Rootless podman or docker. Podman is recommended as it works out of the box for most
         distributions and container runs as normal non-root user unlike docker that
@@ -441,9 +441,9 @@ command rather than directly using podman/docker.
 ## Development
 
 Virtual environment setup have been provided for consistent development, test and build
-with multiple python versions. The minimum python version required is 3.9 and tests are
-run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12, 3.13 and
-    others in future).
+with multiple python versions. The minimum python version required is 3.10 and tests are
+run against all major python versions higher than that (i.e. 3.10, 3.11, 3.12, 3.13, 3.14
+    and others in future).
 
 The setup uses pyenv with venv which can be used for development with IDEA/PyCharm/VSCode
 or in terminal, running tests against all supported python versions using `tox` etc.
@@ -534,7 +534,7 @@ otherwise is error-prone and can cause unwanted side-effects for other tests.
 
 Once pyenv+venv set up is working, you can run the entire test suite and other checks
 using `tox` in the checkout directory, or `tox -p` for parallel run. It will run with
-all supported python versions (i.e. from 3.9 onwards). Tests are written using the `pytest`
+all supported python versions (i.e. from 3.10 onwards). Tests are written using the `pytest`
 test framework which will be installed along with other requirements by the `setup-venv.sh`
 script (or you can explicitly use `requirements.txt` and install `tox` separately).
 

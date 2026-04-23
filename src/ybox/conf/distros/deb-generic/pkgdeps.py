@@ -6,7 +6,7 @@ given packages as expected by `ybox-pkg`.
 
 import platform
 import sys
-from typing import Iterable, Optional, cast
+from typing import Iterable, cast
 
 import apt_pkg
 
@@ -31,7 +31,7 @@ class APTPackageMap(PackageMap):
             pkg.desc = self._records.short_desc
 
     def _transform_or_deps(self, all_deps: dict[str, list[list[apt_pkg.Dependency]]],
-                           dep_type: str) -> Optional[list[list[PackageCondition]]]:
+                           dep_type: str) -> list[list[PackageCondition]] | None:
         if deps := all_deps.get(dep_type):
             return [[PackageCondition(dep.target_pkg.name,
                                       dep.target_pkg.architecture or self._platform_arch,
@@ -40,7 +40,7 @@ class APTPackageMap(PackageMap):
         return None
 
     def _transform_deps(self, all_deps: dict[str, list[list[apt_pkg.Dependency]]],
-                        dep_type: str) -> Optional[list[PackageCondition]]:
+                        dep_type: str) -> list[PackageCondition] | None:
         if deps := all_deps.get(dep_type):
             return [PackageCondition(dep.target_pkg.name,
                                      dep.target_pkg.architecture or self._platform_arch,
@@ -115,7 +115,7 @@ class APTPackageMap(PackageMap):
 
     @staticmethod
     def _to_package(name: str, ver: apt_pkg.Version,
-                    inst_ver: Optional[apt_pkg.Version]) -> Package:
+                    inst_ver: apt_pkg.Version | None) -> Package:
         installed = inst_ver is not None and inst_ver.ver_str == ver.ver_str \
             and inst_ver.arch == ver.arch
         all_deps = ver.depends_list

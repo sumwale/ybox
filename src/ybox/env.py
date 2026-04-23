@@ -11,7 +11,6 @@ import sys
 from datetime import datetime
 from importlib.resources import files
 from pathlib import Path
-from typing import Optional, Union
 
 from .print import print_error, print_notice
 
@@ -20,7 +19,7 @@ if sys.version_info >= (3, 11):
 else:
     from importlib.abc import Traversable
 
-PathName = Union[Path, Traversable]
+PathName = Path | Traversable
 
 
 def get_docker_command() -> str:
@@ -56,7 +55,7 @@ class Environ:
     Also captures the current time and sets up the $NOW environment variable.
     """
 
-    def __init__(self, docker_cmd: Optional[str] = None, home_dir: Optional[str] = None):
+    def __init__(self, docker_cmd: str | None = None, home_dir: str | None = None):
         """
         Initialize the `Environ` object providing the podman/docker command to use.
 

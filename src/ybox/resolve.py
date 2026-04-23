@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Final, Iterable, Optional, Union, cast
+from typing import Any, Callable, Final, Iterable, cast
 
 from ybox.cmd import parse_opt_deps_args
 from ybox.print import fgcolor, print_color, print_error, print_warn
@@ -25,7 +25,7 @@ class PackageCondition:
     arch: Final[str]
     version: Final[str]  # optionally a version to be compared against
     version_cmp: Final[str]  # comparison against the version e.g. <pkg> >= 1.1
-    _version_cmp_op: Optional[VersionCompare] = None  # function equivalent of `version_cmp`
+    _version_cmp_op: VersionCompare | None = None  # function equivalent of `version_cmp`
 
     def __hash__(self) -> int:
         return hash((self.name, self.version, self.version_cmp))
@@ -41,7 +41,7 @@ class PackageCondition:
     __repr__ = __str__
 
     @property
-    def version_cmp_op(self) -> Optional[VersionCompare]:
+    def version_cmp_op(self) -> VersionCompare | None:
         """equivalent function for `version_cmp` from the `operator` module"""
         if self.version and not self._version_cmp_op:
             if self.version_cmp == "=" or self.version_cmp == "==":
@@ -65,9 +65,9 @@ class PackageCondition:
 
 # Package conditions that are ANDed (e.g. <pkg1> = 1.1, <pkg2> >= 2.0)
 # These are initially unprocessed objects which are transformed to `PackageCondition`s when required
-PackageConditions = Union[Any, Iterable[PackageCondition]]
+PackageConditions = Any | Iterable[PackageCondition]
 # ORed sets of package conditions that are ANDed (e.g. <pkg1> = 1.1 | <pkg11>, <pkg2> >= 2.0)
-OrPackageConditions = Union[Any, Iterable[Iterable[PackageCondition]]]
+OrPackageConditions = Any | Iterable[Iterable[PackageCondition]]
 OrDependencies = list[Iterable[PackageCondition]]
 
 
@@ -91,7 +91,7 @@ class Package:
     suggests: OrPackageConditions = None
     conflicts: PackageConditions = None
     provides: PackageConditions = None  # required upfront by `DistributionPackageMap` for all
-    provided_by: Final[Optional['Package']] = None
+    provided_by: Final['Package | None'] = None
     transformed: bool = False
 
     def __hash__(self) -> int:
@@ -176,8 +176,8 @@ class PackageMap(BasePackageCollection):
                                resolved: CandidatePackages) -> Iterable[PackageCondition]:
         remaining_pkgs = ()
         for pkg in resolve_pkgs:
-            candidates: Optional[list[Package]] = None
-            installed: Optional[list[Package]] = None
+            candidates: list[Package] | None = None
+            installed: list[Package] | None = None
             for candidate in self.lookup(pkg.name):
                 if self.verify_package_condition(candidate, pkg):
                     if candidate.installed:
@@ -269,7 +269,7 @@ class DistributionPackageMap(PackageMap):
     def cannonical_name(self, pkg: str) -> str:
         return self._distro_pkgs.cannonical_name(pkg)
 
-    def add_package(self, pkg: Package, conflicts: Optional[ConflictMap]) -> None:
+    def add_package(self, pkg: Package, conflicts: ConflictMap | None) -> None:
         self._package_map[pkg.name].append(pkg)
         if conflicts and pkg.installed:
             self.add_conflicts(pkg, conflicts)
@@ -380,7 +380,7 @@ class ResolvePackage:
     def select_packages(self, resolved: CandidatePackages, conflicts: ConflictMap) -> list[Package]:
         selected: list[Package] = []
         for pkg, candidates in resolved:
-            preferred: Optional[Package] = None
+            preferred: Package | None = None
             for candidate in candidates:
                 # TODO: SW: add full conflict resolution based on depends that will select other
                 # potential candidates after backtracking and even offer to uninstall

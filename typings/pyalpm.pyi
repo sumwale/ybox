@@ -5,8 +5,6 @@ package databases.
 
 from __future__ import annotations
 
-from typing import Optional
-
 __all__: list[str] = ['DB', 'Handle', 'LOG_DEBUG', 'LOG_ERROR', 'LOG_FUNCTION',
                       'LOG_WARNING', 'PKG_REASON_DEPEND', 'PKG_REASON_EXPLICIT',
                       'Package', 'SIG_DATABASE', 'SIG_DATABASE_MARGINAL_OK',
@@ -216,7 +214,7 @@ class DB:
     pkgcache: list[Package]
     grpcache: list[tuple[str, list[Package]]]
 
-    def get_pkg(self, name: str) -> Optional[Package]:
+    def get_pkg(self, name: str) -> Package | None:
         """
         Retrieves a package instance with the name `name`.
 
@@ -227,7 +225,7 @@ class DB:
                 or None if it doesn't exist
         """
 
-    def read_grp(self, group: str) -> Optional[tuple[str, list[Package]]]:
+    def read_grp(self, group: str) -> tuple[str, list[Package]] | None:
         """
         Retrieves the list of packages that belong to the group by the name passed.
 
@@ -420,7 +418,7 @@ def vercmp(version1: str, version2: str) -> int:
     """
 
 
-def find_satisfier(packages: list[str], pkgname: str) -> Optional[Package]:
+def find_satisfier(packages: list[str], pkgname: str) -> Package | None:
     """
     Finds a package satisfying a dependency constraint in a package list.
 
@@ -444,7 +442,7 @@ def find_grp_pkgs(databases: list[DB], group: str) -> list[Package]:
     """
 
 
-def sync_newversion(package: Package, databases: list[DB]) -> Optional[Package]:
+def sync_newversion(package: Package, databases: list[DB]) -> Package | None:
     """
     Finds an available upgrade for a package in a list of databases.
 

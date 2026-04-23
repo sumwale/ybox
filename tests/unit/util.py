@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import reduce
 from importlib.resources import files
 from itertools import chain
-from typing import Any, Optional
+from typing import Any
 
 import ybox.state as y_state
 from ybox.env import Environ
@@ -23,9 +23,9 @@ class PackageDetails:
     name: str
     shared_root: str
     local_copies: list[str]
-    copy_type: Optional[Any]  # this is `CopyType` when filled
+    copy_type: Any | None  # this is `CopyType` when filled
     app_flags: dict[str, str]
-    dep_type: Optional[Any]  # this is `DependencyType` when filled
+    dep_type: Any | None  # this is `DependencyType` when filled
     dep_of: str
 
 

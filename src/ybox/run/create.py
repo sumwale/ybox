@@ -18,7 +18,6 @@ from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
 from textwrap import dedent
-from typing import Optional
 
 from ybox import __version__ as product_version
 from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
@@ -576,7 +575,7 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
 
 
 def process_base_section(base_section: SectionProxy, profile: PathName, conf: StaticConfiguration,
-                         docker_args: list[str]) -> tuple[str, Optional[bool]]:
+                         docker_args: list[str]) -> tuple[str, bool | None]:
     """
     Process the `[base]` section in the container profile to append required podman/docker
     options in the list that has been passed, and return a tuple having the shared root to use for
@@ -595,7 +594,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
     # shared root is disabled by default
     shared_root = ""
     # hard links are false by default (value of None means skip the [configs] section entirely)
-    config_hardlinks: Optional[bool] = False
+    config_hardlinks: bool | None = False
     # configure locale by default
     config_locale = True
     # DRI will be force enabled if NVIDIA support is enabled
@@ -767,7 +766,7 @@ def _replace_xdg_rt_dir(src: str, env: Environ) -> str:
     return src.replace(env.xdg_rt_dir + "/", env.target_xdg_rt_dir + "/")
 
 
-def add_multi_opt(docker_args: list[str], opt: str, val: Optional[str]) -> None:
+def add_multi_opt(docker_args: list[str], opt: str, val: str | None) -> None:
     """
     Append a comma-separated value in the profile as multiple options to podman/docker arguments.
 
@@ -1038,7 +1037,7 @@ def process_startup_section(startup_section: SectionProxy, conf: StaticConfigura
 # for all symlinks. So it behaves like follow_symlinks=True if the symlink destination is outside
 # the "src_path" else it is False.
 def copytree(src_path: str, dest: str, hardlink: bool = False,
-             src_root: Optional[str] = None) -> None:
+             src_root: str | None = None) -> None:
     """
     Copy or create hard links to a source directory tree in the given destination directory.
     Since hard links to directories are not supported, the destination will mirror the directories

@@ -6,7 +6,7 @@ import multiprocessing
 import os
 import time
 from datetime import datetime
-from multiprocessing import Process
+from multiprocessing.context import ForkProcess
 from multiprocessing.synchronize import Event
 from pathlib import Path
 from unittest.mock import patch
@@ -21,7 +21,7 @@ _LOCK_FILE = f"test_locking-{uuid4()}.lck"
 
 
 def _run_in_process(func, args=(), expected_exitcode: int = 0,  # type: ignore
-                    wait_for_process: bool = True) -> Process:
+                    wait_for_process: bool = True) -> ForkProcess:
     """
     Run a given function with arguments in a separate process.
 
@@ -29,7 +29,8 @@ def _run_in_process(func, args=(), expected_exitcode: int = 0,  # type: ignore
     :param args: arguments to the function as an `Iterable` (default is empty tuple)
     :param expected_exitcode: the expected exit code of the process (default is 0)
     """
-    proc = Process(target=func, args=args)  # type: ignore
+    ctx = multiprocessing.get_context("fork")
+    proc = ctx.Process(target=func, args=args)  # type: ignore
     proc.start()
     if wait_for_process:
         proc.join()

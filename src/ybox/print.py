@@ -6,7 +6,7 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass
-from typing import IO, Optional
+from typing import IO
 
 
 # define color names for printing in terminal
@@ -48,8 +48,8 @@ def get_terminal_width() -> int:
         return shutil.get_terminal_size().columns
 
 
-def print_color(msg: str, fg: Optional[str] = None,
-                bg: Optional[str] = None, end: str = "\n", file: Optional[IO[str]] = None) -> None:
+def print_color(msg: str, fg: str | None = None,
+                bg: str | None = None, end: str = "\n", file: IO[str] | None = None) -> None:
     """
     Display given string to standard output with foreground and background colors, if provided.
     The colors will show up as expected on most known Linux terminals and console though
@@ -75,7 +75,7 @@ def print_color(msg: str, fg: Optional[str] = None,
     print(full_msg, end=end, file=file, flush=end != "\n")
 
 
-def print_error(msg: str, end: str = "\n", file: Optional[IO[str]] = None) -> None:
+def print_error(msg: str, end: str = "\n", file: IO[str] | None = None) -> None:
     """
     Display an error string in red foreground (and no background change).
 
@@ -88,7 +88,7 @@ def print_error(msg: str, end: str = "\n", file: Optional[IO[str]] = None) -> No
     print_color(msg, fg=fgcolor.red, end=end, file=file)
 
 
-def print_warn(msg: str, end: str = "\n", file: Optional[IO[str]] = None):
+def print_warn(msg: str, end: str = "\n", file: IO[str] | None = None):
     """
     Display a warning string in purple foreground (and no background change).
 
@@ -99,7 +99,7 @@ def print_warn(msg: str, end: str = "\n", file: Optional[IO[str]] = None):
     print_color(msg, fg=fgcolor.purple, end=end, file=file)
 
 
-def print_notice(msg: str, end: str = "\n", file: Optional[IO[str]] = None):
+def print_notice(msg: str, end: str = "\n", file: IO[str] | None = None):
     """
     Display a string in orange foreground (and no background change).
 
@@ -110,7 +110,7 @@ def print_notice(msg: str, end: str = "\n", file: Optional[IO[str]] = None):
     print_color(msg, fg=fgcolor.orange, end=end, file=file)
 
 
-def print_info(msg: str, end: str = "\n", file: Optional[IO[str]] = None):
+def print_info(msg: str, end: str = "\n", file: IO[str] | None = None):
     """
     Display an informational string in blue foreground (and no background change).
 

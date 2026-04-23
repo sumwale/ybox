@@ -12,7 +12,7 @@ from configparser import BasicInterpolation, ConfigParser, Interpolation
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Iterable, Sequence
 
 from simple_term_menu import TerminalMenu  # type: ignore
 from tabulate import tabulate
@@ -72,8 +72,8 @@ def resolve_inc_path(inc: str, src: PathName) -> PathName:
 
 
 # read the ini file, recursing into the includes to build the final dictionary
-def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
-                  top_level: Optional[PathName] = None) -> ConfigParser:
+def config_reader(conf_file: PathName, interpolation: Interpolation | None,
+                  top_level: PathName | None = None) -> ConfigParser:
     """
     Read the container configuration INI file, recursing into the includes to build the final
     dictionary having the sections with corresponding key-value pairs.
@@ -119,7 +119,7 @@ def config_reader(conf_file: PathName, interpolation: Optional[Interpolation],
     return config
 
 
-def ini_file_reader(fd: Iterable[str], interpolation: Optional[Interpolation],
+def ini_file_reader(fd: Iterable[str], interpolation: Interpolation | None,
                     case_sensitive: bool = True) -> ConfigParser:
     """
     Read an INI file from a given file handle. It applies some basic rules that are used
@@ -138,7 +138,7 @@ def ini_file_reader(fd: Iterable[str], interpolation: Optional[Interpolation],
     return config
 
 
-def copy_file(src: PathName, dest: str, permissions: Optional[int] = None) -> None:
+def copy_file(src: PathName, dest: str, permissions: int | None = None) -> None:
     """
     Copy a given source file (can be on filesystem or package resource) to destination path
     overwriting if it exists, and with given optional permissions. If `permissions` is not provided
@@ -298,7 +298,7 @@ def check_package(docker_cmd: str, check_cmd: str, package: str,
     return (check_result.returncode, output) if output else (1, output)
 
 
-def select_item_from_menu(items: list[str]) -> Optional[str]:
+def select_item_from_menu(items: list[str]) -> str | None:
     """
     Display a list of items on terminal and allow user to select an item from it interactively
     using arrow keys and all.
