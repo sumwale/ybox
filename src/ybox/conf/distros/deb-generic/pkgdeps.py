@@ -21,7 +21,7 @@ import os
 import re
 import sys
 from enum import Enum
-from typing import Callable, Iterable, Optional, Union
+from typing import Callable, Iterable
 
 from ybox.cmd import parse_opt_deps_args, run_command
 from ybox.print import print_error, print_notice
@@ -29,7 +29,7 @@ from ybox.print import print_error, print_notice
 # regex pattern for package name in Recommends or Suggests fields
 PKG_DEP_RE = re.compile(r"([,|]?)\s*([^\s,|(]+)\s*(\([^)]*\))?\s*")
 
-PackageAlternate = tuple[str, str, Optional[list[str]]]
+PackageAlternate = tuple[str, str, list[str] | None]
 
 
 def main() -> None:
@@ -71,7 +71,7 @@ class PkgDetail(Enum):
 
 # noinspection PyUnusedLocal
 def process_next_item(line: str, parse_line: Callable[[str], tuple[PkgDetail, str]],
-                      parse_dep: Callable[[str], Iterable[tuple[str, str, Optional[str]]]],
+                      parse_dep: Callable[[str], Iterable[tuple[str, str, str | None]]],
                       installed: Callable[[str], bool], max_level: int,
                       pkg_details: dict[str, list[PackageAlternate]], level: int = 1) -> None:
     """
@@ -108,7 +108,7 @@ def find_opt_deps(package: str, max_level: int) -> dict[str, tuple[str, int, int
     all_packages: dict[str, str] = {}
     # the map below stores all the virtual packages to the list of the packages that provide them,
     # including the actual package itself which always provides itself
-    provides_map: dict[str, Union[str, list[str]]] = {}
+    provides_map: dict[str, str | list[str]] = {}
 
     def insert_or_update_provides(provide: str, pkg: str) -> None:
         """insert a single value in provides map if not present, else change to list and append"""

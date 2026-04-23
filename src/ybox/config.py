@@ -4,7 +4,7 @@ Configuration locations, distribution and box name of ybox container.
 
 import os
 import re
-from typing import Iterable, Optional
+from typing import Iterable
 
 from .env import Environ
 
@@ -84,12 +84,12 @@ class StaticConfiguration:
         return self._shared_box_image if has_shared_root else self._box_image
 
     @property
-    def localtime(self) -> Optional[str]:
+    def localtime(self) -> str | None:
         """the target link for /etc/localtime"""
         return self._localtime
 
     @property
-    def timezone(self) -> Optional[str]:
+    def timezone(self) -> str | None:
         """the contents of /etc/timezone"""
         return self._timezone
 

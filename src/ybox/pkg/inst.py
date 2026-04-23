@@ -12,7 +12,7 @@ import sys
 import tempfile
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
-from typing import Callable, Optional, Union
+from typing import Callable
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
@@ -85,7 +85,7 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
                      docker_cmd: str, conf: StaticConfiguration, rt_conf: RuntimeConfiguration,
                      state: YboxStateManagement, opt_deps_cmd: str, opt_dep_flag: str,
                      opt_dep_install: bool, check_pkg: bool, check_avail: str, check_inst: str,
-                     selected_deps: Optional[list[str]], quiet: int) -> int:
+                     selected_deps: list[str] | None, quiet: int) -> int:
     """
     Real workhorse for :func:`install_package` that is invoked recursively for
     optional dependencies if required.
@@ -305,7 +305,7 @@ def select_optional_deps(package: str, deps: list[tuple[str, str, int]]) -> list
 
 def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str, str],
                          list_cmd: str, docker_cmd: str, conf: StaticConfiguration,
-                         box_conf: Union[str, ConfigParser], shared_root: str,
+                         box_conf: str | ConfigParser, shared_root: str,
                          quiet: int) -> list[str]:
     """
     Create wrappers in host environment to invoke container's desktop files and executables.
@@ -387,7 +387,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     return wrapper_files
 
 
-def _get_parsed_box_conf(box_conf: Union[str, ConfigParser]) -> Optional[ConfigParser]:
+def _get_parsed_box_conf(box_conf: str | ConfigParser) -> ConfigParser | None:
     """
     Get the parsed `ConfigParser` for the container configuration.
 

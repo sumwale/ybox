@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import Enum, IntFlag, auto
 from importlib.resources import files
 from io import StringIO
-from typing import Iterable, Iterator, Optional, Union
+from typing import Iterable, Iterator
 from uuid import uuid4
 
 from packaging.version import Version
@@ -43,7 +43,7 @@ class RuntimeConfiguration:
     name: str
     distribution: str
     shared_root: str
-    ini_config: Union[str, ConfigParser]
+    ini_config: str | ConfigParser
 
 
 class CopyType(IntFlag):
@@ -495,7 +495,7 @@ class YboxStateManagement:
         YboxStateManagement._remove_local_copies(local_copies)
         return row is not None
 
-    def get_container_configuration(self, name: str) -> Optional[RuntimeConfiguration]:
+    def get_container_configuration(self, name: str) -> RuntimeConfiguration | None:
         """
         Get the configuration details of the container which includes its Linux distribution name,
         shared root path (or empty if not using shared root), and its resolved configuration in
@@ -511,8 +511,8 @@ class YboxStateManagement:
             return RuntimeConfiguration(name=name, distribution=row[0], shared_root=row[1],
                                         ini_config=row[2]) if row else None
 
-    def get_containers(self, name: Optional[str] = None, distribution: Optional[str] = None,
-                       shared_root: Optional[str] = None,
+    def get_containers(self, name: str | None = None, distribution: str | None = None,
+                       shared_root: str | None = None,
                        include_destroyed: bool = False) -> list[str]:
         """
         Get the containers matching the given name, distribution and/or shared root location.
@@ -580,7 +580,7 @@ class YboxStateManagement:
 
     def register_package(self, container_name: str, package: str, local_copies: list[str],
                          copy_type: CopyType, app_flags: dict[str, str], shared_root: str,
-                         dep_type: Optional[DependencyType], dep_of: str,
+                         dep_type: DependencyType | None, dep_of: str,
                          skip_if_exists: bool = False) -> None:
         """
         Register a package as being owned by a container.
@@ -774,7 +774,7 @@ class YboxStateManagement:
             return result
 
     def unregister_repository(self, name: str,
-                              container_or_shared_root: str) -> Optional[tuple[str, bool]]:
+                              container_or_shared_root: str) -> tuple[str, bool] | None:
         """
         Unregister a previously registered package repository (using :meth:`register_repository`).
 

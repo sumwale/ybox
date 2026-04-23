@@ -7,7 +7,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from configparser import ConfigParser
 from dataclasses import dataclass
 from importlib.resources import files
-from typing import Callable, Optional, Union, cast
+from typing import Callable, cast
 from uuid import uuid4
 
 import pytest
@@ -100,7 +100,7 @@ class DistributionBase:
 
     def for_all_distros(self, test_func: Callable[[DistributionHelper], None]) -> None:
         """execute a given zero argument function for all supported distributions"""
-        failure: Optional[BaseException] = None
+        failure: BaseException | None = None
         with ProcessPoolExecutor() as executor:
             futures = {executor.submit(test_func, helper): helper for helper in self._helpers}
             for future in as_completed(futures):
@@ -116,7 +116,7 @@ class DistributionBase:
         if failure:
             raise failure
 
-    def run_on_container(self, cmd: Union[str, list[str]], helper: DistributionHelper,
+    def run_on_container(self, cmd: str | list[str], helper: DistributionHelper,
                          capture_output: bool = True) -> subprocess.CompletedProcess[bytes]:
         """
         Run a command on the container using podman/docker exec and return the

@@ -8,7 +8,7 @@ import shlex
 import subprocess
 import sys
 from enum import Enum
-from typing import Callable, Iterable, Optional, Union
+from typing import Callable, Iterable
 
 from ybox import __version__ as product_version
 from ybox.config import Consts
@@ -181,8 +181,8 @@ def build_shell_command(docker_cmd: str, box_name: str, cmd: str,
     return [docker_cmd, "exec", box_name, shell, cmd]
 
 
-def run_command(cmd: Union[str, list[str]], capture_output: bool = False,
-                exit_on_error: bool = True, error_msg: Optional[str] = None) -> Union[str, int]:
+def run_command(cmd: str | list[str], capture_output: bool = False,
+                exit_on_error: bool = True, error_msg: str | None = None) -> str | int:
     """
     Helper wrapper around `subprocess.run` to display failure message (in red foreground color)
     for the case of failure, exit on failure and capturing and returning output if required.
@@ -304,8 +304,8 @@ def page_output(output: Iterable[bytes], pager: str) -> int:
         return 130  # see https://tldp.org/LDP/abs/html/exitcodes.html
 
 
-def page_command(cmd: Union[str, list[str]], pager: str, error_msg: Optional[str] = None,
-                 transform: Optional[Callable[[str], str]] = None, header: str = "") -> int:
+def page_command(cmd: str | list[str], pager: str, error_msg: str | None = None,
+                 transform: Callable[[str], str] | None = None, header: str = "") -> int:
     """
     Execute a given command using `subprocess.run` and show its output one screenful at a time
     as UTF-8 string using the given `pager` command. In case of failure of either the command

@@ -27,7 +27,6 @@ import time
 import zlib
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
 
 import ijson  # type: ignore
 
@@ -117,7 +116,7 @@ def build_pacman_db_map(sep: str) -> defaultdict[str, list[PackageAlternate]]:
     return arch_packages
 
 
-def _process_pkg_names(pkgs: Optional[list[str]]) -> list[str]:
+def _process_pkg_names(pkgs: list[str] | None) -> list[str]:
     """internal method to strip out versions from each package name of a list of package names"""
     return [m.group(0) for pkg in pkgs if (m := _PACKAGE_NAME_RE.match(pkg))] if pkgs else []
 
