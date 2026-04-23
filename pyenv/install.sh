@@ -54,7 +54,7 @@ source "$SCRIPT_DIR/activate.bash"
       system_version=
     fi
   fi
-  all_versions="3.9 3.10 3.11 3.12 3.13"
+  all_versions="3.9 3.10 3.11 3.12 3.13 3.14"
   req_versions="$(echo "$all_versions" | sed "s/\<$system_version\>//")"
   pyenv install $req_versions || /bin/true
   pyenv local $req_versions || /bin/true
