@@ -335,7 +335,7 @@ def page_command(cmd: str | list[str], pager: str, error_msg: str | None = None,
 
 def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_interactive: bool,
                           needs_tty: bool, extra_args: Iterable[str], working_dir: str,
-                          cmd: list[str]) -> None:
+                          cmd: list[str], extra_flags: str = "") -> None:
     """
     Append the podman/docker command-line arguments for execution of a command that includes
     environment variables to be passed through from the host environment to the container which
@@ -355,6 +355,7 @@ def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_in
     :param cmd: existing command-line as a list of strings that should be concatenated without any
                 separator; this will be populated with the arguments required for podman/docker
                 execution including the environment variables to be passed through from the host
+    :param extra_flags: an explicit string having additional flags to be passed to podman/docker
     """
     cmd.append(docker_cmd)
     cmd.append(" exec")
@@ -365,6 +366,8 @@ def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_in
     # need a pseudo-terminal
     if needs_tty:
         cmd.append(" -t")
+    if extra_flags:
+        cmd.append(extra_flags)
     for e_var in _PASSTHROUGH_ENVVARS:
         cmd.extend(" -e ")
         cmd.append(e_var)

@@ -646,9 +646,13 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
                 exist_ok=True)
     wrapper_exec = _get_wrapper_executable(filename, conf)
     print_notice(f"Linking container executable {file} to {wrapper_exec}")
-    exec_content = ["#!/bin/sh\nexec "]
+    term_flags = "-it" if needs_tty else "-i"
+    # the special first argument "--no-terminal" will skip -it flags to podman/docker exec
+    exec_content = ['#!/bin/sh\nif [ "$1" = "--no-terminal" ]; then\n  term_flags=""\n  shift\n']
+    exec_content.append(f'else\n  term_flags="{term_flags}"\nfi\nexec ')
     # ensure to change working directory to same on as on host if possible using `run-in-dir`
-    populate_exec_cmdline(docker_cmd, conf.box_name, "", True, needs_tty, (), "`pwd`", exec_content)
+    populate_exec_cmdline(docker_cmd, conf.box_name, "", False, False, (), "`pwd`",
+                          exec_content, extra_flags=" $term_flags")
     # check if ambient capabilities have to be cleared
     if not keep_ambient_caps:
         exec_content.append("/usr/bin/setpriv --ambient-caps -all ")
