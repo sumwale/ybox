@@ -1,6 +1,7 @@
 """Unit tests for `ybox/config.py`"""
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -70,7 +71,12 @@ def test_properties(env: Environ, config: static_conf):
     assert config.distribution == _TEST_DISTRIBUTION
     assert config.box_name == _TEST_CONTAINER
     assert config.localtime == os.readlink("/etc/localtime")
-    assert config.timezone == Path("/etc/timezone").read_text(encoding="utf-8").rstrip()
+    tz_path = Path("/etc/timezone")
+    if tz_path.exists():
+        assert config.timezone == tz_path.read_text(encoding="utf-8").rstrip()
+    else:
+        assert config.timezone == subprocess.check_output(
+            ["timedatectl", "show", "--property=Timezone", "--value"]).decode("utf-8").rstrip()
     assert config.configs_dir == f"{env.data_dir}/{_TEST_CONTAINER}/configs"
     assert config.target_configs_dir == f"{env.target_data_dir}/{_TEST_CONTAINER}/configs"
     assert config.scripts_dir == f"{env.data_dir}/{_TEST_CONTAINER}/ybox-scripts"

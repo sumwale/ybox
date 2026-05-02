@@ -35,6 +35,7 @@ for ver in $all_versions; do
   echo "Creating test migration database for ybox version:"
   tail -n1 src/ybox/__init__.py
   echo
+  perl -pi -e 's/^from importlib.abc import Traversable/import sys\nif sys.version_info >= (3, 11):\n    from importlib.resources.abc import Traversable\nelse:\n    from importlib.abc import Traversable/' src/ybox/env.py
   PYTHONPATH=./src python3 ./tests/create_migration_db.py "$PROJ_DIR/tests/resources/migration/"
 done
 

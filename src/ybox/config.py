@@ -4,6 +4,8 @@ Configuration locations, distribution and box name of ybox container.
 
 import os
 import re
+import shutil
+import subprocess
 from typing import Iterable
 
 from .env import Environ
@@ -33,6 +35,9 @@ class StaticConfiguration:
         if os.path.exists("/etc/timezone"):
             with open("/etc/timezone", "r", encoding="utf-8") as timezone:
                 self._timezone = timezone.read().rstrip("\n")
+        elif (tdctl := shutil.which("timedatectl", path=os.pathsep.join(Consts.sys_bin_dirs()))):
+            self._timezone = subprocess.check_output([tdctl, "show", "--property=Timezone",
+                                                      "--value"]).decode("utf-8").rstrip("\n")
         self._pager = os.environ.get("YBOX_PAGER", Consts.default_pager())
         container_dir = f"{env.data_dir}/{box_name}"
         os.environ["YBOX_CONTAINER_DIR"] = container_dir
@@ -90,7 +95,7 @@ class StaticConfiguration:
 
     @property
     def timezone(self) -> str | None:
-        """the contents of /etc/timezone"""
+        """the contents of /etc/timezone or output of timedatectl"""
         return self._timezone
 
     @property
