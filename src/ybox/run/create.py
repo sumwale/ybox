@@ -147,6 +147,8 @@ def main_argv(argv: list[str]) -> None:
                                "--format={{.Id}}", conf.box_image(True)], check=False,
                               stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL).returncode != 0:
+                # fetch/refresh the base container image
+                _fetch_container_image(docker_cmd, base_image_name)
                 # run the "base" container with appropriate arguments for the current user to
                 # the 'entrypoint-base.sh' script to create the user and group in the container
                 run_base_container(base_image_name, current_user, secondary_groups, docker_cmd,
@@ -171,15 +173,8 @@ def main_argv(argv: list[str]) -> None:
                                           shared_root_dirs, conf, args.quiet)
                 remove_container(docker_cmd, conf)
     else:
-        # for no shared_root case, its best to refresh the local image -- retry a few times
-        for _ in range(3):
-            if int(run_command([docker_cmd, "pull", base_image_name], exit_on_error=False,
-                               error_msg="fetching container base image")) == 0:
-                break
-            time.sleep(5)
-        else:
-            run_command([docker_cmd, "pull", base_image_name],
-                        error_msg="fetching container base image")
+        # fetch/refresh the base container image
+        _fetch_container_image(docker_cmd, base_image_name)
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
         run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
@@ -263,6 +258,23 @@ def main_argv(argv: list[str]) -> None:
                 pkg_args.append(app)
                 parsed_args = pkg_parse_args(pkg_args)
                 install_package(parsed_args, pkgmgr, docker_cmd, conf, runtime_conf, state)
+
+
+def _fetch_container_image(docker_cmd: str, image_name: str) -> None:
+    """
+    Fetch a given container image with some retries.
+
+    :param docker_cmd: the podman/docker executable to use
+    :param image_name: the podman/docker image to fetch
+    """
+    for _ in range(3):
+        if int(run_command([docker_cmd, "pull", image_name], exit_on_error=False,
+                           error_msg="fetching container base image")) == 0:
+            break
+        time.sleep(5)
+    else:
+        run_command([docker_cmd, "pull", image_name],
+                    error_msg="fetching container base image")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
