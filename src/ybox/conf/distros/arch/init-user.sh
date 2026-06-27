@@ -7,21 +7,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
 current_user="$(id -un)"
-# install AUR helper yay (original preference was paru whose development is sporadic)
 YAY="yay --noconfirm"
-echo_color "$fg_cyan" "Installing AUR helper 'yay'" >> $status_file
-export HOME=$(getent passwd "$current_user" | cut -d: -f6)
-cd "$HOME"
-rm -rf yay
-git clone https://aur.archlinux.org/yay.git
-cd yay
-makepkg --noconfirm -si
-cd ..
+# install AUR helper yay (original preference was paru whose development is sporadic)
+if ! type -p yay >/dev/null; then
+  echo_color "$fg_cyan" "Installing AUR helper 'yay'" >> $status_file
+  export HOME=$(getent passwd "$current_user" | cut -d: -f6)
+  cd "$HOME"
+  rm -rf yay
+  git clone https://aur.archlinux.org/yay.git
+  cd yay
+  makepkg --noconfirm -si
+  cd ..
+fi
 if [ -n "$EXTRA_PKGS" ]; then
   echo_color "$fg_cyan" "Installing $EXTRA_PKGS" >> $status_file
   $YAY -S --needed $EXTRA_PKGS
 fi
-orphans=$($YAY -Qdtq)
+orphans=$($YAY -Qdtq || /bin/true)
 if [ -n "$orphans" ]; then
   $YAY -Rn $orphans
 fi
