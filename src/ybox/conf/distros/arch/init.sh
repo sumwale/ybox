@@ -11,10 +11,11 @@ export HOME=/root
 PAC="pacman --noconfirm"
 echo_color "$fg_cyan" "Configuring pacman" >> $status_file
 pacman-key --init
+# add color and eye candy in pacman output
 sed -i 's/^#[ ]*Color.*/Color/;s/^[ ]*NoProgressBar.*/#NoProgressBar\nILoveCandy/' /etc/pacman.conf
+# disable the sandbox in newer pacman versions that does not work properly in a container
+sed -i 's/^ILoveCandy/ILoveCandy\nDisableSandbox/' /etc/pacman.conf
 sed -i 's,^[ ]*NoExtract[ ]*=.*,#\0,' /etc/pacman.conf
-# disable the sandbox in the newer pacman versions that does not work in container
-sed -i 's/^#[ ]*DisableSandbox/DisableSandbox/' /etc/pacman.conf
 if ! grep -q '^[ ]*\[multilib\]' /etc/pacman.conf; then
   echo -e '[multilib]\nInclude = /etc/pacman.d/mirrorlist' >> /etc/pacman.conf
 fi
