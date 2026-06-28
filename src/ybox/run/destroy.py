@@ -34,27 +34,26 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = env.docker_cmd
     container_name = args.container_name
 
-    check_ybox_exists(docker_cmd, container_name, exit_on_error=True)
-    print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
+    if check_ybox_exists(docker_cmd, container_name):
+        print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
     # check if there is a systemd service for the container
     ybox_svc_prefix = ybox_systemd_service_prefix(container_name)
     ybox_svc = f"{ybox_svc_prefix}.service"
     systemctl = check_systemd_service_present(ybox_svc)
 
     # continue even if this fails since the container may already be in stopped state
+    if not systemctl or args.force:
+        run_command([docker_cmd, "container", "stop", container_name],
+                    exit_on_error=False, error_msg=f"stopping '{container_name}'")
+        print_warn(f"Removing ybox container '{container_name}'")
+        rm_args = [docker_cmd, "container", "rm"]
+        if args.force:
+            rm_args.append("--force")
+        rm_args.append(container_name)
+        run_command(rm_args, exit_on_error=not args.force, error_msg=f"removing '{container_name}'")
     if systemctl:
         run_command([systemctl, "--user", "stop", ybox_svc],
                     exit_on_error=False, error_msg=f"stopping '{container_name}'")
-    else:
-        run_command([docker_cmd, "container", "stop", container_name],
-                    exit_on_error=False, error_msg=f"stopping '{container_name}'")
-
-    print_warn(f"Removing ybox container '{container_name}'")
-    rm_args = [docker_cmd, "container", "rm"]
-    if args.force:
-        rm_args.append("--force")
-    rm_args.append(container_name)
-    run_command(rm_args, error_msg=f"removing '{container_name}'")
 
     # remove shared TMPDIR if present
     tmpdir = f"/var/tmp/ybox.{container_name}"

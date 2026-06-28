@@ -203,7 +203,8 @@ def main_argv(argv: list[str]) -> None:
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
                 [systemctl, "--user", "--quiet", "is-enabled", "default.target"],
                 exit_on_error=False) == 0:
-        create_and_start_service(box_name, env, systemctl, sys_path, wait_msg)
+        run_command([docker_full_args[0], "container", "rm", box_name], error_msg="container rm")
+        create_and_start_service(box_name, docker_full_args, env, systemctl, sys_path, wait_msg)
     else:
         if not args.skip_systemd_service:
             print_warn("Skipping user systemd service generation due to missing systemctl in "
@@ -212,7 +213,7 @@ def main_argv(argv: list[str]) -> None:
         start_container(docker_cmd, conf)
         print_info(wait_msg)
         wait_for_ybox_container(docker_cmd, conf, 120)
-    # truncate the app.list and config.list files so that those actions are skipped if the
+    # truncate the app.list and config.list files so that those actions are to be skipped if the
     # container is restarted later
     if os.access(conf.app_list, os.W_OK):
         truncate_file(conf.app_list)
@@ -1285,7 +1286,7 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
       * systemd user service file is generated for podman/docker to start the container
         automatically on user login (in absence of -S/--skip-systemd-service option)
 
-    :param docker_full_cmd: the `docker`/`podman run -itd` command with all the options filled
+    :param docker_full_cmd: the `podman`/`docker run` command with all the options filled
                             in from the container profile specification as a list of string
     :param current_user: the current user executing the `ybox-create` script
     :param shared_root: the shared root directory to use for the container
@@ -1340,12 +1341,14 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
         sys.exit(code)
 
 
-def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_path: str,
-                             wait_msg: str) -> None:
+def create_and_start_service(box_name: str, docker_full_cmd: list[str], env: Environ,
+                             systemctl: str, sys_path: str, wait_msg: str) -> None:
     """
     Create, enable and start systemd service for a ybox container.
 
     :param box_name: name of the ybox container
+    :param docker_full_cmd: the `podman`/`docker run` command with all the options filled
+                            in from the container profile specification as a list of string
     :param env: an instance of the current :class:`Environ`
     :param systemctl: resolved path to the `systemctl` utility
     :param sys_path: PATH used for searching system utilities
@@ -1378,7 +1381,8 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
     env_content = f"""
         SLEEP_SECS={{sleep_secs}}
         # set the container manager to the one configured during ybox-create
-        YBOX_CONTAINER_MANAGER={env.docker_cmd}
+        YBOX_CONTAINER_MANAGER={docker_full_cmd[0]}
+        CONTAINER_ARGS='"{'" "'.join(docker_full_cmd[2:])}"'
     """
     os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
     print_color(f"Generating user systemd service '{ybox_svc}' and reloading daemon", fgcolor.cyan)

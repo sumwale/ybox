@@ -51,20 +51,23 @@ def stop_container(docker_cmd: str, args: argparse.Namespace):
     :param docker_cmd: the podman/docker executable to use
     :param args: arguments having all attributes passed by the user
     """
-    _stop_container(docker_cmd, args.container, args.timeout,
+    _stop_container(docker_cmd, args.container, args.timeout, args.rm, args.force_rm,
                     fail_on_error=not args.ignore_stopped)
 
 
 def _stop_container(docker_cmd: str, container_name: str, timeout: int,
-                    fail_on_error: bool):
+                    remove: bool, force_remove: bool, fail_on_error: bool):
     """
     Stop an active ybox container.
 
     :param docker_cmd: the podman/docker executable to use
     :param container_name: name of the container
     :param timeout: seconds to wait for container to stop before killing the container
+    :param remove: also remove the container after a successful stop
+    :param force_remove: force remove the container after a successful stop
     :param fail_on_error: if True then show error message on failure to stop else ignore
     """
+    exit_code = 0
     if check_active_ybox(docker_cmd, container_name):
         print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
         run_command([docker_cmd, "container", "stop", "-t", str(timeout), container_name],
@@ -73,13 +76,32 @@ def _stop_container(docker_cmd: str, container_name: str, timeout: int,
             time.sleep(0.5)
             if get_ybox_state(docker_cmd, container_name, ("exited", "stopped"),
                               exit_on_error=False, state_msg=" stopped"):
-                return
-        print_error(f"Failed to stop ybox container '{container_name}'")
+                exit_code = 0
+                break
+        else:
+            print_error(f"Failed to stop ybox container '{container_name}'")
+            exit_code = 1
     elif fail_on_error:
         print_error(f"No active ybox container '{container_name}' found")
         sys.exit(1)
     else:
         print_color(f"No active ybox container '{container_name}' found", fg=fgcolor.cyan)
+
+    action = "stop"
+    if remove:
+        action = "remove"
+        msg = "container rm" if fail_on_error else "SKIP"
+        exit_code = run_command([docker_cmd, "container", "rm", container_name],
+                                exit_on_error=False, error_msg=msg)
+    elif force_remove:
+        action = "force remove"
+        msg = "container rm --force" if fail_on_error else "SKIP"
+        exit_code = run_command([docker_cmd, "container", "rm", "-t", str(timeout), "--force",
+                                 container_name], exit_on_error=False, error_msg=msg)
+    if exit_code != 0:
+        print_error(f"Failed to {action} ybox container '{container_name}' (code = {exit_code})")
+        if fail_on_error:
+            sys.exit(int(exit_code))
 
 
 def restart_container(docker_cmd: str, args: argparse.Namespace):
@@ -89,7 +111,8 @@ def restart_container(docker_cmd: str, args: argparse.Namespace):
     :param docker_cmd: the podman/docker executable to use
     :param args: arguments having all attributes passed by the user
     """
-    _stop_container(docker_cmd, args.container, timeout=int(args.timeout / 2), fail_on_error=False)
+    _stop_container(docker_cmd, args.container, timeout=int(args.timeout / 2), remove=False,
+                    force_remove=False, fail_on_error=False)
     start_container(docker_cmd, args)
 
 
@@ -149,6 +172,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     stop = operations.add_parser("stop", help="stop a ybox container")
     _add_subparser_args(stop, 10,
                         "time in seconds to wait for a container to stop before killing it")
+    stop.add_argument("-R", "--rm", action="store_true",
+                      help="also remove the container after a successful stop")
+    stop.add_argument("-F", "--force-rm", action="store_true",
+                      help="force removal of the container (implies -R/--rm)")
     stop.add_argument("-I", "--ignore-stopped", action="store_true",
                       help="don't fail on an already stopped container")
     stop.set_defaults(func=stop_container)
