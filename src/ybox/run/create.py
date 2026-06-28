@@ -43,6 +43,10 @@ from ybox.util import (EnvInterpolation, config_reader,
 _EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 _DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
 _WS_RE = re.compile(r"\s+")
+_PKG_VARS = (("required", "REQUIRED_PKGS"), ("recommended", "RECOMMENDED_PKGS"),
+             ("suggested", "SUGGESTED_PKGS"), ("required_deps", "REQUIRED_DEPS"),
+             ("recommended_deps", "RECOMMENDED_DEPS"), ("suggested_deps", "SUGGESTED_DEPS"),
+             ("extra", "EXTRA_PKGS"))
 
 
 # Note: deliberately not using os.path.join for joining paths since the code only works on
@@ -579,10 +583,7 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
         add_env_option(docker_args, "CONFIGURE_FASTEST_MIRRORS", "1")
     if distro_config.has_section("packages"):
         packages_section = distro_config["packages"]
-        for key, env_var in (("required", "REQUIRED_PKGS"), ("recommended", "RECOMMENDED_PKGS"),
-                             ("suggested", "SUGGESTED_PKGS"), ("required_deps", "REQUIRED_DEPS"),
-                             ("recommended_deps", "RECOMMENDED_DEPS"),
-                             ("suggested_deps", "SUGGESTED_DEPS"), ("extra", "EXTRA_PKGS")):
+        for key, env_var in _PKG_VARS:
             if value := packages_section.get(key):
                 add_env_option(docker_args, env_var, _WS_RE.sub(" ", value))
     key_server = distro_config.get("repo", RepoCmd.DEFAULT_GPG_KEY_SERVER.value,
@@ -1305,7 +1306,7 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
         for shared_dir in shared_root_dirs.split(","):
             add_mount_option(docker_full_cmd, f"{shared_root}{shared_dir}", shared_dir)
     docker_full_cmd.append(f"-e=XDG_RUNTIME_DIR={conf.env.target_xdg_rt_dir}")
-    docker_full_cmd.append("-e=YBOX_TARGET_SCRIPTS_DIR")  # pass this along for container scripts
+    docker_full_cmd.append(f"-e=YBOX_TARGET_SCRIPTS_DIR={conf.target_scripts_dir}")
     docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_PRIMARY.value}")
     docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_DISTRIBUTION.value}={conf.distribution}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint()}")
@@ -1378,11 +1379,15 @@ def create_and_start_service(box_name: str, docker_full_cmd: list[str], env: Env
     svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
                                   manager_name=manager_name, docker_requires=docker_requires,
                                   sys_path=sys_path, ybox_bin_dir=ybox_bin_dir, env_file=ybox_env)
+    # remove unneeded package install variables to reduce the overall size of CONTAINER_ARGS string
+    pkg_vars = {pkg[1] for pkg in _PKG_VARS}
+    container_args = [arg for arg in docker_full_cmd[2:]
+                      if not arg.startswith("-e=") or arg[3:].partition("=")[0] not in pkg_vars]
     env_content = f"""
         SLEEP_SECS={{sleep_secs}}
         # set the container manager to the one configured during ybox-create
         YBOX_CONTAINER_MANAGER={docker_full_cmd[0]}
-        CONTAINER_ARGS='"{'" "'.join(docker_full_cmd[2:])}"'
+        CONTAINER_ARGS='"{'" "'.join(container_args)}"'
     """
     os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
     print_color(f"Generating user systemd service '{ybox_svc}' and reloading daemon", fgcolor.cyan)
