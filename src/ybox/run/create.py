@@ -1390,17 +1390,18 @@ def create_and_start_service(box_name: str, docker_full_cmd: list[str], env: Env
         CONTAINER_ARGS='"{'" "'.join(container_args)}"'
     """
     os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
+    os.makedirs(env.config_dir, Consts.default_directory_mode(), exist_ok=True)
     print_color(f"Generating user systemd service '{ybox_svc}' and reloading daemon", fgcolor.cyan)
     with open(f"{systemd_dir}/{ybox_svc}", "w", encoding="utf-8") as svc_fd:
         svc_fd.write(svc_content)
-    with open(f"{systemd_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
+    with open(f"{env.config_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content.format(sleep_secs=0)))  # don't sleep for the start below
     run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
     run_command([systemctl, "--user", "enable", ybox_svc], exit_on_error=True)
     print_info(wait_msg)
     run_command([systemctl, "--user", "start", ybox_svc], exit_on_error=True)
     # change SLEEP_SECS to 5 for subsequent starts
-    with open(f"{systemd_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
+    with open(f"{env.config_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content.format(sleep_secs=5)))
 
 

@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from ybox.cmd import check_ybox_exists, parser_version_check, run_command
 from ybox.config import Consts
@@ -65,14 +66,11 @@ def main_argv(argv: list[str]) -> None:
         print_color(f"Removing systemd service '{ybox_svc}' and reloading daemon", fg=fgcolor.cyan)
         run_command([systemctl, "--user", "disable", ybox_svc], exit_on_error=False)
         systemd_dir = env.systemd_user_conf_dir()
-        try:
-            os.unlink(f"{systemd_dir}/{ybox_svc}")
-        except OSError:
-            pass
-        try:
-            os.unlink(f"{systemd_dir}/.{ybox_svc_prefix}.env")
-        except OSError:
-            pass
+        Path(systemd_dir, ybox_svc).unlink(missing_ok=True)
+        env_file = f".{ybox_svc_prefix}.env"
+        Path(env.config_dir, env_file).unlink(missing_ok=True)
+        # also try to delete the .env file from the old location
+        Path(systemd_dir, env_file).unlink(missing_ok=True)
         run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
 
     # check and remove any dangling container references in state database

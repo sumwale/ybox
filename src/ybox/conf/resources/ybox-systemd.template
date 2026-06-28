@@ -9,7 +9,7 @@ After=network-online.target
 {docker_requires}
 [Service]
 Environment=PATH={sys_path}:{ybox_bin_dir}
-EnvironmentFile=%h/.config/systemd/user/{env_file}
+EnvironmentFile=%h/.config/ybox/{env_file}
 Type=notify
 NotifyAccess=all
 Restart=on-failure
