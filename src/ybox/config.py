@@ -88,6 +88,13 @@ class StaticConfiguration:
         """
         return self._shared_box_image if has_shared_root else self._box_image
 
+    def unshared_root(self) -> str:
+        """
+        path of the directory on the host used for storing root subdirs of the container for the
+        case when `shared_root` is not set (i.e. a unique directory is used for the container).
+        """
+        return f"{self._env.data_dir}/{self._box_name}/ROOT"
+
     @property
     def localtime(self) -> str | None:
         """the target link for /etc/localtime"""
@@ -200,8 +207,8 @@ class Consts:
                 "prime-run", "run-in-dir", Consts.run_user_bash_cmd())
 
     @staticmethod
-    def shared_root_mount_dir() -> str:
-        """directory where shared root directory is mounted in a container during setup"""
+    def root_mount_dir() -> str:
+        """directory where container's root directory is mounted in a container during setup"""
         return "/ybox-root"
 
     @staticmethod

@@ -99,7 +99,7 @@ def test_consts():
                         "entrypoint-common.sh", "entrypoint-root.sh", "entrypoint-user.sh",
                         "prime-run", "run-in-dir", "run-user-bash-cmd")
     assert Consts.resource_scripts() == expected_scripts
-    assert Consts.shared_root_mount_dir() == "/ybox-root"
+    assert Consts.root_mount_dir() == "/ybox-root"
     assert Consts.status_target_file() == "/usr/local/ybox-status"
     assert Consts.entrypoint_init_done_file() == "ybox-init.done"
     assert Consts.container_desktop_dirs() == ("/usr/share/applications",)

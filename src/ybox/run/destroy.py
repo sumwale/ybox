@@ -9,9 +9,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ybox.cmd import check_ybox_exists, parser_version_check, run_command
-from ybox.config import Consts
+from ybox.cmd import (check_ybox_exists, delete_container_directory,
+                      parser_version_check, run_command)
+from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ
+from ybox.pkg.inst import get_parsed_box_conf
 from ybox.print import (fgcolor, print_color, print_error, print_notice,
                         print_warn)
 from ybox.state import YboxStateManagement
@@ -43,15 +45,14 @@ def main_argv(argv: list[str]) -> None:
     systemctl = check_systemd_service_present(ybox_svc)
 
     # continue even if this fails since the container may already be in stopped state
-    if not systemctl or args.force:
-        run_command([docker_cmd, "container", "stop", container_name],
-                    exit_on_error=False, error_msg=f"stopping '{container_name}'")
-        print_warn(f"Removing ybox container '{container_name}'")
-        rm_args = [docker_cmd, "container", "rm"]
-        if args.force:
-            rm_args.append("--force")
-        rm_args.append(container_name)
-        run_command(rm_args, exit_on_error=not args.force, error_msg=f"removing '{container_name}'")
+    run_command([docker_cmd, "container", "stop", container_name],
+                exit_on_error=False, error_msg=f"stopping '{container_name}'")
+    print_warn(f"Removing ybox container '{container_name}'")
+    rm_args = [docker_cmd, "container", "rm"]
+    if args.force:
+        rm_args.append("--force")
+    rm_args.append(container_name)
+    run_command(rm_args, exit_on_error=not args.force, error_msg=f"removing '{container_name}'")
     if systemctl:
         run_command([systemctl, "--user", "stop", ybox_svc],
                     exit_on_error=False, error_msg=f"stopping '{container_name}'")
@@ -62,16 +63,16 @@ def main_argv(argv: list[str]) -> None:
         shutil.rmtree(tmpdir)
 
     # remove systemd service file and reload daemon
+    systemd_dir = env.systemd_user_conf_dir()
     if systemctl:
         print_color(f"Removing systemd service '{ybox_svc}' and reloading daemon", fg=fgcolor.cyan)
         run_command([systemctl, "--user", "disable", ybox_svc], exit_on_error=False)
-        systemd_dir = env.systemd_user_conf_dir()
         Path(systemd_dir, ybox_svc).unlink(missing_ok=True)
-        env_file = f".{ybox_svc_prefix}.env"
-        Path(env.config_dir, env_file).unlink(missing_ok=True)
-        # also try to delete the .env file from the old location
-        Path(systemd_dir, env_file).unlink(missing_ok=True)
         run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
+    # remove the .env file
+    Path(env.config_dir, f"{container_name}.env").unlink(missing_ok=True)
+    # also try to delete the .env file from the old location
+    Path(systemd_dir, f".{ybox_svc_prefix}.env").unlink(missing_ok=True)
 
     # check and remove any dangling container references in state database
     valid_containers = set(get_all_containers(docker_cmd))
@@ -80,9 +81,37 @@ def main_argv(argv: list[str]) -> None:
     print_warn(f"Clearing ybox state for '{container_name}'")
     with YboxStateManagement(env) as state:
         state.begin_transaction()
-        if not state.unregister_container(container_name):
+        if (runtime_conf := state.get_container_configuration(container_name)) is None:
             print_error(f"No entry found for '{container_name}' in the state database")
             sys.exit(1)
+        conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
+        print_notice("Removing container configuration files and scripts")
+        shutil.rmtree(conf.configs_dir, ignore_errors=True)
+        shutil.rmtree(conf.scripts_dir, ignore_errors=True)
+        Path(conf.status_file).unlink(missing_ok=True)
+        if not runtime_conf.shared_root:
+            # remove non-shared root directory
+            unshared_root = conf.unshared_root()
+            if os.path.isdir(unshared_root):
+                print_notice(f"Removing unshared root directory {unshared_root}")
+                delete_container_directory(unshared_root, env)
+            # remove the container specific image
+            container_image = conf.box_image(False)
+            print_notice(f"Removing unshared container image {container_image}")
+            run_command([docker_cmd, "image", "rm", container_image], exit_on_error=False,
+                        error_msg="removing unshared container image")
+        # delete all container related files if required
+        if args.delete_files:
+            box_conf = get_parsed_box_conf(runtime_conf.ini_config)
+            assert box_conf is not None
+            home_dir = box_conf["base"]["home"]
+            if os.path.isdir(home_dir):
+                print_notice(f"Removing home directory {home_dir}")
+                delete_container_directory(home_dir, env)
+            container_dir = f"{env.data_dir}/{container_name}"
+            print_notice(f"Removing container directory {container_dir}")
+            delete_container_directory(container_dir, env)
+        state.unregister_container(container_name)
         remove_orphans_from_db(valid_containers, state)
 
 
@@ -96,6 +125,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stop and remove an active ybox container")
     parser.add_argument("-f", "--force", action="store_true",
                         help="force destroy the container using SIGKILL if required")
+    parser.add_argument("-D", "--delete-files", action="store_true",
+                        help="remove all files of the container including the home directory")
     parser.add_argument("container_name", type=str, help="name of the active ybox")
     parser_version_check(parser, argv)
     return parser.parse_args(argv)

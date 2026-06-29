@@ -29,15 +29,13 @@ if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/local
   if [ "$LANG" != "en_US.UTF-8" ]; then
     echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
   fi
+  # reinstall glibc to obtain /usr/share/i18/locales/* files and try again
+  $PAC -Sy
+  $PAC -S glibc
   if ! locale-gen; then
-    # reinstall glibc to obtain /usr/share/i18/locales/* files and try again
-    $PAC -Sy
-    $PAC -S glibc
-    if ! locale-gen; then
-      echo_color "$fg_red" "FAILED to generate locale for $LANG, fallback to en_US.UTF-8" >> $status_file
-      export LANG=en_US.UTF-8
-      export LANGUAGE="en_US:en"
-    fi
+    echo_color "$fg_red" "FAILED to generate locale for $LANG, fallback to en_US.UTF-8" >> $status_file
+    export LANG=en_US.UTF-8
+    export LANGUAGE="en_US:en"
   fi
   echo "LANG=$LANG" > /etc/locale.conf
   if [ -n "$LANGUAGE" ]; then
