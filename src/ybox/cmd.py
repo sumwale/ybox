@@ -147,7 +147,7 @@ def check_active_ybox(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
-    return bool(get_ybox_state(docker_cmd, box_name, expected_states=("running",),
+    return bool(get_ybox_state(docker_cmd, box_name, expected_states=("running", "stopping"),
                                exit_on_error=exit_on_error, state_msg=" active"))
 
 

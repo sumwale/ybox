@@ -19,7 +19,7 @@ from tabulate import tabulate
 
 from ybox import __version__ as product_version
 
-from .cmd import build_shell_command, get_ybox_state
+from .cmd import build_shell_command, check_active_ybox
 from .config import Consts, StaticConfiguration
 from .env import Environ, PathName
 from .print import fgcolor as fg
@@ -220,7 +220,8 @@ def get_ybox_version(conf: StaticConfiguration) -> str:
     return ""
 
 
-def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout: int) -> None:
+def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout: int,
+                            for_stop: bool = False) -> None:
     """
     Wait for container created with `create.start_container` to finish all its initialization.
     This depends on the specific entrypoint script used by `create.start_container` to write
@@ -230,6 +231,7 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
     :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param timeout: seconds to wait for container to start before exiting with failure code 1
+    :param for_stop: if True then wait for container to completely stop before returning
     """
     sys.stdout.flush()
     box_name = conf.box_name
@@ -254,23 +256,22 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
         for _ in range(timeout):
             # check the container status first which may be running or stopping
             # in which case sleep and retry (if stopped, then read_lines should succeed)
-            if get_ybox_state(docker_cmd, box_name, expected_states=("running", "stopping")):
-                if read_lines():
+            if check_active_ybox(docker_cmd, box_name):
+                if read_lines() and not for_stop:
                     return
+            elif for_stop:
+                return
             else:
                 time.sleep(1)  # wait for sometime for file write to become visible
                 if read_lines():
                     return
-                print_error("FAILED waiting for container to be ready (last status: "
-                            f"{status_line}).\nCheck 'ybox-logs {box_name}' for more details.")
-                sys.exit(1)
+                break
             # using simple poll per second rather than inotify or similar because the
             # initialization can take a good amount of time and second granularity is enough
             time.sleep(1)
-    # reading did not end after timeout
-    print_error(f"TIMED OUT waiting for ready container after {timeout}secs (last status: "
-                f"{status_line}).\nCheck 'ybox-logs -f {box_name}' for more details.")
-    sys.exit(1)
+        print_error(f"FAILED waiting for container to be ready with timeout={timeout}secs "
+                    f"(last status: {status_line}).\nCheck 'ybox-logs {box_name}' for details.")
+        sys.exit(1)
 
 
 def truncate_file(file: str) -> None:

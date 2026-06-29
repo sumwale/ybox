@@ -205,7 +205,7 @@ def main_argv(argv: list[str]) -> None:
     print_info("Waiting for the container to initialize (see "
                f"'ybox-logs -f {box_name}' for detailed progress)")
     # wait for container to initialize while printing out its progress from conf.status_file
-    wait_for_ybox_container(docker_cmd, conf, 600)
+    wait_for_ybox_container(docker_cmd, conf, 600, for_stop=True)
 
     # remove distribution specific scripts and restart container the final time
     print_info(f"Starting the final container '{box_name}'")
@@ -216,7 +216,7 @@ def main_argv(argv: list[str]) -> None:
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
                 [systemctl, "--user", "--quiet", "is-enabled", "default.target"],
                 exit_on_error=False) == 0:
-        run_command([docker_full_args[0], "container", "rm", box_name], error_msg="container rm")
+        remove_container(docker_full_args[0], conf)
         create_and_start_service(box_name, docker_full_args, env, systemctl, sys_path, wait_msg)
     else:
         if not args.skip_systemd_service:
