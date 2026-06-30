@@ -15,7 +15,7 @@ NotifyAccess=all
 Restart=on-failure
 # sleep to allow for the basic initialization of the user's login/graphical environment
 ExecStartPre=/usr/bin/sleep $SLEEP_SECS
-ExecStart=/bin/sh -c "eval $YBOX_CONTAINER_MANAGER run $CONTAINER_RUN_ARGS && systemd-notify --ready && exec ybox-control wait {name}"
+ExecStart=/bin/sh -c "eval $YBOX_CONTAINER_MANAGER container rm {name} 2>/dev/null; eval $YBOX_CONTAINER_MANAGER run $CONTAINER_RUN_ARGS && systemd-notify --ready && exec ybox-control wait {name}"
 ExecStop=/bin/sh -c "ybox-control stop -t 20 --ignore-stopped --rm {name}"
 ExecStopPost=/bin/sh -c "ybox-control stop -t 20 --ignore-stopped --rm {name}"
 TimeoutStopSec=60

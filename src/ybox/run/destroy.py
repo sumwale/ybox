@@ -52,7 +52,8 @@ def main_argv(argv: list[str]) -> None:
     if args.force:
         rm_args.append("--force")
     rm_args.append(container_name)
-    run_command(rm_args, exit_on_error=not args.force, error_msg=f"removing '{container_name}'")
+    # continue even if this fails since the container may already have been removed
+    run_command(rm_args, exit_on_error=False, error_msg=f"removing '{container_name}'")
     if systemctl:
         run_command([systemctl, "--user", "stop", ybox_svc],
                     exit_on_error=False, error_msg=f"stopping '{container_name}'")
