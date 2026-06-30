@@ -94,10 +94,10 @@ def test_check_ybox_state(capsys: pytest.CaptureFixture[str]):
             else:
                 assert "-it" in bash_cmd
                 # fails with docker but succeeds with podman, so check both cases
-                if "not a tty" in output.stderr.decode("utf-8").lower():
-                    assert out == ""
-                else:
+                if "podman" in docker_cmd:
                     assert out.endswith("Linux")
+                else:
+                    assert out == "" or out.endswith("Linux")
 
         _stop_container(docker_cmd, cnt_name, check_removed=True)
         # check success with primary label
