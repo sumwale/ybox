@@ -97,6 +97,7 @@ class Environ:
         self._user_base = user_base = site.getuserbase()
         target_user_base = f"{self._target_home}/.local"
         self._data_dir = f"{user_base}/share/ybox"
+        self._config_dir = f"{self._home_dir}/.config/ybox"
         self._target_data_dir = f"{target_user_base}/share/ybox"
         self._xdg_rt_dir = os.environ.get("XDG_RUNTIME_DIR", "").rstrip("/")
         # the container user's one can be different because it is the root user for docker
@@ -113,8 +114,7 @@ class Environ:
             print_notice("Running with YBOX_TESTING enabled")
             self._configuration_dirs = self._sys_conf_dirs
         else:
-            self._configuration_dirs = [Path(f"{self._home_dir}/.config/ybox"),
-                                        sys_conf_dir]
+            self._configuration_dirs = [Path(self._config_dir), sys_conf_dir]
         self._user_applications_dir = f"{user_base}/share/applications"
         self._user_executables_dir = f"{user_base}/bin"
 
@@ -182,6 +182,11 @@ class Environ:
         """base user directory where runtime data related to all the containers is
            stored in subdirectories"""
         return self._data_dir
+
+    @property
+    def config_dir(self) -> str:
+        """base user directory where configuration data related to the ybox application is stored"""
+        return self._config_dir
 
     @property
     def target_data_dir(self) -> str:

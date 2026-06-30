@@ -21,7 +21,8 @@ from textwrap import dedent
 
 from ybox import __version__ as product_version
 from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
-                      parser_version_check, run_command)
+                      delete_container_directory, parser_version_check,
+                      run_command)
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ, NotSupportedError, PathName
 from ybox.filelock import FileLock
@@ -43,6 +44,10 @@ from ybox.util import (EnvInterpolation, config_reader,
 _EXTRACT_PARENS_NAME = re.compile(r"^.*\(([^)]+)\)$")
 _DEP_SUFFIX = re.compile(r"^(.*):dep\((.*)\)$")
 _WS_RE = re.compile(r"\s+")
+_PKG_VARS = (("required", "REQUIRED_PKGS"), ("recommended", "RECOMMENDED_PKGS"),
+             ("suggested", "SUGGESTED_PKGS"), ("required_deps", "REQUIRED_DEPS"),
+             ("recommended_deps", "RECOMMENDED_DEPS"), ("suggested_deps", "SUGGESTED_DEPS"),
+             ("extra", "EXTRA_PKGS"))
 
 
 # Note: deliberately not using os.path.join for joining paths since the code only works on
@@ -82,7 +87,7 @@ def main_argv(argv: list[str]) -> None:
 
     conf = StaticConfiguration(env, distro, box_name)
     # read the distribution specific configuration
-    base_image_name, shared_root_dirs, secondary_groups, distro_config = read_distribution_config(
+    base_image_name, mount_root_dirs, secondary_groups, distro_config = read_distribution_config(
         args, conf)
     # setup entrypoint and related scripts to share with the container on a mount point
     setup_ybox_scripts(conf, distro_config)
@@ -137,8 +142,10 @@ def main_argv(argv: list[str]) -> None:
     #    additional root directory mounts that were copied in step 5 above.
     # Finally, continue with step 4) onwards of previous sequence.
 
+    tmp_image = f"{conf.box_image(False)}__ybox_tmp"
     # handle the shared_root case: acquire file lock and check if shared container image exists
     if shared_root:
+        container_root = shared_root
         os.makedirs(os.path.dirname(shared_root),
                     mode=Consts.default_directory_mode(), exist_ok=True)
         with FileLock(f"{shared_root}-image.lock"):
@@ -156,31 +163,37 @@ def main_argv(argv: list[str]) -> None:
                 # commit the stopped container with a temporary name, then remove the container;
                 # keeping a separate tmp_image helps reduce size of final image a bit because
                 # this one is without --userns while the final shared image is with --userns
-                tmp_image = f"{conf.box_image(False)}__ybox_tmp"
                 commit_container(docker_cmd, tmp_image, conf)
                 # start a container using the temporary image with "--userns" option to make
                 # a copy of the container root directories to the shared location
-                run_shared_copy_container(docker_cmd, tmp_image, shared_root, shared_root_dirs,
-                                          conf, args.quiet)
+                run_root_copy_container(docker_cmd, tmp_image, shared_root, mount_root_dirs,
+                                        conf, args.quiet)
                 # finally commit this container with the name of the shared image
                 commit_container(docker_cmd, conf.box_image(True), conf)
                 remove_image(docker_cmd, tmp_image)
             # in case a shared root directory is not present but shared image is present,
             # need to run the container to copy to shared root
             elif any((not os.path.exists(f"{shared_root}{s_dir}") for s_dir in
-                      shared_root_dirs.split(","))):
-                run_shared_copy_container(docker_cmd, conf.box_image(True), shared_root,
-                                          shared_root_dirs, conf, args.quiet)
+                      mount_root_dirs.split(","))):
+                run_root_copy_container(docker_cmd, conf.box_image(True), shared_root,
+                                        mount_root_dirs, conf, args.quiet)
                 remove_container(docker_cmd, conf)
     else:
-        # fetch/refresh the base container image
-        _fetch_container_image(docker_cmd, base_image_name)
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
         run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
-        # commit the stopped container, remove it, then start new container with the
-        # "--userns=keep-id" option (podman) for the required container state
+        # commit the stopped container with a temporary name, then remove the container;
+        # keeping a separate tmp_image helps reduce size of final image a bit because
+        # this one is without --userns while the final shared image is with --userns
+        commit_container(docker_cmd, tmp_image, conf)
+        # start a container using the temporary image with "--userns" option to make
+        # a copy of the container root directories to the non-shared location which is fixed for now
+        container_root = conf.unshared_root()
+        run_root_copy_container(docker_cmd, tmp_image, container_root, mount_root_dirs,
+                                conf, args.quiet)
+        # finally commit this container with the name of the non-shared image
         commit_container(docker_cmd, conf.box_image(False), conf)
+        remove_image(docker_cmd, tmp_image)
 
     # there is one additional stop/start below because all packages are upgraded by the
     # entrypoint script to pick up any important fixes which can lead to system libraries
@@ -188,11 +201,11 @@ def main_argv(argv: list[str]) -> None:
 
     # set up the final container with all the required arguments
     print_info(f"Initializing container for '{distro}' using '{profile}'")
-    run_container(docker_full_args, current_user, shared_root, shared_root_dirs, conf)
+    run_container(docker_full_args, current_user, shared_root, mount_root_dirs, conf)
     print_info("Waiting for the container to initialize (see "
                f"'ybox-logs -f {box_name}' for detailed progress)")
     # wait for container to initialize while printing out its progress from conf.status_file
-    wait_for_ybox_container(docker_cmd, conf, 600)
+    wait_for_ybox_container(docker_cmd, conf, 600, for_stop=True)
 
     # remove distribution specific scripts and restart container the final time
     print_info(f"Starting the final container '{box_name}'")
@@ -203,7 +216,8 @@ def main_argv(argv: list[str]) -> None:
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
                 [systemctl, "--user", "--quiet", "is-enabled", "default.target"],
                 exit_on_error=False) == 0:
-        create_and_start_service(box_name, env, systemctl, sys_path, wait_msg)
+        remove_container(docker_full_args[0], conf)
+        create_and_start_service(box_name, docker_full_args, env, systemctl, sys_path, wait_msg)
     else:
         if not args.skip_systemd_service:
             print_warn("Skipping user systemd service generation due to missing systemctl in "
@@ -212,7 +226,7 @@ def main_argv(argv: list[str]) -> None:
         start_container(docker_cmd, conf)
         print_info(wait_msg)
         wait_for_ybox_container(docker_cmd, conf, 120)
-    # truncate the app.list and config.list files so that those actions are skipped if the
+    # truncate the app.list and config.list files so that those actions are to be skipped if the
     # container is restarted later
     if os.access(conf.app_list, os.W_OK):
         truncate_file(conf.app_list)
@@ -241,7 +255,7 @@ def main_argv(argv: list[str]) -> None:
                 quiet = 2 if args.quiet else 0
                 # box_conf can be skipped in new state.db but not for pre 0.9.3 having empty flags
                 if local_copies := wrap_container_files(package, copy_type, app_flags, list_cmd,
-                                                        docker_cmd, conf, box_conf, shared_root,
+                                                        docker_cmd, conf, box_conf, container_root,
                                                         quiet):
                     # register the package again with the local_copies (no change to package_deps)
                     state.register_package(box_name, package, local_copies, copy_type, app_flags,
@@ -270,11 +284,9 @@ def _fetch_container_image(docker_cmd: str, image_name: str) -> None:
     for _ in range(3):
         if int(run_command([docker_cmd, "pull", image_name], exit_on_error=False,
                            error_msg="fetching container base image")) == 0:
-            break
+            return
         time.sleep(5)
-    else:
-        run_command([docker_cmd, "pull", image_name],
-                    error_msg="fetching container base image")
+    run_command([docker_cmd, "pull", image_name], error_msg="fetching container base image")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -543,8 +555,8 @@ def read_distribution_config(args: argparse.Namespace,
 
     :param args: the parsed arguments passed to the invoking `ybox-create` script
     :param conf: the :class:`StaticConfiguration` for the container
-    :return: a tuple of image name, shared root directories, secondary groups and an object of
-             :class:`ConfigParser` for the `distro.ini`
+    :return: a tuple of image name, container's root directories to be copied to host mount,
+             secondary groups and an object of :class:`ConfigParser` for the `distro.ini`
     """
     env = conf.env
     env_interpolation = EnvInterpolation(env, [])
@@ -559,9 +571,11 @@ def read_distribution_config(args: argparse.Namespace,
                      f"provided on the command-line: {args.distribution_image}")
         print()
         image_name = args.distribution_image
-    shared_root_dirs = distro_base_section["shared_root_dirs"]  # should always exist
+    # pre 0.9.15 releases use the obsolete `shared_root_dirs`
+    mount_root_dirs = distro_base_section.get("mount_root_dirs") or \
+        distro_base_section["shared_root_dirs"]
     secondary_groups = distro_base_section["secondary_groups"]  # should always exist
-    return image_name, shared_root_dirs, secondary_groups, distro_config
+    return image_name, mount_root_dirs, secondary_groups, distro_config
 
 
 def process_distribution_config(distro_config: ConfigParser, docker_args: list[str]) -> None:
@@ -578,10 +592,7 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
         add_env_option(docker_args, "CONFIGURE_FASTEST_MIRRORS", "1")
     if distro_config.has_section("packages"):
         packages_section = distro_config["packages"]
-        for key, env_var in (("required", "REQUIRED_PKGS"), ("recommended", "RECOMMENDED_PKGS"),
-                             ("suggested", "SUGGESTED_PKGS"), ("required_deps", "REQUIRED_DEPS"),
-                             ("recommended_deps", "RECOMMENDED_DEPS"),
-                             ("suggested_deps", "SUGGESTED_DEPS"), ("extra", "EXTRA_PKGS")):
+        for key, env_var in _PKG_VARS:
             if value := packages_section.get(key):
                 add_env_option(docker_args, env_var, _WS_RE.sub(" ", value))
     key_server = distro_config.get("repo", RepoCmd.DEFAULT_GPG_KEY_SERVER.value,
@@ -1174,62 +1185,55 @@ def run_base_container(image_name: str, current_user: str, secondary_groups: str
     run_command(docker_run, error_msg="running container with base image")
 
 
-def run_shared_copy_container(docker_cmd: str, image_name: str, shared_root: str,
-                              shared_root_dirs: str, conf: StaticConfiguration,
-                              quiet: bool) -> None:
+def run_root_copy_container(docker_cmd: str, image_name: str, container_root: str,
+                            mount_root_dirs: str, conf: StaticConfiguration, quiet: bool) -> None:
     """
-    Start a container from a base distribution image (with minimal configuration) when
-    `shared_root` has been provided for the container and copy a configured set of directories
-    (`shared_root_dirs` in `distro.ini`) from the container to the `shared_root` directory.
-    This directory is then used as the root directory for all the final containers that share the
-    same `shared_root`.
+    Start a container from a base distribution image (with minimal configuration) to copy a
+    configured set of directories (`mount_root_dirs` in `distro.ini`) from the container to the
+    `container_root` directory. For the case of `shared_root`, this directory is used as the root
+    directory for all the final containers that share the same `shared_root`, else it is a
+    directory unique to this container.
 
-    If the provided `shared_root` directory already exists, then user is interactively asked
+    If the provided `container_root` directory already exists, then user is interactively asked
     whether to delete the existing directory before proceeding.
 
     :param docker_cmd: the podman/docker executable to use
     :param image_name: distribution image to use for the container as specified in `distro.ini`
-    :param shared_root: the shared root directory to use for the container
-    :param shared_root_dirs: comma-separate list of directories shared between containers having
-                             the same `shared_root`
+    :param container_root: the directory on the host to use for the root directory of the container
+    :param mount_root_dirs: comma-separate list of directories to be copied to the `container_root`
     :param conf: the :class:`StaticConfiguration` for the container
     :param quiet: if True then don't ask for user confirmation but assume a `no`
     """
-    # if shared root copy exists locally, then prompt user to delete it or else exit
-    if os.path.exists(shared_root):
+    # if the container root exists locally, then prompt user to delete it or else exit
+    if os.path.exists(container_root):
         input_msg = f"""
-            The shared root directory for '{conf.distribution}' already exists in:
-                {shared_root}
+            The root directory for '{conf.distribution}' already exists in:
+                {container_root}
             However, the corresponding ybox container image for '{conf.distribution}' does not
-            exist. This can happen if an old copy of shared root directory is lying around and
+            exist. This can happen if an old copy of the root directory is lying around and
             is usually safe to remove, but you should be sure that no other ybox is running
-            for '{conf.distribution}' with 'shared_root' configuration that is using that
+            for '{conf.distribution}' with 'container_root' configuration that is using that
             directory. Should the root directory be removed (y/N): """
         response = "N" if quiet else input(dedent(input_msg))
         if response.strip().lower() == "y":
-            try:
-                shutil.rmtree(shared_root)
-            except OSError:
-                # try with sudo
-                run_command(["/usr/bin/sudo", "/bin/rm", "-rf", shared_root],
-                            error_msg="deleting directory")
+            delete_container_directory(container_root, conf.env)
         else:
             print_error(f"Aborting creation of ybox container '{conf.box_name}'")
             # remove the temporary image before exit
             remove_image(docker_cmd, image_name)
             sys.exit(1)
-    os.makedirs(shared_root, mode=Consts.default_directory_mode())
+    os.makedirs(container_root, mode=Consts.default_directory_mode())
     # the entrypoint-cp.sh script requires two arguments: first is the comma separated
     # list of directories to be copied, and second the target directory
     docker_full_cmd = [docker_cmd, "run", f"--name={conf.box_name}",
                        f"-v={conf.scripts_dir}:{conf.target_scripts_dir}:ro",
-                       f"-v={shared_root}:{Consts.shared_root_mount_dir()}",
+                       f"-v={container_root}:{Consts.root_mount_dir()}",
                        f"--label={YboxLabel.CONTAINER_COPY.value}", "--user=0",
                        f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint_cp()}"]
     if conf.env.uses_podman:
         docker_full_cmd.append("--userns=keep-id")
-    docker_full_cmd.extend((image_name, shared_root_dirs, Consts.shared_root_mount_dir()))
-    run_command(docker_full_cmd, error_msg="running container for copying shared root")
+    docker_full_cmd.extend((image_name, mount_root_dirs, Consts.root_mount_dir()))
+    run_command(docker_full_cmd, error_msg="running container for copying container's root")
 
 
 def commit_container(docker_cmd: str, image_name: str, conf: StaticConfiguration) -> None:
@@ -1260,7 +1264,7 @@ def remove_image(docker_cmd: str, image_name: str) -> None:
 
 
 def run_container(docker_full_cmd: list[str], current_user: str, shared_root: str,
-                  shared_root_dirs: str, conf: StaticConfiguration) -> None:
+                  root_dirs: str, conf: StaticConfiguration) -> None:
     """
     Create and start the final ybox container applying all the provided configuration.
     The following characteristics of the container are noteworthy:
@@ -1285,12 +1289,11 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
       * systemd user service file is generated for podman/docker to start the container
         automatically on user login (in absence of -S/--skip-systemd-service option)
 
-    :param docker_full_cmd: the `docker`/`podman run -itd` command with all the options filled
+    :param docker_full_cmd: the `podman`/`docker run` command with all the options filled
                             in from the container profile specification as a list of string
     :param current_user: the current user executing the `ybox-create` script
     :param shared_root: the shared root directory to use for the container
-    :param shared_root_dirs: comma-separate list of directories shared between containers having
-                             the same `shared_root`
+    :param root_dirs: comma-separate list of container's root sub-directories mounted on the host
     :param conf: the :class:`StaticConfiguration` for the container
     """
     add_mount_option(docker_full_cmd, conf.scripts_dir, conf.target_scripts_dir, "ro")
@@ -1300,11 +1303,11 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
     status_path.touch(mode=0o600, exist_ok=False)
     add_mount_option(docker_full_cmd, conf.status_file, Consts.status_target_file())
 
-    if shared_root:
-        for shared_dir in shared_root_dirs.split(","):
-            add_mount_option(docker_full_cmd, f"{shared_root}{shared_dir}", shared_dir)
+    container_root = shared_root or conf.unshared_root()
+    for root_subdir in root_dirs.split(","):
+        add_mount_option(docker_full_cmd, f"{container_root}{root_subdir}", root_subdir)
     docker_full_cmd.append(f"-e=XDG_RUNTIME_DIR={conf.env.target_xdg_rt_dir}")
-    docker_full_cmd.append("-e=YBOX_TARGET_SCRIPTS_DIR")  # pass this along for container scripts
+    docker_full_cmd.append(f"-e=YBOX_TARGET_SCRIPTS_DIR={conf.target_scripts_dir}")
     docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_PRIMARY.value}")
     docker_full_cmd.append(f"--label={YboxLabel.CONTAINER_DISTRIBUTION.value}={conf.distribution}")
     docker_full_cmd.append(f"--entrypoint={conf.target_scripts_dir}/{Consts.entrypoint()}")
@@ -1340,12 +1343,14 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
         sys.exit(code)
 
 
-def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_path: str,
-                             wait_msg: str) -> None:
+def create_and_start_service(box_name: str, docker_full_cmd: list[str], env: Environ,
+                             systemctl: str, sys_path: str, wait_msg: str) -> None:
     """
     Create, enable and start systemd service for a ybox container.
 
     :param box_name: name of the ybox container
+    :param docker_full_cmd: the `podman`/`docker run` command with all the options filled
+                            in from the container profile specification as a list of string
     :param env: an instance of the current :class:`Environ`
     :param systemctl: resolved path to the `systemctl` utility
     :param sys_path: PATH used for searching system utilities
@@ -1361,9 +1366,8 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
         manager_name = "Docker"
         docker_requires = "After=docker.service\nRequires=docker.service\n"
     systemd_dir = env.systemd_user_conf_dir()
-    ybox_svc_prefix = ybox_systemd_service_prefix(box_name)
-    ybox_svc = f"{ybox_svc_prefix}.service"
-    ybox_env = f".{ybox_svc_prefix}.env"
+    ybox_svc = f"{ybox_systemd_service_prefix(box_name)}.service"
+    ybox_env = f"{box_name}.env"
     formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
     # get the path of ybox-control and replace $HOME by %h to keep it generic
     if ybox_ctrl_path := shutil.which("ybox-control"):
@@ -1375,23 +1379,29 @@ def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_pa
     svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
                                   manager_name=manager_name, docker_requires=docker_requires,
                                   sys_path=sys_path, ybox_bin_dir=ybox_bin_dir, env_file=ybox_env)
+    # remove unneeded package install variables to reduce the overall size of CONTAINER_RUN_ARGS
+    pkg_vars = {pkg[1] for pkg in _PKG_VARS}
+    container_run_args = [arg for arg in docker_full_cmd[2:]
+                          if not arg.startswith("-e=") or arg[3:].partition("=")[0] not in pkg_vars]
     env_content = f"""
         SLEEP_SECS={{sleep_secs}}
         # set the container manager to the one configured during ybox-create
-        YBOX_CONTAINER_MANAGER={env.docker_cmd}
+        YBOX_CONTAINER_MANAGER={docker_full_cmd[0]}
+        CONTAINER_RUN_ARGS='"{'" "'.join(container_run_args)}"'
     """
     os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
+    os.makedirs(env.config_dir, Consts.default_directory_mode(), exist_ok=True)
     print_color(f"Generating user systemd service '{ybox_svc}' and reloading daemon", fgcolor.cyan)
     with open(f"{systemd_dir}/{ybox_svc}", "w", encoding="utf-8") as svc_fd:
         svc_fd.write(svc_content)
-    with open(f"{systemd_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
+    with open(f"{env.config_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content.format(sleep_secs=0)))  # don't sleep for the start below
     run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
     run_command([systemctl, "--user", "enable", ybox_svc], exit_on_error=True)
     print_info(wait_msg)
     run_command([systemctl, "--user", "start", ybox_svc], exit_on_error=True)
     # change SLEEP_SECS to 5 for subsequent starts
-    with open(f"{systemd_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
+    with open(f"{env.config_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content.format(sleep_secs=5)))
 
 

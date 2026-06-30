@@ -5,6 +5,7 @@ Utilities related to command execution like running a command, get podman/docker
 import argparse
 import errno
 import shlex
+import shutil
 import subprocess
 import sys
 from enum import Enum
@@ -12,6 +13,7 @@ from typing import Callable, Iterable
 
 from ybox import __version__ as product_version
 from ybox.config import Consts
+from ybox.env import Environ
 
 from .print import print_error, print_info, print_notice, print_warn
 
@@ -145,7 +147,7 @@ def check_active_ybox(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
-    return bool(get_ybox_state(docker_cmd, box_name, expected_states=("running",),
+    return bool(get_ybox_state(docker_cmd, box_name, expected_states=("running", "stopping"),
                                exit_on_error=exit_on_error, state_msg=" active"))
 
 
@@ -379,3 +381,17 @@ def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_in
             cmd.append(arg)
     cmd.extend((" ", box_name, " /usr/local/bin/run-in-dir ", escape_str, '"', working_dir,
                 escape_str, '" '))
+
+
+def delete_container_directory(container_dir: str, env: Environ) -> None:
+    """delete given directory which hosts a directory mounted in a container"""
+    if env.uses_podman:
+        if run_command([env.docker_cmd, "unshare", "/bin/rm", "-rf", container_dir],
+                       exit_on_error=False, error_msg="deleting container directory") == 0:
+            return
+    try:
+        shutil.rmtree(container_dir)
+    except OSError:
+        # try with sudo
+        run_command(["/usr/bin/sudo", "/bin/rm", "-rf", container_dir],
+                    error_msg="deleting container directory")
