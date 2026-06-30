@@ -179,6 +179,10 @@ def main_argv(argv: list[str]) -> None:
                                         mount_root_dirs, conf, args.quiet)
                 remove_container(docker_cmd, conf)
     else:
+        # fetch the base image only if it does not exist (allow retries via _fetch_container_image)
+        if run_command([docker_cmd, "images", "-q", base_image_name], capture_output=True,
+                       exit_on_error=False, error_msg="checking for base container image") == "":
+            _fetch_container_image(docker_cmd, base_image_name)
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
         run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
