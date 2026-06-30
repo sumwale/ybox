@@ -155,7 +155,8 @@ def main_argv(argv: list[str]) -> None:
                               stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL).returncode != 0:
                 # fetch/refresh the base container image
-                _fetch_container_image(docker_cmd, base_image_name)
+                _run_cmd_retries([docker_cmd, "pull", base_image_name],
+                                 "fetching container base image", 3)
                 # run the "base" container with appropriate arguments for the current user to
                 # the 'entrypoint-base.sh' script to create the user and group in the container
                 run_base_container(base_image_name, current_user, secondary_groups, docker_cmd,
@@ -179,10 +180,11 @@ def main_argv(argv: list[str]) -> None:
                                         mount_root_dirs, conf, args.quiet)
                 remove_container(docker_cmd, conf)
     else:
-        # fetch the base image only if it does not exist (allow retries via _fetch_container_image)
+        # fetch the base image only if it does not exist (allow for retries)
         if run_command([docker_cmd, "images", "-q", base_image_name], capture_output=True,
                        exit_on_error=False, error_msg="checking for base container image") == "":
-            _fetch_container_image(docker_cmd, base_image_name)
+            _run_cmd_retries([docker_cmd, "pull", base_image_name],
+                             "fetching container base image", 3)
         # run the "base" container with appropriate arguments for the current user to the
         # 'entrypoint-base.sh' script to create the user and group in the container
         run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
@@ -278,19 +280,19 @@ def main_argv(argv: list[str]) -> None:
                 install_package(parsed_args, pkgmgr, docker_cmd, conf, runtime_conf, state)
 
 
-def _fetch_container_image(docker_cmd: str, image_name: str) -> None:
+def _run_cmd_retries(cmd: list[str], error_msg: str, retries: int) -> None:
     """
-    Fetch a given container image with some retries.
+    Execute a given command+args retries, waiting for a few seconds between each retry.
 
-    :param docker_cmd: the podman/docker executable to use
-    :param image_name: the podman/docker image to fetch
+    :param cmd: command and its arguments to run as a list of string
+    :param error_msg: error message to print on screen if all retries fail
+    :param retries: number of times to retry
     """
-    for _ in range(3):
-        if int(run_command([docker_cmd, "pull", image_name], exit_on_error=False,
-                           error_msg="SKIP")) == 0:
+    for _ in range(retries):
+        if int(run_command(cmd, exit_on_error=False, error_msg="SKIP")) == 0:
             return
         time.sleep(5)
-    run_command([docker_cmd, "pull", image_name], error_msg="fetching container base image")
+    run_command(cmd, error_msg=error_msg)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -1250,15 +1252,15 @@ def commit_container(docker_cmd: str, image_name: str, conf: StaticConfiguration
     :param image_name: name of the image to create
     :param conf: the :class:`StaticConfiguration` for the container
     """
-    run_command([docker_cmd, "commit", "--change", f"USER {conf.env.target_user}",
-                 "--change", f"WORKDIR {conf.env.target_home}", conf.box_name, image_name],
-                error_msg="container commit")
+    _run_cmd_retries([docker_cmd, "commit", "--change", f"USER {conf.env.target_user}",
+                      "--change", f"WORKDIR {conf.env.target_home}", conf.box_name, image_name],
+                     "container commit", 3)
     remove_container(docker_cmd, conf)
 
 
 def remove_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     """remove a stopped podman/docker container"""
-    run_command([docker_cmd, "container", "rm", conf.box_name], error_msg="container rm")
+    _run_cmd_retries([docker_cmd, "container", "rm", conf.box_name], "container rm", 3)
 
 
 def remove_image(docker_cmd: str, image_name: str) -> None:
