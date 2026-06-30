@@ -219,7 +219,7 @@ def main_argv(argv: list[str]) -> None:
     if not args.skip_systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
                 [systemctl, "--user", "--quiet", "is-enabled", "default.target"],
-                exit_on_error=False) == 0:
+                exit_on_error=False, error_msg="SKIP") == 0:
         remove_container(docker_full_args[0], conf)
         create_and_start_service(box_name, docker_full_args, env, systemctl, sys_path, wait_msg)
     else:
@@ -287,7 +287,7 @@ def _fetch_container_image(docker_cmd: str, image_name: str) -> None:
     """
     for _ in range(3):
         if int(run_command([docker_cmd, "pull", image_name], exit_on_error=False,
-                           error_msg="fetching container base image")) == 0:
+                           error_msg="SKIP")) == 0:
             return
         time.sleep(5)
     run_command([docker_cmd, "pull", image_name], error_msg="fetching container base image")
