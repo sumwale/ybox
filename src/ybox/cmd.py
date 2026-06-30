@@ -229,9 +229,9 @@ def _print_subprocess_output(result: subprocess.CompletedProcess[bytes]) -> None
     """print completed subprocess output in color (orange for standard output and purple
        for standard error)"""
     if result.stdout:
-        print_notice(result.stdout.decode("utf-8"))
+        print_notice(result.stdout.decode("utf-8"), end="")
     if result.stderr:
-        print_warn(result.stderr.decode("utf-8"), file=sys.stderr)
+        print_warn(result.stderr.decode("utf-8"), end="", file=sys.stderr)
 
 
 def parser_version_check(parser: argparse.ArgumentParser, argv: list[str]) -> None:

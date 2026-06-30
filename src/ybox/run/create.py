@@ -231,7 +231,7 @@ def main_argv(argv: list[str]) -> None:
                        "'systemctl --user is-enabled default.target'")
         start_container(docker_cmd, conf)
         print_info(wait_msg)
-        wait_for_ybox_container(docker_cmd, conf, 120)
+    wait_for_ybox_container(docker_cmd, conf, 120)
     # truncate the app.list and config.list files so that those actions are to be skipped if the
     # container is restarted later
     if os.access(conf.app_list, os.W_OK):

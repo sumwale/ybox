@@ -9,13 +9,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ybox.cmd import (check_ybox_exists, delete_container_directory,
-                      parser_version_check, run_command)
+from ybox.cmd import (delete_container_directory, parser_version_check,
+                      run_command)
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ
 from ybox.pkg.inst import get_parsed_box_conf
 from ybox.print import (fgcolor, print_color, print_error, print_notice,
                         print_warn)
+from ybox.run.control import stop_container_impl
 from ybox.state import YboxStateManagement
 
 
@@ -37,26 +38,20 @@ def main_argv(argv: list[str]) -> None:
     docker_cmd = env.docker_cmd
     container_name = args.container_name
 
-    if check_ybox_exists(docker_cmd, container_name):
-        print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
     # check if there is a systemd service for the container
     ybox_svc_prefix = ybox_systemd_service_prefix(container_name)
     ybox_svc = f"{ybox_svc_prefix}.service"
     systemctl = check_systemd_service_present(ybox_svc)
 
-    # continue even if this fails since the container may already be in stopped state
-    run_command([docker_cmd, "container", "stop", container_name],
-                exit_on_error=False, error_msg=f"stopping '{container_name}'")
-    print_warn(f"Removing ybox container '{container_name}'")
-    rm_args = [docker_cmd, "container", "rm"]
-    if args.force:
-        rm_args.append("--force")
-    rm_args.append(container_name)
-    # continue even if this fails since the container may already have been removed
-    run_command(rm_args, exit_on_error=False, error_msg=f"removing '{container_name}'")
-    if systemctl:
+    # service stop will both stop and remove the service, but user may have started the container
+    # outside of the service, so check for running service first
+    if systemctl and run_command([systemctl, "--user", "--quiet", "is-active", ybox_svc],
+                                 exit_on_error=False, error_msg="SKIP") == 0:
+        print_color(f"Stopping ybox service '{ybox_svc}'", fg=fgcolor.cyan)
         run_command([systemctl, "--user", "stop", ybox_svc],
-                    exit_on_error=False, error_msg=f"stopping '{container_name}'")
+                    exit_on_error=False, error_msg=f"stopping service '{ybox_svc}'")
+    else:
+        stop_container_impl(docker_cmd, container_name, 10, True, args.force, ignore_stopped=True)
 
     # remove shared TMPDIR if present
     tmpdir = f"/var/tmp/ybox.{container_name}"

@@ -262,10 +262,15 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
             elif for_stop:
                 return
             else:
-                time.sleep(1)  # wait for sometime for file write to become visible
+                # wait for a while for the container to become active before failing
+                for _ in range(5):
+                    time.sleep(1)
+                    if check_active_ybox(docker_cmd, box_name):
+                        break
+                else:
+                    break
                 if read_lines():
                     return
-                break
             # using simple poll per second rather than inotify or similar because the
             # initialization can take a good amount of time and second granularity is enough
             time.sleep(1)
