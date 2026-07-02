@@ -225,8 +225,7 @@ def main_argv(argv: list[str]) -> None:
                 f"(see ybox-logs -f {box_name}' for detailed progress)")
     if not args.skip_systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
-                [systemctl, "--user", "--quiet", "is-enabled", "default.target"],
-                exit_on_error=False, error_msg="SKIP") == 0:
+                [systemctl, "--user", "daemon-reload"], exit_on_error=False, error_msg="SKIP") == 0:
         remove_container(docker_full_args[0], conf)
         create_service_env_file(box_name, docker_full_args, env)
         create_and_start_service(box_name, env, systemctl, sys_path, wait_msg)
@@ -234,7 +233,7 @@ def main_argv(argv: list[str]) -> None:
         if not args.skip_systemd_service:
             print_warn("Skipping user systemd service generation due to missing systemctl in "
                        f"PATH={os.pathsep.join(Consts.sys_bin_dirs())} or failure in "
-                       "'systemctl --user is-enabled default.target'")
+                       "'systemctl --user daemon-reload'")
         if not args.no_autostart_file:
             create_autostart_file(box_name, env)
         start_container(docker_cmd, conf)
