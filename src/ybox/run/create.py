@@ -235,6 +235,7 @@ def main_argv(argv: list[str]) -> None:
                        f"PATH={os.pathsep.join(Consts.sys_bin_dirs())} or failure in "
                        "'systemctl --user daemon-reload'")
         if not args.no_autostart_file:
+            create_service_env_file(box_name, docker_full_args, env)
             create_autostart_file(box_name, env)
         start_container(docker_cmd, conf)
         print_info(wait_msg)
