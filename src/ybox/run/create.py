@@ -1386,7 +1386,7 @@ def create_service_env_file(box_name: str, docker_full_cmd: list[str], env: Envi
     os.makedirs(env.config_dir, Consts.default_directory_mode(), exist_ok=True)
     print_color(f"Generating env file '{ybox_env}' having environment variables used by the ybox "
                 "container services", fgcolor.cyan)
-    with open(f"{env.config_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
+    with open(ybox_env, "w", encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content.format(sleep_secs=0)))  # don't sleep for the initial start
 
 
