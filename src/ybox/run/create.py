@@ -30,7 +30,7 @@ from ybox.pkg.inst import install_package, wrap_container_files
 from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
                         print_notice, print_warn)
 from ybox.run.destroy import (get_all_containers, remove_orphans_from_db,
-                              ybox_systemd_service_prefix)
+                              ybox_service_prefix)
 from ybox.run.graphics import (add_env_option, add_mount_option, enable_dri,
                                enable_nvidia, enable_wayland, enable_x11,
                                handle_variable_mount)
@@ -84,6 +84,11 @@ def main_argv(argv: list[str]) -> None:
     if check_ybox_exists(docker_cmd, box_name):
         print_error(f"ybox container '{box_name}' already exists.")
         sys.exit(1)
+    other_box_name = box_name[5:] if box_name.startswith("ybox-") else f"ybox-{box_name}"
+    if check_ybox_exists(docker_cmd, box_name):
+        print_error(f"Found existing ybox container '{other_box_name}' whose service/autostart "
+                    "files overlap with those of '{box_name}'. Please choose another name.")
+        sys.exit(2)
 
     conf = StaticConfiguration(env, distro, box_name)
     # read the distribution specific configuration
@@ -223,12 +228,15 @@ def main_argv(argv: list[str]) -> None:
                 [systemctl, "--user", "--quiet", "is-enabled", "default.target"],
                 exit_on_error=False, error_msg="SKIP") == 0:
         remove_container(docker_full_args[0], conf)
-        create_and_start_service(box_name, docker_full_args, env, systemctl, sys_path, wait_msg)
+        create_service_env_file(box_name, docker_full_args, env)
+        create_and_start_service(box_name, env, systemctl, sys_path, wait_msg)
     else:
         if not args.skip_systemd_service:
             print_warn("Skipping user systemd service generation due to missing systemctl in "
                        f"PATH={os.pathsep.join(Consts.sys_bin_dirs())} or failure in "
                        "'systemctl --user is-enabled default.target'")
+        if not args.no_autostart_file:
+            create_autostart_file(box_name, env)
         start_container(docker_cmd, conf)
         print_info(wait_msg)
     wait_for_ybox_container(docker_cmd, conf, 120)
@@ -319,6 +327,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "~/.config/systemd/user with the name 'ybox-<name>.service' if the "
                              "<name> does not begin with 'ybox-' prefix else '<name>.service' if "
                              "it already has 'ybox-' prefix")
+    parser.add_argument("-A", "--no-autostart-file", action="store_true",
+                        help="if systemd service has been skipped using -S/--skip-systemd-service "
+                             "or systemd user services are not available on the system, then an "
+                             "autostart .desktop file is created in ~/.config/autostart; "
+                             "this option can be used to skip creation of that autostart file")
     parser.add_argument("-F", "--force-own-orphans", action="store_true",
                         help="force ownership of orphan packages on the same shared root even "
                              "if container configuration does not match, meaning the packages "
@@ -1349,42 +1362,17 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
         sys.exit(code)
 
 
-def create_and_start_service(box_name: str, docker_full_cmd: list[str], env: Environ,
-                             systemctl: str, sys_path: str, wait_msg: str) -> None:
+def create_service_env_file(box_name: str, docker_full_cmd: list[str], env: Environ) -> None:
     """
-    Create, enable and start systemd service for a ybox container.
+    Create an env file for the ybox container that defines common environment variables used
+    by both the systemd service and the autostart desktop file
 
     :param box_name: name of the ybox container
     :param docker_full_cmd: the `podman`/`docker run` command with all the options filled
                             in from the container profile specification as a list of string
     :param env: an instance of the current :class:`Environ`
-    :param systemctl: resolved path to the `systemctl` utility
-    :param sys_path: PATH used for searching system utilities
-    :param wait_msg: message to output before waiting for the service to start
     """
-    svc_file = env.search_config_path("resources/ybox-systemd.template", only_sys_conf=True)
-    with svc_file.open("r", encoding="utf-8") as svc_fd:
-        svc_tmpl = svc_fd.read()
-    if env.uses_podman:
-        manager_name = "Podman"
-        docker_requires = ""
-    else:
-        manager_name = "Docker"
-        docker_requires = "After=docker.service\nRequires=docker.service\n"
-    systemd_dir = env.systemd_user_conf_dir()
-    ybox_svc = f"{ybox_systemd_service_prefix(box_name)}.service"
-    ybox_env = f"{box_name}.env"
-    formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
-    # get the path of ybox-control and replace $HOME by %h to keep it generic
-    if ybox_ctrl_path := shutil.which("ybox-control"):
-        ybox_bin_dir = os.path.dirname(ybox_ctrl_path)
-        if ybox_bin_dir.startswith(env.home + "/"):
-            ybox_bin_dir = f"%h{ybox_bin_dir[len(env.home):]}"
-    else:
-        ybox_bin_dir = "%h/.local/bin"
-    svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
-                                  manager_name=manager_name, docker_requires=docker_requires,
-                                  sys_path=sys_path, ybox_bin_dir=ybox_bin_dir, env_file=ybox_env)
+    ybox_env = f"{env.config_dir}/{box_name}.env"
     # remove unneeded package install variables to reduce the overall size of CONTAINER_RUN_ARGS
     pkg_vars = {pkg[1] for pkg in _PKG_VARS}
     container_run_args = [arg for arg in docker_full_cmd[2:]
@@ -1395,20 +1383,84 @@ def create_and_start_service(box_name: str, docker_full_cmd: list[str], env: Env
         YBOX_CONTAINER_MANAGER={docker_full_cmd[0]}
         CONTAINER_RUN_ARGS='"{'" "'.join(container_run_args)}"'
     """
-    os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
     os.makedirs(env.config_dir, Consts.default_directory_mode(), exist_ok=True)
-    print_color(f"Generating user systemd service '{ybox_svc}' and reloading daemon", fgcolor.cyan)
-    with open(f"{systemd_dir}/{ybox_svc}", "w", encoding="utf-8") as svc_fd:
-        svc_fd.write(svc_content)
+    print_color(f"Generating env file '{ybox_env}' having environment variables used by the ybox "
+                "container services", fgcolor.cyan)
     with open(f"{env.config_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
-        env_fd.write(dedent(env_content.format(sleep_secs=0)))  # don't sleep for the start below
+        env_fd.write(dedent(env_content.format(sleep_secs=0)))  # don't sleep for the initial start
+
+
+def create_and_start_service(box_name: str, env: Environ, systemctl: str, sys_path: str,
+                             wait_msg: str) -> None:
+    """
+    Create, enable and start systemd service for a ybox container.
+
+    :param box_name: name of the ybox container
+    :param env: an instance of the current :class:`Environ`
+    :param systemctl: resolved path to the `systemctl` utility
+    :param sys_path: PATH used for searching system utilities
+    :param wait_msg: message to output before waiting for the service to start
+    """
+    tmpl_file = env.search_config_path("resources/ybox-systemd.template", only_sys_conf=True)
+    with tmpl_file.open("r", encoding="utf-8") as svc_fd:
+        svc_tmpl = svc_fd.read()
+    docker_requires = "" if env.uses_podman else "After=docker.service\nRequires=docker.service\n"
+    systemd_dir = env.systemd_user_conf_dir()
+    ybox_svc = f"{ybox_service_prefix(box_name)}.service"
+    ybox_env = f"{box_name}.env"
+    formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
+    # get the path of ybox-control and replace $HOME by %h to keep it generic
+    if ybox_ctrl_path := shutil.which("ybox-control"):
+        ybox_bin_dir = os.path.dirname(ybox_ctrl_path)
+        if ybox_bin_dir.startswith(env.home + "/"):
+            ybox_bin_dir = f"%h{ybox_bin_dir[len(env.home):]}"
+    else:
+        ybox_bin_dir = "%h/.local/bin"
+    svc_content = svc_tmpl.format(name=box_name, version=product_version, date=formatted_now,
+                                  docker_requires=docker_requires, sys_path=sys_path,
+                                  ybox_bin_dir=ybox_bin_dir, env_file=ybox_env)
+    os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
+    ybox_svc_path = f"{systemd_dir}/{ybox_svc}"
+    if os.path.exists(ybox_svc_path):
+        bak_file = f"{ybox_svc_path}.{int(round(env.now.timestamp()))}"
+        print_error(f"Found existing systemd service file '{ybox_svc}'! Renaming to '{bak_file}'")
+        os.rename(ybox_svc_path, bak_file)
+    print_color(f"Generating user systemd service '{ybox_svc}' and reloading daemon", fgcolor.cyan)
+    with open(ybox_svc_path, "w", encoding="utf-8") as svc_fd:
+        svc_fd.write(svc_content)
     run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
     run_command([systemctl, "--user", "enable", ybox_svc], exit_on_error=True)
     print_info(wait_msg)
     run_command([systemctl, "--user", "start", ybox_svc], exit_on_error=True)
-    # change SLEEP_SECS to 5 for subsequent starts
-    with open(f"{env.config_dir}/{ybox_env}", "w", encoding="utf-8") as env_fd:
-        env_fd.write(dedent(env_content.format(sleep_secs=5)))
+    # change SLEEP_SECS to 5 in the environment file for subsequent starts
+    env_path = Path(f"{env.config_dir}/{ybox_env}")
+    new_env_content = env_path.read_text(encoding="utf-8").replace("SLEEP_SECS=0", "SLEEP_SECS=5")
+    env_path.write_text(new_env_content, encoding="utf-8")
+
+
+def create_autostart_file(box_name: str, env: Environ) -> None:
+    """
+    Create autostart desktop file in ~/.config/autostart for a ybox container.
+
+    :param box_name: name of the ybox container
+    :param env: an instance of the current :class:`Environ`
+    """
+    ybox_env = f"{box_name}.env"
+    formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
+    autostart_dir = f"{env.home}/.config/autostart"
+    os.makedirs(autostart_dir, Consts.default_directory_mode(), exist_ok=True)
+    autostart_file = Path(autostart_dir, f"{ybox_service_prefix(box_name)}.desktop")
+    if os.path.exists(autostart_file):
+        bak_file = f"{autostart_file}.{int(round(env.now.timestamp()))}"
+        print_error(f"Found existing autostart file '{autostart_file}'! Renaming to '{bak_file}'")
+        os.rename(autostart_file, bak_file)
+    print_info(f"Generating user autostart desktop file '{autostart_file}'")
+    tmpl_file = env.search_config_path("resources/ybox-autostart.template", only_sys_conf=True)
+    with tmpl_file.open("r", encoding="utf-8") as autostart_fd:
+        autostart_tmpl = autostart_fd.read()
+    autostart_content = autostart_tmpl.format(name=box_name, version=product_version,
+                                              date=formatted_now, env_file=ybox_env)
+    autostart_file.write_text(autostart_content, encoding="utf-8")
 
 
 def start_container(docker_cmd: str, conf: StaticConfiguration) -> None:

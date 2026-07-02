@@ -39,7 +39,7 @@ def main_argv(argv: list[str]) -> None:
     container_name = args.container_name
 
     # check if there is a systemd service for the container
-    ybox_svc_prefix = ybox_systemd_service_prefix(container_name)
+    ybox_svc_prefix = ybox_service_prefix(container_name)
     ybox_svc = f"{ybox_svc_prefix}.service"
     systemctl = check_systemd_service_present(ybox_svc)
 
@@ -65,6 +65,9 @@ def main_argv(argv: list[str]) -> None:
         run_command([systemctl, "--user", "disable", ybox_svc], exit_on_error=False)
         Path(systemd_dir, ybox_svc).unlink(missing_ok=True)
         run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
+    else:
+        # remove the autostart file if present
+        Path(f"{env.home}/.config/autostart/{ybox_svc_prefix}.desktop").unlink(missing_ok=True)
     # remove the .env file
     Path(env.config_dir, f"{container_name}.env").unlink(missing_ok=True)
     # also try to delete the .env file from the old location
@@ -128,8 +131,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def ybox_systemd_service_prefix(container_name: str) -> str:
-    """systemd service name prefix for given ybox container name"""
+def ybox_service_prefix(container_name: str) -> str:
+    """service name prefix to be used by systemd/autostart for given ybox container name"""
     return container_name if container_name.startswith("ybox-") else f"ybox-{container_name}"
 
 
