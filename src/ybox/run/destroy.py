@@ -129,7 +129,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="remove all files of the container including the home directory")
     parser.add_argument("-K", "--keep-files", action="store_true",
                         help="keep the files of the container including the storage location of a "
-                        "non-shared root one, configs and scripts directories, custom image; "
+                        "non-shared root one, configs and scripts directories, non-shared image; "
                         "systemd/autostart service and env files are still deleted")
     parser.add_argument("container_name", type=str, help="name of the active ybox")
     parser_version_check(parser, argv)
