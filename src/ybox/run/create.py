@@ -147,64 +147,53 @@ def main_argv(argv: list[str]) -> None:
     #    additional root directory mounts that were copied in step 5 above.
     # Finally, continue with step 4) onwards of previous sequence.
 
-    tmp_image = f"{conf.box_image(False)}__ybox_tmp"
     # handle the shared_root case: acquire file lock and check if shared container image exists
     if shared_root:
         container_root = shared_root
-        os.makedirs(os.path.dirname(shared_root),
-                    mode=Consts.default_directory_mode(), exist_ok=True)
-        with FileLock(f"{shared_root}-image.lock"):
-            # if image already exists, then skip the subsequent steps
-            if subprocess.run([docker_cmd, "inspect", "--type=image",
-                               "--format={{.Id}}", conf.box_image(True)], check=False,
-                              stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL).returncode != 0:
-                # fetch/refresh the base container image
-                _run_cmd_retries([docker_cmd, "pull", base_image_name],
-                                 "fetching container base image", 3)
-                # run the "base" container with appropriate arguments for the current user to
-                # the 'entrypoint-base.sh' script to create the user and group in the container
-                run_base_container(base_image_name, current_user, secondary_groups, docker_cmd,
-                                   conf)
-                # commit the stopped container with a temporary name, then remove the container;
-                # keeping a separate tmp_image helps reduce size of final image a bit because
-                # this one is without --userns while the final shared image is with --userns
-                commit_container(docker_cmd, tmp_image, conf)
-                # start a container using the temporary image with "--userns" option to make
-                # a copy of the container root directories to the shared location
-                run_root_copy_container(docker_cmd, tmp_image, shared_root, mount_root_dirs,
-                                        conf, args.quiet)
-                # finally commit this container with the name of the shared image
-                commit_container(docker_cmd, conf.box_image(True), conf)
-                remove_image(docker_cmd, tmp_image)
-            # in case a shared root directory is not present but shared image is present,
-            # need to run the container to copy to shared root
-            elif any((not os.path.exists(f"{shared_root}{s_dir}") for s_dir in
-                      mount_root_dirs.split(","))):
-                run_root_copy_container(docker_cmd, conf.box_image(True), shared_root,
-                                        mount_root_dirs, conf, args.quiet)
-                remove_container(docker_cmd, conf)
+        has_shared_root = True
     else:
-        # fetch the base image only if it does not exist (allow for retries)
-        if run_command([docker_cmd, "images", "-q", base_image_name], capture_output=True,
-                       exit_on_error=False, error_msg="checking for base container image") == "":
-            _run_cmd_retries([docker_cmd, "pull", base_image_name],
-                             "fetching container base image", 3)
-        # run the "base" container with appropriate arguments for the current user to the
-        # 'entrypoint-base.sh' script to create the user and group in the container
-        run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
-        # commit the stopped container with a temporary name, then remove the container;
-        # keeping a separate tmp_image helps reduce size of final image a bit because
-        # this one is without --userns while the final shared image is with --userns
-        commit_container(docker_cmd, tmp_image, conf)
-        # start a container using the temporary image with "--userns" option to make
-        # a copy of the container root directories to the non-shared location which is fixed for now
+        # the location of non-shared root is fixed for now
         container_root = conf.unshared_root()
-        run_root_copy_container(docker_cmd, tmp_image, container_root, mount_root_dirs,
-                                conf, args.quiet)
-        # finally commit this container with the name of the non-shared image
-        commit_container(docker_cmd, conf.box_image(False), conf)
-        remove_image(docker_cmd, tmp_image)
+        has_shared_root = False
+
+    custom_box_image = conf.box_image(has_shared_root)
+    tmp_image = f"{custom_box_image}__ybox_tmp"
+    os.makedirs(os.path.dirname(container_root),
+                mode=Consts.default_directory_mode(), exist_ok=True)
+    with FileLock(f"{container_root}-image.lock"):
+        # if the custom image already exists, then skip the subsequent steps
+        if subprocess.run([docker_cmd, "inspect", "--type=image",
+                           "--format={{.Id}}", custom_box_image], check=False,
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode != 0:
+            # refresh the base image (with retries) and remove the previous one after confirmation
+            if run_command([docker_cmd, "images", "-q", base_image_name], capture_output=True,
+                           exit_on_error=False, error_msg="existing container base image") != "":
+                _run_cmd_retries([docker_cmd, "image", "rm", base_image_name],
+                                 "removing old container base image", 3, False)
+            _run_cmd_retries([docker_cmd, "pull", base_image_name],
+                             "fetching container base image", 3, True)
+            # run the "base" container with appropriate arguments for the current user to
+            # the 'entrypoint-base.sh' script to create the user and group in the container
+            run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
+            # commit the stopped container with a temporary name, then remove the container;
+            # keeping a separate tmp_image helps reduce size of final image a bit because
+            # this one is without --userns while the final custom image is with --userns
+            commit_container(docker_cmd, tmp_image, conf)
+            # start a container using the temporary image with "--userns" option to make
+            # a copy of the container root directories to the host mounted location
+            run_root_copy_container(docker_cmd, tmp_image, container_root, mount_root_dirs,
+                                    conf, args.quiet)
+            # finally commit this container with the name of the custom image
+            commit_container(docker_cmd, custom_box_image, conf)
+            remove_image(docker_cmd, tmp_image)
+        # in case the container root directory is not present but the custom image is present,
+        # need to run the container to copy to container root
+        elif any((not os.path.exists(f"{container_root}{s_dir}") for s_dir in
+                  mount_root_dirs.split(","))):
+            run_root_copy_container(docker_cmd, custom_box_image, container_root,
+                                    mount_root_dirs, conf, args.quiet)
+            remove_container(docker_cmd, conf)
 
     # there is one additional stop/start below because all packages are upgraded by the
     # entrypoint script to pick up any important fixes which can lead to system libraries
@@ -288,19 +277,20 @@ def main_argv(argv: list[str]) -> None:
                 install_package(parsed_args, pkgmgr, docker_cmd, conf, runtime_conf, state)
 
 
-def _run_cmd_retries(cmd: list[str], error_msg: str, retries: int) -> None:
+def _run_cmd_retries(cmd: list[str], error_msg: str, retries: int, exit_on_error: bool) -> None:
     """
     Execute a given command+args retries, waiting for a few seconds between each retry.
 
     :param cmd: command and its arguments to run as a list of string
     :param error_msg: error message to print on screen if all retries fail
     :param retries: number of times to retry
+    :param exit_on_error: whether to exit using `sys.exit` if the check fails
     """
     for _ in range(retries):
         if int(run_command(cmd, exit_on_error=False, error_msg="SKIP")) == 0:
             return
         time.sleep(5)
-    run_command(cmd, error_msg=error_msg)
+    run_command(cmd, exit_on_error=exit_on_error, error_msg=error_msg)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -1267,13 +1257,13 @@ def commit_container(docker_cmd: str, image_name: str, conf: StaticConfiguration
     """
     _run_cmd_retries([docker_cmd, "commit", "--change", f"USER {conf.env.target_user}",
                       "--change", f"WORKDIR {conf.env.target_home}", conf.box_name, image_name],
-                     "container commit", 3)
+                     "container commit", 3, True)
     remove_container(docker_cmd, conf)
 
 
 def remove_container(docker_cmd: str, conf: StaticConfiguration) -> None:
     """remove a stopped podman/docker container"""
-    _run_cmd_retries([docker_cmd, "container", "rm", conf.box_name], "container rm", 3)
+    _run_cmd_retries([docker_cmd, "container", "rm", conf.box_name], "container rm", 3, True)
 
 
 def remove_image(docker_cmd: str, image_name: str) -> None:

@@ -83,35 +83,36 @@ def main_argv(argv: list[str]) -> None:
         if (runtime_conf := state.get_container_configuration(container_name)) is None:
             print_error(f"No entry found for '{container_name}' in the state database")
             sys.exit(1)
-        conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
-        print_notice("Removing container configuration files and scripts")
-        shutil.rmtree(conf.configs_dir, ignore_errors=True)
-        shutil.rmtree(conf.scripts_dir, ignore_errors=True)
-        Path(conf.status_file).unlink(missing_ok=True)
-        if not runtime_conf.shared_root:
-            # remove non-shared root directory
-            unshared_root = conf.unshared_root()
-            if os.path.isdir(unshared_root):
-                print_notice(f"Removing unshared root directory {unshared_root}")
-                delete_container_directory(unshared_root, env)
-            # remove the container specific image
-            container_image = conf.box_image(False)
-            print_notice(f"Removing unshared container image {container_image}")
-            run_command([docker_cmd, "image", "rm", container_image], exit_on_error=False,
-                        error_msg="removing unshared container image")
-        # delete all container related files if required
-        if args.delete_files:
-            box_conf = get_parsed_box_conf(runtime_conf.ini_config)
-            assert box_conf is not None
-            home_dir = box_conf["base"]["home"]
-            if os.path.isdir(home_dir):
-                print_notice(f"Removing home directory {home_dir}")
-                delete_container_directory(home_dir, env)
-            container_dir = f"{env.data_dir}/{container_name}"
-            print_notice(f"Removing container directory {container_dir}")
-            delete_container_directory(container_dir, env)
-        state.unregister_container(container_name)
-        remove_orphans_from_db(valid_containers, state)
+        if not args.keep_files:
+            conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
+            print_notice("Removing container configuration files and scripts")
+            shutil.rmtree(conf.configs_dir, ignore_errors=True)
+            shutil.rmtree(conf.scripts_dir, ignore_errors=True)
+            Path(conf.status_file).unlink(missing_ok=True)
+            if not runtime_conf.shared_root:
+                # remove non-shared root directory
+                unshared_root = conf.unshared_root()
+                if os.path.isdir(unshared_root):
+                    print_notice(f"Removing unshared root directory {unshared_root}")
+                    delete_container_directory(unshared_root, env)
+                # remove the container specific image
+                container_image = conf.box_image(False)
+                print_notice(f"Removing unshared container image {container_image}")
+                run_command([docker_cmd, "image", "rm", container_image], exit_on_error=False,
+                            error_msg="SKIP")
+            # delete all container related files if required
+            if args.delete_files:
+                box_conf = get_parsed_box_conf(runtime_conf.ini_config)
+                assert box_conf is not None
+                home_dir = box_conf["base"]["home"]
+                if os.path.isdir(home_dir):
+                    print_notice(f"Removing home directory {home_dir}")
+                    delete_container_directory(home_dir, env)
+                container_dir = f"{env.data_dir}/{container_name}"
+                print_notice(f"Removing container directory {container_dir}")
+                delete_container_directory(container_dir, env)
+            state.unregister_container(container_name)
+            remove_orphans_from_db(valid_containers, state)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -126,6 +127,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="force destroy the container using SIGKILL if required")
     parser.add_argument("-D", "--delete-files", action="store_true",
                         help="remove all files of the container including the home directory")
+    parser.add_argument("-K", "--keep-files", action="store_true",
+                        help="keep the files of the container including the storage location of a "
+                        "non-shared root one, configs and scripts directories, custom image; "
+                        "systemd/autostart service and env files are still deleted")
     parser.add_argument("container_name", type=str, help="name of the active ybox")
     parser_version_check(parser, argv)
     return parser.parse_args(argv)
