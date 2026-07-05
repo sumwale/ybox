@@ -48,6 +48,7 @@ def main_argv(argv: list[str]) -> None:
     run_command(docker_args, error_msg="listing ybox containers")
 
     if list_all:
+        # pylint: disable=import-outside-toplevel
         from ybox.print import print_notice
         from ybox.state import YboxStateManagement
 
