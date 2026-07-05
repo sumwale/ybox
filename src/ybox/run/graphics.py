@@ -10,6 +10,7 @@ from typing import Iterable
 
 from ybox.config import Consts, StaticConfiguration
 from ybox.env import Environ
+from ybox.util import DynamicToken
 
 # standard library directories to search for NVIDIA libraries
 _STD_LIB_DIRS = ["/usr/lib", "/lib", "/usr/local/lib", "/usr/lib64", "/lib64",
@@ -63,36 +64,7 @@ def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "
         docker_args.append(mount_arg)
 
 
-def handle_variable_mount(docker_args: list[str], env: Environ, mount_path: str) -> str:
-    """
-    Handle the case where a mount point may change in different starts or even within the same
-    started container instance. In these cases the "base" directory of the mount point is
-    mounted instead which should normally be `/tmp` or `$XDG_RUNTIME_DIR`. The variable values
-    are assumed to lie between these two, or the parent directory of the mount point if it does
-    not lie within these two base directories. The actual passing of the required environment
-    variable (that can change) is handled by the `run-in-dir` script that will adjust the variable
-    value to reflect that mount point added by this method.
-
-    :param docker_args: list of podman/docker arguments to which the options have to be appended
-    :param env: an instance of the current :class:`Environ`
-    :param mount_path: the variable path which is usually the value of an environment variable
-    :return: the result mount point inside the container for the `mount_path`
-    """
-    base_dir = os.path.dirname(mount_path)
-    # check if parent_dir is in $XDG_RUNTIME_DIR or /tmp
-    if not env.xdg_rt_dir:
-        base_dirs = {base_dir, "/tmp"}
-    elif mount_path.startswith(env.xdg_rt_dir + "/") or mount_path.startswith("/tmp/"):
-        base_dirs = (env.xdg_rt_dir, "/tmp")
-        base_dir = "/tmp" if base_dir.startswith("/tmp") else env.xdg_rt_dir
-    else:
-        base_dirs = (base_dir, env.xdg_rt_dir, "/tmp")
-    for b_dir in base_dirs:
-        add_mount_option(docker_args, b_dir, f"{b_dir}-host", "ro", check_exists=True)
-    return mount_path.replace(base_dir, f"{base_dir}-host")
-
-
-def enable_x11(docker_args: list[str], env: Environ) -> None:
+def enable_x11(docker_args: list[str], docker_dynamic_args: list[str]) -> None:
     """
     Append options to podman/docker arguments to share host machine's Xorg X11 server
     with the new ybox container. This also sets up sharing of XAUTHORITY file (with automatic
@@ -100,22 +72,17 @@ def enable_x11(docker_args: list[str], env: Environ) -> None:
     X authentication to work.
 
     :param docker_args: list of podman/docker arguments to which the options have to be appended
-    :param env: an instance of the current :class:`Environ`
+    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
+                                before each `podman`/`docker run` execution
+                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     """
     add_env_option(docker_args, "DISPLAY")
     xsock = "/tmp/.X11-unix"
     if os.access(xsock, os.R_OK):
         add_mount_option(docker_args, xsock, xsock, "ro")
-    if xauth := os.environ.get("XAUTHORITY"):
-        # XAUTHORITY file may change after a restart or login (e.g. with Xwayland), so mount some
-        # parent directory which is adjusted by run-in-dir script if it has changed;
-        # For now the known common parents are used below since using just the immediate
-        # parent can cause trouble if one changes the display manager, for example, which
-        # uses an entirely different mount point (e.g. gdm uses /run/user/... while sddm
-        #   uses /tmp)
-        target_xauth = handle_variable_mount(docker_args, env, xauth)
-        add_env_option(docker_args, "XAUTHORITY", target_xauth)
-        add_env_option(docker_args, "XAUTHORITY_ORIG", target_xauth)
+    add_env_option(docker_args, "XAUTHORITY")  # pick the value set in current env
+    docker_args.append("{}")  # positional str.format() string resolved using docker_dynamic_args
+    docker_dynamic_args.append(DynamicToken.XAUTHORITY_MOUNT.name)
 
 
 def enable_wayland(docker_args: list[str], env: Environ) -> None:

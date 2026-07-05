@@ -68,8 +68,6 @@ def main_argv(argv: list[str]) -> None:
     else:
         # remove the autostart file if present
         Path(f"{env.home}/.config/autostart/{ybox_svc_prefix}.desktop").unlink(missing_ok=True)
-    # remove the .env file
-    Path(env.config_dir, f"{container_name}.env").unlink(missing_ok=True)
     # also try to delete the .env file from the old location
     Path(systemd_dir, f".{ybox_svc_prefix}.env").unlink(missing_ok=True)
 
@@ -83,8 +81,10 @@ def main_argv(argv: list[str]) -> None:
         if (runtime_conf := state.get_container_configuration(container_name)) is None:
             print_error(f"No entry found for '{container_name}' in the state database")
             sys.exit(1)
+        conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
+        # remove the container specific configuration directory
+        shutil.rmtree(conf.container_config_dir, ignore_errors=True)
         if not args.keep_files:
-            conf = StaticConfiguration(env, runtime_conf.distribution, container_name)
             print_notice("Removing container configuration files and scripts")
             shutil.rmtree(conf.configs_dir, ignore_errors=True)
             shutil.rmtree(conf.scripts_dir, ignore_errors=True)
@@ -130,7 +130,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-K", "--keep-files", action="store_true",
                         help="keep the files of the container including the storage location of a "
                         "non-shared root one, configs and scripts directories, non-shared image; "
-                        "systemd/autostart service and env files are still deleted")
+                        "systemd/autostart service and env/args files are still deleted")
     parser.add_argument("container_name", type=str, help="name of the active ybox")
     parser_version_check(parser, argv)
     return parser.parse_args(argv)

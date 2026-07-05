@@ -10,6 +10,7 @@ import sys
 import time
 from configparser import BasicInterpolation, ConfigParser, Interpolation
 from dataclasses import dataclass, field
+from enum import Enum
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -355,3 +356,32 @@ class FormatTable:
         headers = [f"{c}{h}{fg.reset}" for h, c in zip(self.headers, self.colors)]
         return tabulate(table, headers, tablefmt=self.fmt, disable_numparse=True,
                         maxcolwidths=self.max_col_widths)
+
+
+class DynamicToken(Enum):
+    """
+    Holds the allowed 'tokens' in the container launch arguments file that are resolved at runtime.
+    The value of each 'token' is a zero-argument function to be invoked to obtain the corresponding
+    podman/docker argument.
+    """
+    @staticmethod
+    def _resolve_dbus_mount() -> str:
+        """return the podman/docker argument to mount the socket of user's session D-Bus"""
+        if dbus_session := os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+            dbus_path = dbus_session[dbus_session.find("=") + 1:]
+            if (dbus_opts_idx := dbus_path.find(",")) != -1:
+                dbus_path = dbus_path[:dbus_opts_idx]
+            return f"-v={dbus_path}:{dbus_path}"
+        return ""
+
+    @staticmethod
+    def _resolve_any_mount(name: str) -> str:
+        """return the podman/docker argument to mount a path in the given environment variable"""
+        if mount_path := os.environ.get(name):
+            return f"-v={mount_path}:{mount_path}"
+        return ""
+
+    DBUS_MOUNT = (_resolve_dbus_mount,)
+    XAUTHORITY_MOUNT = (lambda: DynamicToken._resolve_any_mount("XAUTHORITY"),)
+    SSH_SOCK_MOUNT = (lambda: DynamicToken._resolve_any_mount("SSH_AUTH_SOCK"),)
+    GPG_AGENT_MOUNT = (lambda: DynamicToken._resolve_any_mount("GPG_AGENT_INFO"),)
