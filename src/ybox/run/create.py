@@ -216,8 +216,9 @@ def main_argv(argv: list[str]) -> None:
     print_color(f"Updating configuration files in '{conf.container_config_dir}'", fgcolor.cyan)
     create_container_configs(conf, docker_full_args, docker_dynamic_args, False)
     if not args.skip_systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
-            systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
-                [systemctl, "--user", "daemon-reload"], exit_on_error=False, error_msg="SKIP") == 0:
+            systemctl := shutil.which("systemctl", path=sys_path)) and isinstance(run_command(
+                [systemctl, "--user", "daemon-reload"], capture_output=True, exit_on_error=False,
+                error_msg="SKIP"), str):
         remove_container(docker_full_args[0], conf)
         create_and_start_service(conf, systemctl, sys_path)
     else:
