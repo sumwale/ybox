@@ -18,10 +18,9 @@ from ybox.env import Environ
 from .print import print_error, print_info, print_notice, print_warn
 
 # environment variables passed through from host environment to podman/docker executable
-_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "XDG_SESSION_TYPE", "FREETYPE_PROPERTIES",
-                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO", "__NV_PRIME_RENDER_OFFLOAD",
-                        "__GLX_VENDOR_LIBRARY_NAME", "__VK_LAYER_NV_optimus",
-                        "VK_DRIVER_FILES", "VK_ICD_FILES", "VK_ICD_FILENAMES")
+_PASSTHROUGH_ENVVARS = ("__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
+                        "__VK_LAYER_NV_optimus", "VK_DRIVER_FILES", "VK_ICD_FILES",
+                        "VK_ICD_FILENAMES")
 # environment variables passed from host to podman/docker executable with empty if not set;
 # note that these variables are assumed to have values that don't need quoting by /bin/sh
 # else code will need to be updated to quote $<var> value when passing to the shell
