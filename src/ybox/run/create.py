@@ -216,9 +216,9 @@ def main_argv(argv: list[str]) -> None:
     print_color(f"Updating configuration files in '{conf.container_config_dir}'", fgcolor.cyan)
     create_container_configs(conf, docker_full_args, docker_dynamic_args, False)
     if not args.skip_systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
-            systemctl := shutil.which("systemctl", path=sys_path)) and isinstance(run_command(
-                [systemctl, "--user", "daemon-reload"], capture_output=True, exit_on_error=False,
-                error_msg="SKIP"), str):
+            systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
+                ["/bin/sh", "-c", f"{systemctl} --user daemon-reload 2>/dev/null"],
+                exit_on_error=False, error_msg="SKIP") == 0:
         remove_container(docker_full_args[0], conf)
         create_and_start_service(conf, systemctl, sys_path)
     else:
@@ -1355,8 +1355,8 @@ def run_container(docker_full_cmd: list[str], docker_dynamic_args: list[str], cu
         docker_full_cmd.append(f"{conf.target_scripts_dir}/startup.list")
     docker_full_cmd.append(conf.box_name)
 
-    print_color(f"Generating configuration files in '{conf.container_config_dir}' used by the "
-                "ybox container services", fgcolor.cyan)
+    print_color(f"Generating configuration files in '{conf.container_config_dir}' used by "
+                "ybox-launch", fgcolor.cyan)
     create_container_configs(conf, docker_full_cmd, docker_dynamic_args, True)
     launch_container(conf.env, conf.box_name)
 
@@ -1397,9 +1397,12 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
         env_fd.write(dedent(env_content))
     with open(f"{conf.container_config_dir}/args", "w", encoding="utf-8") as args_fd:
         print(*container_run_args, sep="\n", file=args_fd)
+    dyn_file = "args.dyn"
     if docker_dynamic_args:
-        with open(f"{conf.container_config_dir}/args.dyn", "w", encoding="utf-8") as args_dyn_fd:
+        with open(f"{conf.container_config_dir}/{dyn_file}", "w", encoding="utf-8") as args_dyn_fd:
             print(*docker_dynamic_args, sep="\n", file=args_dyn_fd)
+    else:
+        Path(conf.container_config_dir, dyn_file).unlink(missing_ok=True)
 
 
 def _get_ybox_bin_dir_relative(home_prefix: str) -> str:
