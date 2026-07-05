@@ -212,6 +212,8 @@ def main_argv(argv: list[str]) -> None:
     # remove distribution specific scripts and restart container the final time
     print_info(f"Starting the final container '{box_name}'")
     Path(f"{conf.scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o644)
+    # create the final argument and environment files
+    create_container_configs(conf, docker_full_args, docker_dynamic_args, False)
     if not args.skip_systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
                 [systemctl, "--user", "daemon-reload"], exit_on_error=False, error_msg="SKIP") == 0:
@@ -1351,12 +1353,12 @@ def run_container(docker_full_cmd: list[str], docker_dynamic_args: list[str], cu
         docker_full_cmd.append(f"{conf.target_scripts_dir}/startup.list")
     docker_full_cmd.append(conf.box_name)
 
-    create_container_configs(conf, docker_full_cmd, docker_dynamic_args)
+    create_container_configs(conf, docker_full_cmd, docker_dynamic_args, True)
     launch_container(conf.env, conf.box_name)
 
 
 def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[str],
-                             docker_dynamic_args: list[str]) -> None:
+                             docker_dynamic_args: list[str], for_initialization: bool) -> None:
     """
     Create an environment variable and podman/docker argument files for the ybox container that are
     used by both the systemd service and the autostart desktop file.
@@ -1367,22 +1369,30 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
     :param docker_dynamic_args: arguments in `docker_full_cmd` that need to be resolved dynamically
                                 before each `podman`/`docker run` execution
                                 (e.g. DBUS_SESSION_ADDRESS that can change across runs)
+    :param for_initialization: True if this is invoked for the initial setup of the container,
+                               in which case package installation variables will be included and
+                               SLEEP_SECS will be 0 for immediate service startup
     """
-    # remove unneeded package install variables to reduce the overall size of CONTAINER_RUN_ARGS
-    pkg_vars = {pkg[1] for pkg in _PKG_VARS}
-    container_run_args = [arg for arg in docker_full_cmd[2:]
-                          if not arg.startswith("-e=") or arg[3:].partition("=")[0] not in pkg_vars]
+    # remove unneeded package install variables in the final configuration (only required in
+    # initial creation) to reduce the overall size of CONTAINER_RUN_ARGS
+    if for_initialization:
+        sleep_secs = 0
+        container_run_args = docker_full_cmd[2:]
+    else:
+        sleep_secs = 5
+        skip = {pkg[1] for pkg in _PKG_VARS}
+        container_run_args = [arg for arg in docker_full_cmd[2:]
+                              if not arg.startswith("-e=") or arg[3:].partition("=")[0] not in skip]
     env_content = f"""
-        SLEEP_SECS={{sleep_secs}}
+        SLEEP_SECS={sleep_secs}
         # set the container manager to the one configured during ybox-create
         YBOX_CONTAINER_MANAGER={docker_full_cmd[0]}
     """
     os.makedirs(conf.container_config_dir, Consts.default_directory_mode(), exist_ok=True)
-    ybox_env = f"{conf.container_config_dir}/env"
-    print_color(f"Generating env file '{ybox_env}' having environment variables used by the ybox "
-                "container services", fgcolor.cyan)
-    with open(ybox_env, "w", encoding="utf-8") as env_fd:
-        env_fd.write(dedent(env_content.format(sleep_secs=0)))  # don't sleep for the initial start
+    print_color(f"Generating argument and environment files in '{conf.container_config_dir}' "
+                "used by the ybox container services", fgcolor.cyan)
+    with open(f"{conf.container_config_dir}/env", "w", encoding="utf-8") as env_fd:
+        env_fd.write(dedent(env_content))
     with open(f"{conf.container_config_dir}/args", "w", encoding="utf-8") as args_fd:
         print(*container_run_args, sep="\n", file=args_fd)
     if docker_dynamic_args:
@@ -1422,13 +1432,12 @@ def create_and_start_service(conf: StaticConfiguration, systemctl: str, sys_path
     docker_requires = "" if env.uses_podman else "After=docker.service\nRequires=docker.service\n"
     systemd_dir = env.systemd_user_conf_dir()
     ybox_svc = f"{ybox_service_prefix(conf.box_name)}.service"
-    env_path = Path(conf.container_config_dir, "env")
     formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
+    env_file = Path(conf.container_config_dir, "env").relative_to(Path(env.home))
     svc_content = svc_tmpl.format(name=conf.box_name, version=product_version, date=formatted_now,
                                   docker_requires=docker_requires, sys_path=sys_path,
                                   # use %h instead of user's home to keep it generic
-                                  ybox_bin_dir=_get_ybox_bin_dir_relative("%h"),
-                                  env_file=env_path.relative_to(Path(env.home)))
+                                  ybox_bin_dir=_get_ybox_bin_dir_relative("%h"), env_file=env_file)
     os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
     ybox_svc_path = f"{systemd_dir}/{ybox_svc}"
     if os.path.exists(ybox_svc_path):
@@ -1441,9 +1450,6 @@ def create_and_start_service(conf: StaticConfiguration, systemctl: str, sys_path
     run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
     run_command([systemctl, "--user", "enable", ybox_svc], exit_on_error=True)
     run_command([systemctl, "--user", "start", ybox_svc], exit_on_error=True)
-    # change SLEEP_SECS to 5 in the environment file for subsequent starts
-    new_env_content = env_path.read_text(encoding="utf-8").replace("SLEEP_SECS=0", "SLEEP_SECS=5")
-    env_path.write_text(new_env_content, encoding="utf-8")
 
 
 def create_autostart_file(conf: StaticConfiguration) -> None:
