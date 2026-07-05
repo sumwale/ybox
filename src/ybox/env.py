@@ -11,6 +11,7 @@ import sys
 from datetime import datetime
 from importlib.resources import files
 from pathlib import Path
+from typing import TypeAlias
 
 from .print import print_error, print_notice
 
@@ -19,7 +20,7 @@ if sys.version_info >= (3, 11):
 else:
     from importlib.abc import Traversable
 
-PathName = Path | Traversable
+PathName: TypeAlias = Path | Traversable
 
 
 def get_docker_command() -> str:

@@ -10,13 +10,13 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Final, Iterable, cast
+from typing import Any, Callable, Final, Iterable, TypeAlias, cast
 
 from ybox.cmd import parse_opt_deps_args
 from ybox.print import fgcolor, print_color, print_error, print_warn
 
 # a function from the `operator` module
-VersionCompare = Callable[[Any, Any], bool]
+VersionCompare: TypeAlias = Callable[[Any, Any], bool]
 
 
 @dataclass

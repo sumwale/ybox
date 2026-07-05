@@ -334,7 +334,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-C", "--distribution-config", type=str,
                         help="path to distribution configuration file to use instead of the "
                              "'distro.ini' from user/system configuration paths")
-    parser.add_argument("--distribution-image", type=str,
+    parser.add_argument("-I", "--distribution-image", type=str,
                         help="custom container image to use that overrides the one specified in "
                              "the distribution's 'distro.ini'; note that the distribution "
                              "configuration scripts make assumptions on the available utilities "
@@ -1399,26 +1399,28 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
     with open(f"{conf.container_config_dir}/{Consts.container_args_file()}", "w",
               encoding="utf-8") as args_fd:
         print(*container_run_args, sep="\n", file=args_fd)
-    dyn_file = Consts.container_dynamic_args_file()
+    dyn_file = Path(conf.container_config_dir, Consts.container_dynamic_args_file())
     if docker_dynamic_args:
-        with open(f"{conf.container_config_dir}/{dyn_file}", "w", encoding="utf-8") as args_dyn_fd:
+        with dyn_file.open("w", encoding="utf-8") as args_dyn_fd:
             print(*docker_dynamic_args, sep="\n", file=args_dyn_fd)
     else:
-        Path(conf.container_config_dir, dyn_file).unlink(missing_ok=True)
+        dyn_file.unlink(missing_ok=True)
 
 
-def _get_ybox_bin_dir_relative(home_prefix: str) -> str:
+def _ybox_bin_dir(home_prefix: str, env: Environ) -> str:
     """
     Get the directory of `ybox-control` script relative to the home directory, if in user's home
-    else the absolute directory path
+    else the absolute directory path. This is done to make the returned value more generic which
+    works even if the location of user's home directory changes in future.
 
-    :param home_prefix: the prefix to use for user's home (e.g. %h for use in systemd service files)
+    :param home_prefix: the prefix to use for user's home (e.g. %h in systemd service files)
+    :param env: an instance of the current :class:`Environ`
     :return: path to the directory having `ybox-control` script relative to user's home, or absolute
     """
     if ybox_ctrl_path := shutil.which("ybox-control"):
         ybox_bin_dir = Path(ybox_ctrl_path).parent
-        if ybox_bin_dir.is_relative_to(Path.home()):
-            return f"{home_prefix}/{ybox_bin_dir.relative_to(Path.home())}"
+        if ybox_bin_dir.is_relative_to(env.home):
+            return f"{home_prefix}/{ybox_bin_dir.relative_to(env.home)}"
         return str(ybox_bin_dir)
     # if not found in $PATH, then assume it is in user's ~/.local/bin directory
     return f"{home_prefix}/.local/bin"
@@ -1444,7 +1446,7 @@ def create_and_start_service(conf: StaticConfiguration, systemctl: str, sys_path
     svc_content = svc_tmpl.format(name=conf.box_name, version=product_version, date=formatted_now,
                                   docker_requires=docker_requires, sys_path=sys_path,
                                   # use %h instead of user's home to keep it generic
-                                  ybox_bin_dir=_get_ybox_bin_dir_relative("%h"), env_file=env_file)
+                                  ybox_bin_dir=_ybox_bin_dir("%h", env), env_file=env_file)
     os.makedirs(systemd_dir, Consts.default_directory_mode(), exist_ok=True)
     ybox_svc_path = f"{systemd_dir}/{ybox_svc}"
     if os.path.exists(ybox_svc_path):
@@ -1455,8 +1457,7 @@ def create_and_start_service(conf: StaticConfiguration, systemctl: str, sys_path
     with open(ybox_svc_path, "w", encoding="utf-8") as svc_fd:
         svc_fd.write(svc_content)
     run_command([systemctl, "--user", "daemon-reload"], exit_on_error=False)
-    run_command([systemctl, "--user", "enable", ybox_svc], exit_on_error=True)
-    run_command([systemctl, "--user", "start", ybox_svc], exit_on_error=True)
+    run_command([systemctl, "--user", "--now", "enable", ybox_svc], exit_on_error=True)
 
 
 def create_autostart_file(conf: StaticConfiguration) -> None:
@@ -1482,7 +1483,7 @@ def create_autostart_file(conf: StaticConfiguration) -> None:
     autostart_content = autostart_tmpl.format(name=conf.box_name, version=product_version,
                                               date=formatted_now, env_file=env_file,
                                               # use $HOME instead of user's home to keep it generic
-                                              ybox_bin_dir=_get_ybox_bin_dir_relative("$HOME"))
+                                              ybox_bin_dir=_ybox_bin_dir("$HOME", env))
     autostart_file.write_text(autostart_content, encoding="utf-8")
 
 
