@@ -69,7 +69,8 @@ def stop_container_impl(docker_cmd: str, container_name: str, timeout: int,
                            show error message on failure and exit with error
     """
     exit_code = 0
-    if check_active_ybox(docker_cmd, container_name):
+    ybox_state = get_ybox_state(docker_cmd, container_name, expected_states=())
+    if ybox_state and ybox_state[0] in ("running", "stopping"):
         print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
         run_command([docker_cmd, "container", "stop", "-t", str(timeout), container_name],
                     error_msg="container stop")
@@ -82,29 +83,23 @@ def stop_container_impl(docker_cmd: str, container_name: str, timeout: int,
         else:
             print_error(f"Failed to stop ybox container '{container_name}'")
             exit_code = 1
-    elif ignore_stopped:
-        print_color(f"No active ybox container '{container_name}' found", fg=fgcolor.cyan)
-    else:
+    elif not ignore_stopped:
         print_error(f"No active ybox container '{container_name}' found")
         sys.exit(1)
 
     action = "stop"
-    if remove:
+    if remove and ybox_state:
         action = "remove"
-        msg = "SKIP" if ignore_stopped else "container rm"
         print_color(f"Removing ybox container '{container_name}'", fg=fgcolor.cyan)
         exit_code = run_command([docker_cmd, "container", "rm", container_name],
-                                capture_output=ignore_stopped, exit_on_error=False, error_msg=msg)
-    elif force_remove:
+                                exit_on_error=False, error_msg="container rm")
+    elif force_remove and ybox_state:
         action = "force remove"
-        msg = "SKIP" if ignore_stopped else "container rm --force"
         print_color(f"Forcibly removing ybox container '{container_name}'", fg=fgcolor.cyan)
         exit_code = run_command([docker_cmd, "container", "rm", "-t", str(timeout), "--force",
-                                 container_name], capture_output=ignore_stopped,
-                                exit_on_error=False, error_msg=msg)
-    if isinstance(exit_code, str):
-        print(exit_code)
-    elif exit_code != 0 and not ignore_stopped:
+                                 container_name], exit_on_error=False,
+                                error_msg="container rm --force")
+    if exit_code != 0 and not ignore_stopped:
         print_error(f"Failed to {action} ybox container '{container_name}' (code = {exit_code})")
         sys.exit(int(exit_code))
 

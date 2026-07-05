@@ -194,7 +194,7 @@ def main_argv(argv: list[str]) -> None:
                   mount_root_dirs.split(","))):
             run_root_copy_container(docker_cmd, custom_box_image, container_root,
                                     mount_root_dirs, conf, args.quiet)
-            remove_container(docker_cmd, conf)
+            remove_container(docker_cmd, conf.box_name)
 
     # there is one additional stop/start below because all packages are upgraded by the
     # entrypoint script to pick up any important fixes which can lead to system libraries
@@ -219,7 +219,7 @@ def main_argv(argv: list[str]) -> None:
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
                 ["/bin/sh", "-c", f"{systemctl} --user daemon-reload 2>/dev/null"],
                 exit_on_error=False, error_msg="SKIP") == 0:
-        remove_container(docker_full_args[0], conf)
+        remove_container(docker_full_args[0], conf.box_name)
         create_and_start_service(conf, systemctl, sys_path)
     else:
         if not args.skip_systemd_service:
@@ -1264,12 +1264,12 @@ def commit_container(docker_cmd: str, image_name: str, conf: StaticConfiguration
     _run_cmd_retries([docker_cmd, "commit", "--change", f"USER {conf.env.target_user}",
                       "--change", f"WORKDIR {conf.env.target_home}", conf.box_name, image_name],
                      "container commit", 3, True)
-    remove_container(docker_cmd, conf)
+    remove_container(docker_cmd, conf.box_name)
 
 
-def remove_container(docker_cmd: str, conf: StaticConfiguration) -> None:
+def remove_container(docker_cmd: str, box_name: str) -> None:
     """remove a stopped podman/docker container"""
-    _run_cmd_retries([docker_cmd, "container", "rm", conf.box_name], "container rm", 3, True)
+    _run_cmd_retries([docker_cmd, "container", "rm", box_name], "container rm", 3, True)
 
 
 def remove_image(docker_cmd: str, image_name: str) -> None:

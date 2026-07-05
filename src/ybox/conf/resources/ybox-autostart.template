@@ -6,6 +6,6 @@
 Version=1.0
 Name=ybox {name} container
 Comment=Launch ybox {name} container
-Exec=/bin/sh -c '. $HOME/{env_file}; exec {ybox_bin_dir}/ybox-launch {name}'
+Exec=/bin/sh -c '. $HOME/{env_file}; exec {ybox_bin_dir}/ybox-launch --rm {name}'
 Terminal=false
 Type=Application

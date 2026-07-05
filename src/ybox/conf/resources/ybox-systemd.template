@@ -14,7 +14,7 @@ Type=exec
 Restart=on-failure
 # sleep to allow for the basic initialization of the user's login/graphical environment
 ExecStartPre=/usr/bin/sleep $SLEEP_SECS
-ExecStart=/bin/sh -c 'exec ybox-launch --wait {name}'
+ExecStart=/bin/sh -c 'exec ybox-launch --rm --wait {name}'
 ExecStop=/bin/sh -c 'ybox-control stop -t 20 --ignore-stopped --rm {name}'
 ExecStopPost=/bin/sh -c 'ybox-control stop -t 20 --ignore-stopped --rm {name} > /dev/null 2> /dev/null'
 TimeoutStopSec=60

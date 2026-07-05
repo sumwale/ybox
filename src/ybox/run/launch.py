@@ -9,7 +9,7 @@ from pathlib import Path
 from ybox.cmd import parser_version_check, run_command
 from ybox.env import Environ
 from ybox.print import print_error, print_info
-from ybox.run.control import wait_for_container_stop
+from ybox.run.control import stop_container_impl, wait_for_container_stop
 from ybox.util import DynamicToken
 
 
@@ -30,6 +30,9 @@ def main_argv(argv: list[str]) -> None:
     env = Environ()
     container_name = args.container
 
+    if args.rm:
+        stop_container_impl(env.docker_cmd, container_name, timeout=10, remove=True,
+                            force_remove=False, ignore_stopped=True)
     print_info(f"Launching ybox container '{container_name}'")
     launch_container(env, container_name)
     if args.wait:
@@ -77,6 +80,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-t", "--timeout", type=int, default=sys.maxsize,
                         help="time in seconds to wait for the container to stop when -w/--wait "
                              f"argument has been provided (default is {sys.maxsize} secs)")
+    parser.add_argument("-R", "--rm", action="store_true",
+                        help="stop and remove the container before launch")
     parser.add_argument("container", type=str, help="name of the ybox container to launch")
     parser_version_check(parser, argv)
     return parser.parse_args(argv)
