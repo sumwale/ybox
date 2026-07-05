@@ -9,12 +9,12 @@ After=network-online.target
 {docker_requires}
 [Service]
 Environment=PATH={sys_path}:{ybox_bin_dir}
-EnvironmentFile=%h/.config/ybox/{env_file}
+EnvironmentFile=%h/{env_file}
 Type=exec
 Restart=on-failure
 # sleep to allow for the basic initialization of the user's login/graphical environment
 ExecStartPre=/usr/bin/sleep $SLEEP_SECS
-ExecStart=/bin/sh -c 'eval $YBOX_CONTAINER_MANAGER container rm {name} 2>/dev/null; eval $YBOX_CONTAINER_MANAGER run $CONTAINER_RUN_ARGS && exec ybox-control wait {name}'
+ExecStart=/bin/sh -c 'exec ybox-launch --wait {name}'
 ExecStop=/bin/sh -c 'ybox-control stop -t 20 --ignore-stopped --rm {name}'
 ExecStopPost=/bin/sh -c 'ybox-control stop -t 20 --ignore-stopped --rm {name} > /dev/null 2> /dev/null'
 TimeoutStopSec=60

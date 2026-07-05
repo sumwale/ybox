@@ -5,8 +5,9 @@ Code for the `ybox-ls` script that is used to show the active or stopped ybox co
 import argparse
 import sys
 
-from ybox.cmd import YboxLabel, parser_version_check, run_command
-from ybox.env import get_docker_command
+from ybox.cmd import (YboxLabel, check_ybox_exists, parser_version_check,
+                      run_command)
+from ybox.env import Environ, get_docker_command
 
 
 def main() -> None:
@@ -23,10 +24,16 @@ def main_argv(argv: list[str]) -> None:
     :param argv: arguments to the function (main function passes `sys.argv[1:]`)
     """
     args = parse_args(argv)
-    docker_cmd = get_docker_command()
+    list_all = bool(args.all)
+    if list_all:
+        env = Environ()
+        docker_cmd = env.docker_cmd
+    else:
+        env = None
+        docker_cmd = get_docker_command()
 
     docker_args = [docker_cmd, "container", "ls"]
-    if args.all:
+    if list_all:
         docker_args.append("--all")
         docker_args.append(f"--filter=label={YboxLabel.CONTAINER_TYPE.value}")
     else:
@@ -40,6 +47,21 @@ def main_argv(argv: list[str]) -> None:
         docker_args.append("--no-trunc")
     run_command(docker_args, error_msg="listing ybox containers")
 
+    if list_all:
+        from ybox.print import print_notice
+        from ybox.state import YboxStateManagement
+
+        print()
+        assert env
+        # also list containers that have not been launched using `ybox-launch`
+        with YboxStateManagement(env) as state:
+            state.begin_transaction()
+            for container in state.get_containers():
+                if not check_ybox_exists(docker_cmd, container):
+                    if (config_dir := env.container_config_dir(container)).startswith(env.home):
+                        config_dir = f"~{config_dir[len(env.home):]}"
+                    print_notice(f"Not Launched: {container} (configuration in {config_dir})")
+
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     """
@@ -50,7 +72,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="List ybox containers")
     parser.add_argument("-a", "--all", action="store_true",
-                        help="show all containers including stopped and temporary ones; "
+                        help="show all containers including stopped/temporary/unlaunched ones; "
                              "default is to show only active ybox containers and also skip "
                              "any temporary containers spun by ybox-create")
     parser.add_argument("-f", "--filter", type=str, action="append",

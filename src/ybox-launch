@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from ybox.run.control import main
+from ybox.run.launch import main
 
 if __name__ == "__main__":
     main()

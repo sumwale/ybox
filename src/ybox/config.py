@@ -50,6 +50,7 @@ class StaticConfiguration:
         self._config_list = f"{self._scripts_dir}/config.list"
         self._app_list = f"{self._scripts_dir}/app.list"
         self._startup_list = f"{self._scripts_dir}/startup.list"
+        self._container_config_dir = env.container_config_dir(box_name)
 
     @property
     def env(self) -> Environ:
@@ -151,6 +152,11 @@ class StaticConfiguration:
     def startup_list(self) -> str:
         """file containing list of commands to be executed in the container on startup"""
         return self._startup_list
+
+    @property
+    def container_config_dir(self) -> str:
+        """directory where container specific configuration files are stored"""
+        return self._container_config_dir
 
 
 class Consts:

@@ -223,3 +223,12 @@ class Environ:
     def user_executables_dir(self) -> str:
         """User's local executables directory which should be in the $PATH"""
         return self._user_executables_dir
+
+    def container_config_dir(self, box_name: str) -> str:
+        """
+        Get the directory where container specific configuration files are stored.
+
+        :param box_name: name of the ybox container
+        :return: path of the directory having container's configuration files
+        """
+        return f"{self._config_dir}/containers/{box_name}"
