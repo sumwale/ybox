@@ -5,6 +5,7 @@ Utilities related to command execution like running a command, get podman/docker
 import argparse
 import errno
 import shlex
+import shutil
 import subprocess
 import sys
 from enum import Enum
@@ -12,14 +13,14 @@ from typing import Callable, Iterable
 
 from ybox import __version__ as product_version
 from ybox.config import Consts
+from ybox.env import Environ
 
 from .print import print_error, print_info, print_notice, print_warn
 
 # environment variables passed through from host environment to podman/docker executable
-_PASSTHROUGH_ENVVARS = ("XAUTHORITY", "DISPLAY", "XDG_SESSION_TYPE", "FREETYPE_PROPERTIES",
-                        "SSH_AUTH_SOCK", "GPG_AGENT_INFO", "__NV_PRIME_RENDER_OFFLOAD",
-                        "__GLX_VENDOR_LIBRARY_NAME", "__VK_LAYER_NV_optimus",
-                        "VK_DRIVER_FILES", "VK_ICD_FILES", "VK_ICD_FILENAMES")
+_PASSTHROUGH_ENVVARS = ("__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
+                        "__VK_LAYER_NV_optimus", "VK_DRIVER_FILES", "VK_ICD_FILES",
+                        "VK_ICD_FILENAMES")
 # environment variables passed from host to podman/docker executable with empty if not set;
 # note that these variables are assumed to have values that don't need quoting by /bin/sh
 # else code will need to be updated to quote $<var> value when passing to the shell
@@ -145,7 +146,7 @@ def check_active_ybox(docker_cmd: str, box_name: str, exit_on_error: bool = Fals
     :param exit_on_error: whether to exit using `sys.exit` if the check fails
     :return: if `exit_on_error` is False, then return the result of verification as True or False
     """
-    return bool(get_ybox_state(docker_cmd, box_name, expected_states=("running",),
+    return bool(get_ybox_state(docker_cmd, box_name, expected_states=("running", "stopping"),
                                exit_on_error=exit_on_error, state_msg=" active"))
 
 
@@ -227,9 +228,9 @@ def _print_subprocess_output(result: subprocess.CompletedProcess[bytes]) -> None
     """print completed subprocess output in color (orange for standard output and purple
        for standard error)"""
     if result.stdout:
-        print_notice(result.stdout.decode("utf-8"))
+        print_notice(result.stdout.decode("utf-8"), end="")
     if result.stderr:
-        print_warn(result.stderr.decode("utf-8"), file=sys.stderr)
+        print_warn(result.stderr.decode("utf-8"), end="", file=sys.stderr)
 
 
 def parser_version_check(parser: argparse.ArgumentParser, argv: list[str]) -> None:
@@ -337,7 +338,7 @@ def page_command(cmd: str | list[str], pager: str, error_msg: str | None = None,
 
 def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_interactive: bool,
                           needs_tty: bool, extra_args: Iterable[str], working_dir: str,
-                          cmd: list[str]) -> None:
+                          cmd: list[str], extra_flags: str = "") -> None:
     """
     Append the podman/docker command-line arguments for execution of a command that includes
     environment variables to be passed through from the host environment to the container which
@@ -357,6 +358,7 @@ def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_in
     :param cmd: existing command-line as a list of strings that should be concatenated without any
                 separator; this will be populated with the arguments required for podman/docker
                 execution including the environment variables to be passed through from the host
+    :param extra_flags: an explicit string having additional flags to be passed to podman/docker
     """
     cmd.append(docker_cmd)
     cmd.append(" exec")
@@ -367,6 +369,8 @@ def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_in
     # need a pseudo-terminal
     if needs_tty:
         cmd.append(" -t")
+    if extra_flags:
+        cmd.append(extra_flags)
     for e_var in _PASSTHROUGH_ENVVARS:
         cmd.extend(" -e ")
         cmd.append(e_var)
@@ -378,3 +382,17 @@ def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_in
             cmd.append(arg)
     cmd.extend((" ", box_name, " /usr/local/bin/run-in-dir ", escape_str, '"', working_dir,
                 escape_str, '" '))
+
+
+def delete_container_directory(container_dir: str, env: Environ) -> None:
+    """delete given directory which hosts a directory mounted in a container"""
+    if env.uses_podman:
+        if run_command([env.docker_cmd, "unshare", "/bin/rm", "-rf", container_dir],
+                       exit_on_error=False, error_msg="deleting container directory") == 0:
+            return
+    try:
+        shutil.rmtree(container_dir)
+    except OSError:
+        # try with sudo
+        run_command(["/usr/bin/sudo", "/bin/rm", "-rf", container_dir],
+                    error_msg="deleting container directory")

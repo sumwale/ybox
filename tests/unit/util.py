@@ -83,7 +83,8 @@ def read_containers_and_packages(env: Environ, fetch_types: bool,
     if fetch_types:
         def get_copy_type(names: list[str]) -> y_state.CopyType:
             """given a list of `CopyType` names, convert to a single `CopyType` by ORing"""
-            return reduce(operator.ior, [y_state.CopyType[c] for c in names], y_state.CopyType(0))
+            return reduce(operator.ior, [y_state.CopyType[c] for c in names],  # type: ignore
+                          y_state.CopyType(0))
 
         def build_package_details(pkg: str, pkg_info: dict[str, Any],
                                   shared_root: str) -> PackageDetails:

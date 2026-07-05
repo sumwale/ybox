@@ -13,7 +13,7 @@
         "dep_of": "",
         "containers": [
             "ybox-arch_apps",
-            "ubuntu2204_games"
+            "ubuntu2404_games"
         ]
     },
     "chromium": {
@@ -32,7 +32,7 @@
         "dep_of": "",
         "containers": [
             "ybox-arch_apps",
-            "ubuntu2204_games",
+            "ubuntu2404_games",
             "archbox_games"
         ]
     },
@@ -59,7 +59,7 @@
         "dep_type": null,
         "dep_of": "",
         "containers": [
-            "ybox-ubuntu2204_apps"
+            "ybox-ubuntu2404_apps"
         ]
     }
 }

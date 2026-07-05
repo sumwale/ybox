@@ -11,11 +11,11 @@ export HOME=/root
 PAC="pacman --noconfirm"
 echo_color "$fg_cyan" "Configuring pacman" >> $status_file
 pacman-key --init
-sed -i 's/^#[ ]*Color.*/Color/;s/^[ ]*NoProgressBar.*/#NoProgressBar/' /etc/pacman.conf
-sed -i 's,^[ ]*NoExtract[ ]*=[ ]*/\?usr/share/man.*,#\0,' /etc/pacman.conf
-sed -i 's,^[ ]*NoExtract[ ]*=[ ]*.*usr/share/i18n.*,#\0,' /etc/pacman.conf
-# disable the sandbox in the newer pacman versions that does not work in container
-sed -i 's/^#[ ]*DisableSandbox/DisableSandbox/' /etc/pacman.conf
+# add color and eye candy in pacman output
+sed -i 's/^#[ ]*Color.*/Color/;s/^[ ]*NoProgressBar.*/#NoProgressBar\nILoveCandy/' /etc/pacman.conf
+# disable the sandbox in newer pacman versions that does not work properly in a container
+sed -i 's/^ILoveCandy/ILoveCandy\nDisableSandbox/' /etc/pacman.conf
+sed -i 's,^[ ]*NoExtract[ ]*=.*,#\0,' /etc/pacman.conf
 if ! grep -q '^[ ]*\[multilib\]' /etc/pacman.conf; then
   echo -e '[multilib]\nInclude = /etc/pacman.d/mirrorlist' >> /etc/pacman.conf
 fi
@@ -29,15 +29,13 @@ if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/local
   if [ "$LANG" != "en_US.UTF-8" ]; then
     echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
   fi
+  # reinstall glibc to obtain /usr/share/i18/locales/* files and try again
+  $PAC -Sy
+  $PAC -S glibc
   if ! locale-gen; then
-    # reinstall glibc to obtain /usr/share/i18/locales/* files and try again
-    $PAC -Sy
-    $PAC -S glibc
-    if ! locale-gen; then
-      echo_color "$fg_red" "FAILED to generate locale for $LANG, fallback to en_US.UTF-8" >> $status_file
-      export LANG=en_US.UTF-8
-      export LANGUAGE="en_US:en"
-    fi
+    echo_color "$fg_red" "FAILED to generate locale for $LANG, fallback to en_US.UTF-8" >> $status_file
+    export LANG=en_US.UTF-8
+    export LANGUAGE="en_US:en"
   fi
   echo "LANG=$LANG" > /etc/locale.conf
   if [ -n "$LANGUAGE" ]; then

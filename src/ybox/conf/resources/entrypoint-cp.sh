@@ -28,5 +28,10 @@ echo_color "$fg_purple" "Copying data from container to shared root mounted on '
 IFS="," read -ra shared_dirs_arr <<< "$shared_dirs"
 for dir in "${shared_dirs_arr[@]}"; do
   echo_color "$fg_orange" "Copying $dir to $shared_bind$dir"
-  cp -an "$dir" "$shared_bind$dir"
+  # try the new no-clobber option as well as the deprecated one (-n)
+  if cp --update=none --help 2>/dev/null >/dev/null; then
+    cp -a --update=none "$dir" "$shared_bind$dir"
+  else
+    cp -an "$dir" "$shared_bind$dir"
+  fi
 done

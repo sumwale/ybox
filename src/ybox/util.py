@@ -10,6 +10,7 @@ import sys
 import time
 from configparser import BasicInterpolation, ConfigParser, Interpolation
 from dataclasses import dataclass, field
+from enum import Enum
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -19,7 +20,7 @@ from tabulate import tabulate
 
 from ybox import __version__ as product_version
 
-from .cmd import build_shell_command, get_ybox_state
+from .cmd import build_shell_command, check_active_ybox
 from .config import Consts, StaticConfiguration
 from .env import Environ, PathName
 from .print import fgcolor as fg
@@ -220,7 +221,8 @@ def get_ybox_version(conf: StaticConfiguration) -> str:
     return ""
 
 
-def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout: int) -> None:
+def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout: int,
+                            for_stop: bool = False) -> None:
     """
     Wait for container created with `create.start_container` to finish all its initialization.
     This depends on the specific entrypoint script used by `create.start_container` to write
@@ -230,6 +232,7 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
     :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param timeout: seconds to wait for container to start before exiting with failure code 1
+    :param for_stop: if True then wait for container to completely stop before returning
     """
     sys.stdout.flush()
     box_name = conf.box_name
@@ -254,23 +257,27 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
         for _ in range(timeout):
             # check the container status first which may be running or stopping
             # in which case sleep and retry (if stopped, then read_lines should succeed)
-            if get_ybox_state(docker_cmd, box_name, expected_states=("running", "stopping")):
-                if read_lines():
+            if check_active_ybox(docker_cmd, box_name):
+                if read_lines() and not for_stop:
                     return
+            elif for_stop:
+                return
             else:
-                time.sleep(1)  # wait for sometime for file write to become visible
+                # wait for a while for the container to become active before failing
+                for _ in range(5):
+                    time.sleep(1)
+                    if check_active_ybox(docker_cmd, box_name):
+                        break
+                else:
+                    break
                 if read_lines():
                     return
-                print_error("FAILED waiting for container to be ready (last status: "
-                            f"{status_line}).\nCheck 'ybox-logs {box_name}' for more details.")
-                sys.exit(1)
             # using simple poll per second rather than inotify or similar because the
             # initialization can take a good amount of time and second granularity is enough
             time.sleep(1)
-    # reading did not end after timeout
-    print_error(f"TIMED OUT waiting for ready container after {timeout}secs (last status: "
-                f"{status_line}).\nCheck 'ybox-logs -f {box_name}' for more details.")
-    sys.exit(1)
+        print_error(f"FAILED waiting for container to be ready with timeout={timeout}secs "
+                    f"(last status: {status_line}).\nCheck 'ybox-logs {box_name}' for details.")
+        sys.exit(1)
 
 
 def truncate_file(file: str) -> None:
@@ -349,3 +356,32 @@ class FormatTable:
         headers = [f"{c}{h}{fg.reset}" for h, c in zip(self.headers, self.colors)]
         return tabulate(table, headers, tablefmt=self.fmt, disable_numparse=True,
                         maxcolwidths=self.max_col_widths)
+
+
+class DynamicToken(Enum):
+    """
+    Holds the allowed 'tokens' in the container launch arguments file that are resolved at runtime.
+    The value of each 'token' is a zero-argument function to be invoked to obtain the corresponding
+    podman/docker argument.
+    """
+    @staticmethod
+    def _resolve_dbus_mount() -> str:
+        """return the podman/docker argument to mount the socket of user's session D-Bus"""
+        if dbus_session := os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+            dbus_path = dbus_session[dbus_session.find("=") + 1:]
+            if (dbus_opts_idx := dbus_path.find(",")) != -1:
+                dbus_path = dbus_path[:dbus_opts_idx]
+            return f"-v={dbus_path}:{dbus_path}"
+        return ""
+
+    @staticmethod
+    def _resolve_any_mount(name: str) -> str:
+        """return the podman/docker argument to mount a path in the given environment variable"""
+        if mount_path := os.environ.get(name):
+            return f"-v={mount_path}:{mount_path}"
+        return ""
+
+    DBUS_MOUNT = (_resolve_dbus_mount,)
+    XAUTHORITY_MOUNT = (lambda: DynamicToken._resolve_any_mount("XAUTHORITY"),)
+    SSH_SOCK_MOUNT = (lambda: DynamicToken._resolve_any_mount("SSH_AUTH_SOCK"),)
+    GPG_AGENT_MOUNT = (lambda: DynamicToken._resolve_any_mount("GPG_AGENT_INFO"),)

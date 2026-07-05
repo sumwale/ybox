@@ -183,7 +183,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         if args.keep_ambient_caps:
             app_flags[package + ":ambient_caps"] = "keep"
         local_copies = wrap_container_files(package, copy_type, app_flags, list_cmd, docker_cmd,
-                                            conf, rt_conf.ini_config, rt_conf.shared_root, quiet)
+                                            conf, rt_conf.ini_config,
+                                            rt_conf.shared_root or conf.unshared_root(), quiet)
         dep_type, dep_of = (DependencyType.OPTIONAL, args.package) if opt_dep_install else (
             None, "")
         state.register_package(conf.box_name, package, local_copies, copy_type, app_flags,
@@ -308,7 +309,7 @@ def select_optional_deps(package: str, deps: list[tuple[str, str, str, int, int]
 
 def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str, str],
                          list_cmd: str, docker_cmd: str, conf: StaticConfiguration,
-                         box_conf: str | ConfigParser, shared_root: str,
+                         box_conf: str | ConfigParser, container_root: str,
                          quiet: int) -> list[str]:
     """
     Create wrappers in host environment to invoke container's desktop files and executables.
@@ -322,8 +323,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     :param conf: the :class:`StaticConfiguration` for the container
     :param box_conf: the resolved INI format configuration of the container as a string or
                      a `ConfigParser` object
-    :param shared_root: the local shared root directory if `shared_root` is provided
-                        for the container
+    :param container_root: the directory on the host used for the root subdirs of the container
     :param quiet: perform operations quietly
     :return: the list of paths of the wrapper files
     """
@@ -344,7 +344,7 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     executable_dirs = Consts.container_bin_dirs()
     man_dir_pattern = Consts.container_man_dir_pattern()
     # get the parsed container configuration
-    parsed_box_conf = _get_parsed_box_conf(box_conf)
+    parsed_box_conf = get_parsed_box_conf(box_conf)
     # read the container configuration for [app_flags] section
     app_flags_section = parsed_box_conf["app_flags"] \
         if parsed_box_conf and parsed_box_conf.has_section("app_flags") else None
@@ -382,15 +382,15 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
             if file_dir in executable_dirs:
                 _wrap_executable(filename, file, docker_cmd, conf, app_flags, needs_tty,
                                  keep_ambient_caps, wrapper_files)
-            elif shared_root and man_dir_pattern.match(file_dir):
-                _link_man_page(file, shared_root, conf, wrapper_files)
+            elif container_root and man_dir_pattern.match(file_dir):
+                _link_man_page(file, container_root, conf, wrapper_files)
     if selected_icons:
         _copy_app_icons(selected_icons, docker_cmd, conf, quiet, wrapper_files)
 
     return wrapper_files
 
 
-def _get_parsed_box_conf(box_conf: str | ConfigParser) -> ConfigParser | None:
+def get_parsed_box_conf(box_conf: str | ConfigParser) -> ConfigParser | None:
     """
     Get the parsed `ConfigParser` for the container configuration.
 
@@ -649,9 +649,13 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
                 exist_ok=True)
     wrapper_exec = _get_wrapper_executable(filename, conf)
     print_notice(f"Linking container executable {file} to {wrapper_exec}")
-    exec_content = ["#!/bin/sh\nexec "]
+    term_flags = "-it" if needs_tty else "-i"
+    # the special first argument "--no-terminal" will skip -it flags to podman/docker exec
+    exec_content = ['#!/bin/sh\nif [ "$1" = "--no-terminal" ]; then\n  term_flags=""\n  shift\n']
+    exec_content.append(f'else\n  term_flags="{term_flags}"\nfi\nexec ')
     # ensure to change working directory to same on as on host if possible using `run-in-dir`
-    populate_exec_cmdline(docker_cmd, conf.box_name, "", True, needs_tty, (), "`pwd`", exec_content)
+    populate_exec_cmdline(docker_cmd, conf.box_name, "", False, False, (), "`pwd`",
+                          exec_content, extra_flags=" $term_flags")
     # check if ambient capabilities have to be cleared
     if not keep_ambient_caps:
         exec_content.append("/usr/bin/setpriv --ambient-caps -all ")
@@ -672,14 +676,13 @@ def _get_wrapper_executable(filename: str, conf: StaticConfiguration) -> str:
     return f"{conf.env.user_executables_dir}/{filename}"
 
 
-def _link_man_page(file: str, shared_root: str, conf: StaticConfiguration,
+def _link_man_page(file: str, container_root: str, conf: StaticConfiguration,
                    wrapper_files: list[str]) -> None:
     """
-    For an executable, create a wrapper executable that invokes "podman/docker exec".
+    Link man pages of the given program (`file`) in the user's host standard man directory.
 
-    :param file: full path of the executable file being wrapped
-    :param shared_root: the local shared root directory if `shared_root` is provided
-                        for the container
+    :param file: full path of the executable file for which the man page has to be linked
+    :param container_root: the directory on the host used for the root subdirs of the container
     :param conf: the :class:`StaticConfiguration` for the container
     :param wrapper_files: the accumulated list of all wrapper files so far
     """
@@ -688,5 +691,5 @@ def _link_man_page(file: str, shared_root: str, conf: StaticConfiguration,
     print_notice(f"Linking man page {file} to {linked_man_page}")
     linked_man_page.parent.mkdir(parents=True, exist_ok=True)
     linked_man_page.unlink(missing_ok=True)
-    linked_man_page.symlink_to(f"{shared_root}{file}")
+    linked_man_page.symlink_to(f"{container_root}{file}")
     wrapper_files.append(str(linked_man_page))

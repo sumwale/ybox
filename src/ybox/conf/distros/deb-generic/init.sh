@@ -6,6 +6,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
+# switch to sudo.ws in newer Ubuntu releases since sudo-rs does not support "sudo -E"
+if update-alternatives --query sudo 2>/dev/null | grep -q '^[[:space:]]*Value:[[:space:]]*/usr/lib/cargo/bin/sudo'; then
+  update-alternatives --set sudo /usr/bin/sudo.ws
+fi
+
 if [ -f /etc/dpkg/dpkg.cfg.d/excludes ]; then
   echo_color "$fg_cyan" "Removing dpkg excludes" >> $status_file
   mv /etc/dpkg/dpkg.cfg.d/excludes /etc/dpkg/dpkg.cfg.d/excludes.dpkg-tmp

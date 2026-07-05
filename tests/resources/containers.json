@@ -11,20 +11,20 @@
         "profile": "profiles/games.ini",
         "destroy": false
     },
-    "ubuntu2204_games": {
-        "distribution": "ubuntu2204",
-        "shared_root": "$HOME/.local/share/ybox/ROOTS/ub2204",
+    "ubuntu2404_games": {
+        "distribution": "ubuntu2404",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/ub2404",
         "profile": "profiles/games.ini",
         "destroy": false
     },
-    "ybox-ubuntu2204_apps": {
-        "distribution": "ubuntu2204",
-        "shared_root": "$HOME/.local/share/ybox/ROOTS/ub2204",
+    "ybox-ubuntu2404_apps": {
+        "distribution": "ubuntu2404",
+        "shared_root": "$HOME/.local/share/ybox/ROOTS/ub2404",
         "profile": "profiles/apps.ini",
         "destroy": true
     },
-    "ybox-ubuntu2204_games": {
-        "distribution": "ubuntu2204",
+    "ybox-ubuntu2404_games": {
+        "distribution": "ubuntu2404",
         "shared_root": "",
         "profile": "profiles/games.ini",
         "destroy": true

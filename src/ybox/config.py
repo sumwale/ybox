@@ -4,6 +4,8 @@ Configuration locations, distribution and box name of ybox container.
 
 import os
 import re
+import shutil
+import subprocess
 from typing import Iterable
 
 from .env import Environ
@@ -33,6 +35,9 @@ class StaticConfiguration:
         if os.path.exists("/etc/timezone"):
             with open("/etc/timezone", "r", encoding="utf-8") as timezone:
                 self._timezone = timezone.read().rstrip("\n")
+        elif (tdctl := shutil.which("timedatectl", path=os.pathsep.join(Consts.sys_bin_dirs()))):
+            self._timezone = subprocess.check_output([tdctl, "show", "--property=Timezone",
+                                                      "--value"]).decode("utf-8").rstrip("\n")
         self._pager = os.environ.get("YBOX_PAGER", Consts.default_pager())
         container_dir = f"{env.data_dir}/{box_name}"
         os.environ["YBOX_CONTAINER_DIR"] = container_dir
@@ -45,6 +50,7 @@ class StaticConfiguration:
         self._config_list = f"{self._scripts_dir}/config.list"
         self._app_list = f"{self._scripts_dir}/app.list"
         self._startup_list = f"{self._scripts_dir}/startup.list"
+        self._container_config_dir = env.container_config_dir(box_name)
 
     @property
     def env(self) -> Environ:
@@ -83,6 +89,13 @@ class StaticConfiguration:
         """
         return self._shared_box_image if has_shared_root else self._box_image
 
+    def unshared_root(self) -> str:
+        """
+        path of the directory on the host used for storing root subdirs of the container for the
+        case when `shared_root` is not set (i.e. a unique directory is used for the container).
+        """
+        return f"{self._env.data_dir}/{self._box_name}/ROOT"
+
     @property
     def localtime(self) -> str | None:
         """the target link for /etc/localtime"""
@@ -90,7 +103,7 @@ class StaticConfiguration:
 
     @property
     def timezone(self) -> str | None:
-        """the contents of /etc/timezone"""
+        """the contents of /etc/timezone or output of timedatectl"""
         return self._timezone
 
     @property
@@ -139,6 +152,11 @@ class StaticConfiguration:
     def startup_list(self) -> str:
         """file containing list of commands to be executed in the container on startup"""
         return self._startup_list
+
+    @property
+    def container_config_dir(self) -> str:
+        """directory where container specific configuration files are stored"""
+        return self._container_config_dir
 
 
 class Consts:
@@ -195,8 +213,8 @@ class Consts:
                 "prime-run", "run-in-dir", Consts.run_user_bash_cmd())
 
     @staticmethod
-    def shared_root_mount_dir() -> str:
-        """directory where shared root directory is mounted in a container during setup"""
+    def root_mount_dir() -> str:
+        """directory where container's root directory is mounted in a container during setup"""
         return "/ybox-root"
 
     @staticmethod
@@ -265,3 +283,18 @@ class Consts:
     def default_key_server() -> str:
         """default gpg key server to use when not specified in the distribution's `distro.ini`"""
         return "hkps://keys.openpgp.org"
+
+    @staticmethod
+    def container_env_file() -> str:
+        """file having a container's environment variables required by `podman/docker run`"""
+        return "env"
+
+    @staticmethod
+    def container_args_file() -> str:
+        """file having a container's `podman/docker run` arguments separated by newlines"""
+        return "args"
+
+    @staticmethod
+    def container_dynamic_args_file() -> str:
+        """file having a container's dynamic arguments (with `DynamicToken` names)"""
+        return "args.dyn"

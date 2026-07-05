@@ -51,21 +51,26 @@ def stop_container(docker_cmd: str, args: argparse.Namespace):
     :param docker_cmd: the podman/docker executable to use
     :param args: arguments having all attributes passed by the user
     """
-    _stop_container(docker_cmd, args.container, args.timeout,
-                    fail_on_error=not args.ignore_stopped)
+    stop_container_impl(docker_cmd, args.container, args.timeout, args.rm, args.force_rm,
+                        ignore_stopped=args.ignore_stopped)
 
 
-def _stop_container(docker_cmd: str, container_name: str, timeout: int,
-                    fail_on_error: bool):
+def stop_container_impl(docker_cmd: str, container_name: str, timeout: int,
+                        remove: bool, force_remove: bool, ignore_stopped: bool):
     """
     Stop an active ybox container.
 
     :param docker_cmd: the podman/docker executable to use
     :param container_name: name of the container
     :param timeout: seconds to wait for container to stop before killing the container
-    :param fail_on_error: if True then show error message on failure to stop else ignore
+    :param remove: also remove the container after a successful stop
+    :param force_remove: force remove the container after a successful stop
+    :param ignore_stopped: if True then ignore if container is already stopped/removed else
+                           show error message on failure and exit with error
     """
-    if check_active_ybox(docker_cmd, container_name):
+    exit_code = 0
+    ybox_state = get_ybox_state(docker_cmd, container_name, expected_states=())
+    if ybox_state and ybox_state[0] in ("running", "stopping"):
         print_color(f"Stopping ybox container '{container_name}'", fg=fgcolor.cyan)
         run_command([docker_cmd, "container", "stop", "-t", str(timeout), container_name],
                     error_msg="container stop")
@@ -73,13 +78,30 @@ def _stop_container(docker_cmd: str, container_name: str, timeout: int,
             time.sleep(0.5)
             if get_ybox_state(docker_cmd, container_name, ("exited", "stopped"),
                               exit_on_error=False, state_msg=" stopped"):
-                return
-        print_error(f"Failed to stop ybox container '{container_name}'")
-    elif fail_on_error:
+                exit_code = 0
+                break
+        else:
+            print_error(f"Failed to stop ybox container '{container_name}'")
+            exit_code = 1
+    elif not ignore_stopped:
         print_error(f"No active ybox container '{container_name}' found")
         sys.exit(1)
-    else:
-        print_color(f"No active ybox container '{container_name}' found", fg=fgcolor.cyan)
+
+    action = "stop"
+    if remove and ybox_state:
+        action = "remove"
+        print_color(f"Removing ybox container '{container_name}'", fg=fgcolor.cyan)
+        exit_code = run_command([docker_cmd, "container", "rm", container_name],
+                                exit_on_error=False, error_msg="container rm")
+    elif force_remove and ybox_state:
+        action = "force remove"
+        print_color(f"Forcibly removing ybox container '{container_name}'", fg=fgcolor.cyan)
+        exit_code = run_command([docker_cmd, "container", "rm", "-t", str(timeout), "--force",
+                                 container_name], exit_on_error=False,
+                                error_msg="container rm --force")
+    if exit_code != 0 and not ignore_stopped:
+        print_error(f"Failed to {action} ybox container '{container_name}' (code = {exit_code})")
+        sys.exit(int(exit_code))
 
 
 def restart_container(docker_cmd: str, args: argparse.Namespace):
@@ -89,7 +111,8 @@ def restart_container(docker_cmd: str, args: argparse.Namespace):
     :param docker_cmd: the podman/docker executable to use
     :param args: arguments having all attributes passed by the user
     """
-    _stop_container(docker_cmd, args.container, timeout=int(args.timeout / 2), fail_on_error=False)
+    stop_container_impl(docker_cmd, args.container, timeout=int(args.timeout / 2), remove=False,
+                        force_remove=False, ignore_stopped=True)
     start_container(docker_cmd, args)
 
 
@@ -114,8 +137,11 @@ def wait_for_container_stop(docker_cmd: str, args: argparse.Namespace) -> None:
     :param docker_cmd: the podman/docker executable to use
     :param args: arguments having all attributes passed by the user
     """
-    while check_active_ybox(docker_cmd, args.container):
-        time.sleep(2)
+    for _ in range(args.timeout):
+        if not check_active_ybox(docker_cmd, args.container):
+            return
+        time.sleep(1)
+    sys.exit(1)
 
 
 def main_argv(argv: list[str]) -> None:
@@ -149,6 +175,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     stop = operations.add_parser("stop", help="stop a ybox container")
     _add_subparser_args(stop, 10,
                         "time in seconds to wait for a container to stop before killing it")
+    stop.add_argument("-R", "--rm", action="store_true",
+                      help="also remove the container after a successful stop")
+    stop.add_argument("-F", "--force-rm", action="store_true",
+                      help="force removal of the container (implies -R/--rm)")
     stop.add_argument("-I", "--ignore-stopped", action="store_true",
                       help="don't fail on an already stopped container")
     stop.set_defaults(func=stop_container)
@@ -162,7 +192,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     status.set_defaults(func=show_container_status)
 
     wait = operations.add_parser("wait", help="wait for an active ybox container to stop")
-    _add_subparser_args(wait, 0, "")
+    _add_subparser_args(wait, sys.maxsize, "time in seconds to wait for the container to stop")
     wait.set_defaults(func=wait_for_container_stop)
 
     parser_version_check(parser, argv)
@@ -180,5 +210,5 @@ def _add_subparser_args(subparser: argparse.ArgumentParser, timeout_default: int
     """
     if timeout_default != 0:
         subparser.add_argument("-t", "--timeout", type=int, default=timeout_default,
-                               help=timeout_help)
+                               help=f"{timeout_help} (default is {timeout_default} secs)")
     subparser.add_argument("container", help="name of the ybox")

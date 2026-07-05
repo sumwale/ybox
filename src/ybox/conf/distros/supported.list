@@ -1,5 +1,6 @@
 arch
+cachyos
+ubuntu2604
 ubuntu2404
-ubuntu2204
 deb-stable
 deb-oldstable
