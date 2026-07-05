@@ -283,3 +283,18 @@ class Consts:
     def default_key_server() -> str:
         """default gpg key server to use when not specified in the distribution's `distro.ini`"""
         return "hkps://keys.openpgp.org"
+
+    @staticmethod
+    def container_env_file() -> str:
+        """file having a container's environment variables required by `podman/docker run`"""
+        return "env"
+
+    @staticmethod
+    def container_args_file() -> str:
+        """file having a container's `podman/docker run` arguments separated by newlines"""
+        return "args"
+
+    @staticmethod
+    def container_dynamic_args_file() -> str:
+        """file having a container's dynamic arguments (with `DynamicToken` names)"""
+        return "args.dyn"

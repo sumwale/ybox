@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from ybox.cmd import parser_version_check, run_command
+from ybox.config import Consts
 from ybox.env import Environ
 from ybox.print import print_error, print_info
 from ybox.run.control import stop_container_impl, wait_for_container_stop
@@ -49,8 +50,9 @@ def launch_container(env: Environ, container_name: str) -> None:
     :param container_name: name of the ybox container
     """
     container_config_dir = env.container_config_dir(container_name)
-    run_args_str = Path(container_config_dir, "args").read_text(encoding="utf-8")
-    dyn_args_file = Path(container_config_dir, "args.dyn")
+    run_args_file = Path(container_config_dir, Consts.container_args_file())
+    run_args_str = run_args_file.read_text(encoding="utf-8")
+    dyn_args_file = Path(container_config_dir, Consts.container_dynamic_args_file())
     if dyn_args_file.exists():
         dyn_args_str = dyn_args_file.read_text(encoding="utf-8")
         resolved_dyn_args = [DynamicToken[fname].value[0]() for fname in dyn_args_str.splitlines()]

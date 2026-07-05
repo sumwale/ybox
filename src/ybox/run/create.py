@@ -1393,11 +1393,13 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
         YBOX_CONTAINER_MANAGER={docker_full_cmd[0]}
     """
     os.makedirs(conf.container_config_dir, Consts.default_directory_mode(), exist_ok=True)
-    with open(f"{conf.container_config_dir}/env", "w", encoding="utf-8") as env_fd:
+    with open(f"{conf.container_config_dir}/{Consts.container_env_file()}", "w",
+              encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content))
-    with open(f"{conf.container_config_dir}/args", "w", encoding="utf-8") as args_fd:
+    with open(f"{conf.container_config_dir}/{Consts.container_args_file()}", "w",
+              encoding="utf-8") as args_fd:
         print(*container_run_args, sep="\n", file=args_fd)
-    dyn_file = "args.dyn"
+    dyn_file = Consts.container_dynamic_args_file()
     if docker_dynamic_args:
         with open(f"{conf.container_config_dir}/{dyn_file}", "w", encoding="utf-8") as args_dyn_fd:
             print(*docker_dynamic_args, sep="\n", file=args_dyn_fd)
@@ -1438,7 +1440,7 @@ def create_and_start_service(conf: StaticConfiguration, systemctl: str, sys_path
     systemd_dir = env.systemd_user_conf_dir()
     ybox_svc = f"{ybox_service_prefix(conf.box_name)}.service"
     formatted_now = env.now.astimezone().strftime("%a %d %b %Y %H:%M:%S %Z")
-    env_file = Path(conf.container_config_dir, "env").relative_to(Path(env.home))
+    env_file = Path(conf.container_config_dir, Consts.container_env_file()).relative_to(env.home)
     svc_content = svc_tmpl.format(name=conf.box_name, version=product_version, date=formatted_now,
                                   docker_requires=docker_requires, sys_path=sys_path,
                                   # use %h instead of user's home to keep it generic
@@ -1476,7 +1478,7 @@ def create_autostart_file(conf: StaticConfiguration) -> None:
     tmpl_file = env.search_config_path("resources/ybox-autostart.template", only_sys_conf=True)
     with tmpl_file.open("r", encoding="utf-8") as autostart_fd:
         autostart_tmpl = autostart_fd.read()
-    env_file = Path(conf.container_config_dir, "env").relative_to(env.home)
+    env_file = Path(conf.container_config_dir, Consts.container_env_file()).relative_to(env.home)
     autostart_content = autostart_tmpl.format(name=conf.box_name, version=product_version,
                                               date=formatted_now, env_file=env_file,
                                               # use $HOME instead of user's home to keep it generic
