@@ -213,6 +213,7 @@ def main_argv(argv: list[str]) -> None:
     print_info(f"Starting the final container '{box_name}'")
     Path(f"{conf.scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o644)
     # create the final argument and environment files
+    print_color(f"Updating configuration files in '{conf.container_config_dir}'", fgcolor.cyan)
     create_container_configs(conf, docker_full_args, docker_dynamic_args, False)
     if not args.skip_systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
@@ -1353,6 +1354,8 @@ def run_container(docker_full_cmd: list[str], docker_dynamic_args: list[str], cu
         docker_full_cmd.append(f"{conf.target_scripts_dir}/startup.list")
     docker_full_cmd.append(conf.box_name)
 
+    print_color(f"Generating configuration files in '{conf.container_config_dir}' used by the "
+                "ybox container services", fgcolor.cyan)
     create_container_configs(conf, docker_full_cmd, docker_dynamic_args, True)
     launch_container(conf.env, conf.box_name)
 
@@ -1389,8 +1392,6 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
         YBOX_CONTAINER_MANAGER={docker_full_cmd[0]}
     """
     os.makedirs(conf.container_config_dir, Consts.default_directory_mode(), exist_ok=True)
-    print_color(f"Generating argument and environment files in '{conf.container_config_dir}' "
-                "used by the ybox container services", fgcolor.cyan)
     with open(f"{conf.container_config_dir}/env", "w", encoding="utf-8") as env_fd:
         env_fd.write(dedent(env_content))
     with open(f"{conf.container_config_dir}/args", "w", encoding="utf-8") as args_fd:
