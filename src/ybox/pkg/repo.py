@@ -11,7 +11,8 @@ from typing import Iterable, Sequence
 
 from ybox.cmd import (PkgMgr, RepoCmd, build_shell_command, page_output,
                       run_command)
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.print import fgcolor as fg
 from ybox.print import print_error, print_info, print_warn
 from ybox.state import RuntimeConfiguration, YboxStateManagement

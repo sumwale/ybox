@@ -21,7 +21,8 @@ from tabulate import tabulate
 from ybox import __version__ as product_version
 
 from .cmd import build_shell_command, check_active_ybox
-from .config import Consts, StaticConfiguration
+from .config import StaticConfiguration
+from .consts import Consts
 from .env import Environ, PathName
 from .print import fgcolor as fg
 from .print import get_terminal_width, print_error, print_warn

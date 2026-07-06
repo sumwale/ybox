@@ -20,7 +20,8 @@ from packaging.version import Version
 
 from ybox import __version__ as product_version
 
-from .config import Consts, StaticConfiguration
+from .config import StaticConfiguration
+from .consts import Consts
 from .env import Environ, PathName
 from .print import print_color, print_warn
 from .util import ini_file_reader, resolve_inc_path, write_ybox_version

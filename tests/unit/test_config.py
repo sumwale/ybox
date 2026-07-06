@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from ybox.config import Consts
 from ybox.config import StaticConfiguration as static_conf
+from ybox.consts import Consts
 from ybox.env import Environ
 
 _TEST_DISTRIBUTION = "ybox-distro"

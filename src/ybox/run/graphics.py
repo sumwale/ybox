@@ -8,7 +8,8 @@ from itertools import chain
 from os.path import realpath
 from typing import Iterable
 
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.env import Environ
 from ybox.util import DynamicToken
 

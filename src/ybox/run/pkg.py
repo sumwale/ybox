@@ -9,7 +9,8 @@ from typing import cast
 
 from ybox.cmd import (YboxLabel, check_active_ybox, parser_version_check,
                       run_command)
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.env import Environ
 from ybox.pkg.clean import clean_cache
 from ybox.pkg.info import info_packages

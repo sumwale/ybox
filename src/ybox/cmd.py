@@ -12,9 +12,9 @@ from enum import Enum
 from typing import Callable, Iterable
 
 from ybox import __version__ as product_version
-from ybox.config import Consts
-from ybox.env import Environ
 
+from .consts import Consts
+from .env import Environ
 from .print import print_error, print_info, print_notice, print_warn
 
 # environment variables passed through from host environment to podman/docker executable

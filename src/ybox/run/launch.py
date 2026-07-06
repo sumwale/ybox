@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from ybox.cmd import parser_version_check, run_command
-from ybox.config import Consts
+from ybox.consts import Consts
 from ybox.env import Environ
 from ybox.print import print_error, print_info
 from ybox.run.control import stop_container_impl, wait_for_container_stop
