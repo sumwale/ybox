@@ -172,12 +172,15 @@ def get_all_containers(docker_cmd: str, env: Environ, only_unlaunched: bool = Fa
         return set[str]()
     # also add unlaunched containers using the configuration files
     launched = set(result.splitlines())
-    defined = {d.name for d in Path(env.config_dir, Consts.containers_config_dir()).iterdir()
-               if Path(d, Consts.container_args_file()).exists()}
-    if only_unlaunched:
-        return defined.difference(launched)
-    launched.update(defined)
-    return launched
+    containers_dir = Path(env.config_dir, Consts.containers_config_dir())
+    if containers_dir.exists():
+        defined = {d.name for d in containers_dir.iterdir()
+                   if Path(d, Consts.container_args_file()).exists()}
+        if only_unlaunched:
+            return defined.difference(launched)
+        launched.update(defined)
+        return launched
+    return set[str]() if only_unlaunched else launched
 
 
 def remove_orphans_from_db(valid_containers: set[str], state: YboxStateManagement) -> None:
