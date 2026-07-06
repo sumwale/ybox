@@ -232,4 +232,4 @@ class Environ:
         :param box_name: name of the ybox container
         :return: path of the directory having container's configuration files
         """
-        return f"{self._config_dir}/{Consts.containers_config_dir}/{box_name}"
+        return f"{self._config_dir}/{Consts.containers_config_dir()}/{box_name}"
