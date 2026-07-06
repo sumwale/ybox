@@ -5,8 +5,7 @@ Code for the `ybox-ls` script that is used to show the active or stopped ybox co
 import argparse
 import sys
 
-from ybox.cmd import (YboxLabel, check_ybox_exists, parser_version_check,
-                      run_command)
+from ybox.cmd import YboxLabel, parser_version_check, run_command
 from ybox.env import Environ, get_docker_command
 
 
@@ -50,18 +49,15 @@ def main_argv(argv: list[str]) -> None:
     if list_all:
         # pylint: disable=import-outside-toplevel
         from ybox.print import print_notice
-        from ybox.state import YboxStateManagement
+        from ybox.run.destroy import get_all_containers
 
         print()
         assert env
-        # also list containers that have not been launched using `ybox-launch`
-        with YboxStateManagement(env) as state:
-            state.begin_transaction()
-            for container in state.get_containers():
-                if not check_ybox_exists(docker_cmd, container):
-                    if (config_dir := env.container_config_dir(container)).startswith(env.home):
-                        config_dir = f"~{config_dir[len(env.home):]}"
-                    print_notice(f"Not Launched: {container} (configuration in {config_dir})")
+
+        for unlaunched in get_all_containers(docker_cmd, env, only_unlaunched=True):
+            if (config_dir := env.container_config_dir(unlaunched)).startswith(env.home):
+                config_dir = f"~{config_dir[len(env.home):]}"
+            print_notice(f"Not Launched: {unlaunched} (configuration in {config_dir})")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

@@ -12,7 +12,8 @@ from uuid import uuid4
 
 import pytest
 
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.env import Environ, PathName
 from ybox.print import print_error
 from ybox.util import EnvInterpolation, config_reader

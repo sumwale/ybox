@@ -12,6 +12,7 @@ from datetime import datetime
 from importlib.resources import files
 from pathlib import Path
 
+from .consts import Consts
 from .print import print_error, print_notice
 
 if sys.version_info >= (3, 11):
@@ -231,4 +232,4 @@ class Environ:
         :param box_name: name of the ybox container
         :return: path of the directory having container's configuration files
         """
-        return f"{self._config_dir}/containers/{box_name}"
+        return f"{self._config_dir}/{Consts.containers_config_dir}/{box_name}"

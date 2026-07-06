@@ -20,7 +20,7 @@ import pytest
 from unit.util import (RESOURCES_DIR, ContainerDetails, PackageDetails,
                        read_containers_and_packages)
 
-from ybox.config import Consts
+from ybox.consts import Consts
 from ybox.env import Environ
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 

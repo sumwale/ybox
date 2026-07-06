@@ -11,7 +11,8 @@ from pathlib import Path
 
 from ybox.cmd import (delete_container_directory, parser_version_check,
                       run_command)
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.env import Environ
 from ybox.pkg.inst import get_parsed_box_conf
 from ybox.print import (fgcolor, print_color, print_error, print_notice,
@@ -72,7 +73,7 @@ def main_argv(argv: list[str]) -> None:
     Path(systemd_dir, f".{ybox_svc_prefix}.env").unlink(missing_ok=True)
 
     # check and remove any dangling container references in state database
-    valid_containers = set(get_all_containers(docker_cmd))
+    valid_containers = get_all_containers(docker_cmd, env)
 
     # remove the state from the database
     print_warn(f"Clearing ybox state for '{container_name}'")
@@ -156,16 +157,27 @@ def check_systemd_service_present(user_svc: str) -> str:
     return ""
 
 
-def get_all_containers(docker_cmd: str) -> list[str]:
+def get_all_containers(docker_cmd: str, env: Environ, only_unlaunched: bool = False) -> set[str]:
     """
     Get all the valid containers as known to the container manager.
 
     :param docker_cmd: the podman/docker executable to use
+    :param env: an instance of the current :class:`Environ`
+    :param only_unlaunched: if True then return only the containers that have not been launched yet
     :return: list of valid container names
     """
     result = run_command([docker_cmd, "container", "ls", "--all", "--format={{ .Names }}"],
                          capture_output=True, exit_on_error=False, error_msg="listing containers")
-    return [] if isinstance(result, int) else result.splitlines()
+    if isinstance(result, int):
+        return set[str]()
+    # also add unlaunched containers using the configuration files
+    launched = set(result.splitlines())
+    defined = {d.name for d in Path(env.config_dir, Consts.containers_config_dir()).iterdir()
+               if Path(d, Consts.container_args_file()).exists()}
+    if only_unlaunched:
+        return defined.difference(launched)
+    launched.update(defined)
+    return launched
 
 
 def remove_orphans_from_db(valid_containers: set[str], state: YboxStateManagement) -> None:

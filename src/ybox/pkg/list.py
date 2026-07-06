@@ -9,7 +9,8 @@ from configparser import SectionProxy
 from typing import Callable
 
 from ybox.cmd import PkgMgr, page_command
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.print import fgcolor as fg
 from ybox.print import print_warn
 from ybox.state import RuntimeConfiguration, YboxStateManagement

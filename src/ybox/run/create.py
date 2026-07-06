@@ -23,7 +23,8 @@ from ybox import __version__ as product_version
 from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
                       delete_container_directory, parser_version_check,
                       run_command)
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.env import Environ, NotSupportedError, PathName
 from ybox.filelock import FileLock
 from ybox.pkg.inst import install_package, wrap_container_files
@@ -240,7 +241,7 @@ def main_argv(argv: list[str]) -> None:
         truncate_file(conf.config_list)
 
     # check and remove any dangling container references in state database
-    valid_containers = set(get_all_containers(docker_cmd))
+    valid_containers = get_all_containers(docker_cmd, env)
 
     # finally add the state and register the installed packages that were reassigned to this
     # container (because the previously destroyed one has the same configuration and shared root)

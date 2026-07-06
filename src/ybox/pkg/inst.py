@@ -18,7 +18,8 @@ from simple_term_menu import TerminalMenu  # type: ignore
 
 from ybox.cmd import (PkgMgr, build_shell_command, populate_exec_cmdline,
                       run_command)
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.print import print_error, print_info, print_notice, print_warn
 from ybox.state import (CopyType, DependencyType, RuntimeConfiguration,
                         YboxStateManagement)

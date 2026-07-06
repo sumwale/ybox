@@ -10,7 +10,8 @@ from configparser import ConfigParser
 from pathlib import Path
 from typing import cast
 
-from ybox.config import Consts, StaticConfiguration
+from ybox.config import StaticConfiguration
+from ybox.consts import Consts
 from ybox.util import copy_ybox_scripts_to_container
 
 # the two variables below should be passed as local variables to `exec`
