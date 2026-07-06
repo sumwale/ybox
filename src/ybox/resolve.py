@@ -21,6 +21,8 @@ VersionCompare: TypeAlias = Callable[[Any, Any], bool]
 
 @dataclass
 class PackageCondition:
+    """_summary_
+    """
     name: Final[str]
     arch: Final[str]
     version: Final[str]  # optionally a version to be compared against
@@ -28,13 +30,22 @@ class PackageCondition:
     _version_cmp_op: VersionCompare | None = None  # function equivalent of `version_cmp`
 
     def __hash__(self) -> int:
+        """_summary_
+        """
         return hash((self.name, self.version, self.version_cmp))
 
     def __eq__(self, other: Any) -> bool:
+        """
+
+        :param other: _description_
+        :return: _description_
+        """
         return isinstance(other, PackageCondition) and self.name == other.name and self.arch == \
             other.arch and self.version == other.version and self.version_cmp == other.version_cmp
 
     def __str__(self) -> str:
+        """_summary_
+        """
         name_arch = f"{self.name}:{self.arch}" if self.arch else self.name
         return f"{name_arch}{self.version_cmp}{self.version}" if self.version else name_arch
 
@@ -44,7 +55,7 @@ class PackageCondition:
     def version_cmp_op(self) -> VersionCompare | None:
         """equivalent function for `version_cmp` from the `operator` module"""
         if self.version and not self._version_cmp_op:
-            if self.version_cmp == "=" or self.version_cmp == "==":
+            if self.version_cmp in ("=", "=="):
                 self._version_cmp_op = operator.eq
             elif self.version_cmp == ">":
                 self._version_cmp_op = operator.gt
@@ -54,13 +65,13 @@ class PackageCondition:
                 self._version_cmp_op = operator.ge
             elif self.version_cmp == "<=":
                 self._version_cmp_op = operator.le
-            elif self.version_cmp == "<>" or self.version_cmp == "!=":
+            elif self.version_cmp in ("<>", "!="):
                 self._version_cmp_op = operator.ne
             elif not self.version_cmp:
                 raise TypeError(f"No version comparison operator for version '{self.version}")
             else:
                 raise TypeError(f"Unknown version comparison operator '{self.version_cmp}'")
-        self._version_cmp_op
+        return self._version_cmp_op
 
 
 # Package conditions that are ANDed (e.g. <pkg1> = 1.1, <pkg2> >= 2.0)
@@ -81,6 +92,8 @@ class DependencyType(str, Enum):
 
 @dataclass
 class Package:
+    """_summary_
+    """
     name: Final[str]
     arch: Final[str]
     version: Final[str]
@@ -95,13 +108,22 @@ class Package:
     transformed: bool = False
 
     def __hash__(self) -> int:
+        """_summary_
+        """
         return hash((self.name, self.arch, self.version))
 
     def __eq__(self, other: Any) -> bool:
+        """
+
+        :param other: _description_
+        :return: _description_
+        """
         return isinstance(other, Package) and self.name == other.name \
             and self.arch == other.arch and self.version == other.version
 
     def __str__(self) -> str:
+        """_summary_
+        """
         if self.provided_by:
             return f"[{self.provided_by} provides {self.name}={self.version}]" if self.version \
                 else f"[{self.provided_by} provides {self.name}]"
@@ -115,26 +137,48 @@ CandidatePackages = list[tuple[PackageCondition, list[Package]]]
 
 
 class BasePackageCollection(ABC):
+    """_summary_
+    """
 
     # split package name, architecture and its comparison against a version
     PKG_COND_RE = re.compile(r"\s*([^=<>!:\s]+)(:[^=<>!:\s]+)?\s*(([=<>!]+)\s*(\S+)\s*)?")
 
     @abstractmethod
     def platform_architecture(self) -> str:
-        ...
+        """_summary_
+        """
 
     @abstractmethod
     def version_compare(self, v1: str, v2: str) -> int:
-        ...
+        """
+
+        :param v1: _description_
+        :param v2: _description_
+        :return: _description_
+        """
 
     def cannonical_name(self, pkg: str) -> str:
+        """
+
+        :param pkg: _description_
+        :return: _description_
+        """
         return pkg
 
     def package_condition_has_arch(self) -> bool:
+        """_summary_
+        """
         return True
 
     def parse_package_condition(self, pkg_dep: str, pkg_cond: re.Pattern[str] = PKG_COND_RE,
                                 default_arch: str = "") -> PackageCondition:
+        """
+
+        :param pkg_dep: _description_
+        :param pkg_cond: _description_, defaults to PKG_COND_RE
+        :param default_arch: _description_, defaults to ""
+        :return: _description_
+        """
         if mt := pkg_cond.fullmatch(pkg_dep):
             index_inc = 0
             if self.package_condition_has_arch():
@@ -151,8 +195,15 @@ class BasePackageCollection(ABC):
 
 
 class PackageMap(BasePackageCollection):
+    """_summary_
+    """
 
     def add_conflicts(self, pkg: Package, conflicts: ConflictMap) -> None:
+        """
+
+        :param pkg: _description_
+        :param conflicts: _description_
+        """
         conflicts[pkg.name].append(PackageCondition(pkg.name, pkg.arch, pkg.version,
                                                     "=", operator.eq))
         if pkg.conflicts:
@@ -160,20 +211,43 @@ class PackageMap(BasePackageCollection):
                 conflicts[conflict.name].append(conflict)
 
     def verify_package_arch(self, pkg: Package, arch: str) -> bool:
-        return pkg.arch == arch or pkg.arch == "all" or pkg.arch == "any"
+        """
+
+        :param pkg: _description_
+        :param arch: _description_
+        :return: _description_
+        """
+        return pkg.arch in (arch, "all", "any")
 
     def verify_package_condition(self, pkg: Package, pkg_cond: PackageCondition) -> bool:
+        """
+
+        :param pkg: _description_
+        :param pkg_cond: _description_
+        :return: _description_
+        """
         cmp = pkg_cond.version_cmp_op
         return self.verify_package_arch(pkg, pkg_cond.arch) and (not pkg_cond.version or (
             cmp is not None and cmp(self.version_compare(pkg.version, pkg_cond.version), 0)))
 
     def full_package_name(self, pkg: Package) -> str:
+        """
+
+        :param pkg: _description_
+        :return: _description_
+        """
         if not pkg.arch or self.verify_package_arch(pkg, self.platform_architecture()):
             return pkg.name
         return f"{pkg.name}:{pkg.arch}"
 
     def _check_packages_in_map(self, resolve_pkgs: Iterable[PackageCondition],
                                resolved: CandidatePackages) -> Iterable[PackageCondition]:
+        """
+
+        :param resolve_pkgs: _description_
+        :param resolved: _description_
+        :return: _description_
+        """
         remaining_pkgs = ()
         for pkg in resolve_pkgs:
             candidates: list[Package] | None = None
@@ -203,73 +277,143 @@ class PackageMap(BasePackageCollection):
     @abstractmethod
     def build_package_map(self, conflicts: ConflictMap,
                           resolve_pkgs: Iterable[PackageCondition]) -> CandidatePackages:
-        ...
+        """
+
+        :param conflicts: _description_
+        :param resolve_pkgs: _description_
+        :return: _description_
+        """
 
     @abstractmethod
     def lookup(self, pkg_name: str) -> Iterable[Package]:
-        ...
+        """
+
+        :param pkg_name: _description_
+        :return: _description_
+        """
 
     @abstractmethod
     def finalize_package_desc(self, pkg: Package) -> None:
-        ...
+        """
+
+        :param pkg: _description_
+        """
 
     @abstractmethod
     def finalize_package_deps(self, pkg: Package) -> None:
-        ...
+        """
+
+        :param pkg: _description_
+        """
 
     @abstractmethod
     def clear(self) -> None:
-        ...
+        """_summary_
+        """
 
 
 class DistributionPackages(BasePackageCollection):
+    """_summary_
+    """
 
     @abstractmethod
     def populate_primary_packages(self, package_map: 'DistributionPackageMap',
                                   conflicts: ConflictMap,
                                   resolve_pkgs: Iterable[PackageCondition]) -> None:
-        ...
+        """
+
+        :param package_map: _description_
+        :param conflicts: _description_
+        :param resolve_pkgs: _description_
+        """
 
     @abstractmethod
     def has_extra_packages(self) -> bool:
-        ...
+        """_summary_
+        """
 
     @abstractmethod
     def populate_extra_packages(self, package_map: 'DistributionPackageMap', conflicts: ConflictMap,
                                 resolve_pkgs: Iterable[PackageCondition]) -> None:
-        ...
+        """
+
+        :param package_map: _description_
+        :param conflicts: _description_
+        :param resolve_pkgs: _description_
+        """
 
     def transform_description(self, desc: Any) -> Any:
+        """
+
+        :param desc: _description_
+        :return: _description_
+        """
         return desc
 
     @abstractmethod
     def transform_package_conditions(self, pkg: Package, pkg_conds: Any,
                                      dep_type: DependencyType) -> Iterable[PackageCondition]:
-        ...
+        """
+
+        :param pkg: _description_
+        :param pkg_conds: _description_
+        :param dep_type: _description_
+        :return: _description_
+        """
 
     @abstractmethod
     def transform_or_package_conditions(
             self, pkg: Package, pkg_conds: Any,
             dep_type: DependencyType) -> Iterable[Iterable[PackageCondition]]:
-        ...
+        """
+
+        :param pkg: _description_
+        :param pkg_conds: _description_
+        :param dep_type: _description_
+        :return: _description_
+        """
 
 
 class DistributionPackageMap(PackageMap):
+    """_summary_
+    """
 
     def __init__(self, distro_pkgs: DistributionPackages):
+        """
+
+        :param distro_pkgs: _description_
+        """
         self._distro_pkgs = distro_pkgs
         self._package_map = defaultdict[str, list[Package]](list[Package])
 
     def platform_architecture(self) -> str:
+        """_summary_
+        """
         return self._distro_pkgs.platform_architecture()
 
     def version_compare(self, v1: str, v2: str) -> int:
+        """
+
+        :param v1: _description_
+        :param v2: _description_
+        :return: _description_
+        """
         return self._distro_pkgs.version_compare(v1, v2)
 
     def cannonical_name(self, pkg: str) -> str:
+        """
+
+        :param pkg: _description_
+        :return: _description_
+        """
         return self._distro_pkgs.cannonical_name(pkg)
 
     def add_package(self, pkg: Package, conflicts: ConflictMap | None) -> None:
+        """
+
+        :param pkg: _description_
+        :param conflicts: _description_
+        """
         self._package_map[pkg.name].append(pkg)
         if conflicts and pkg.installed:
             self.add_conflicts(pkg, conflicts)
@@ -285,6 +429,12 @@ class DistributionPackageMap(PackageMap):
 
     def build_package_map(self, conflicts: ConflictMap,
                           resolve_pkgs: Iterable[PackageCondition]) -> CandidatePackages:
+        """
+
+        :param conflicts: _description_
+        :param resolve_pkgs: _description_
+        :return: _description_
+        """
         resolved: CandidatePackages = []
         self._distro_pkgs.populate_primary_packages(self, conflicts, resolve_pkgs)
         # check for extra packages only if a given package is not found in the current package map
@@ -298,22 +448,49 @@ class DistributionPackageMap(PackageMap):
         return resolved
 
     def lookup(self, pkg_name: str) -> Iterable[Package]:
+        """
+
+        :param pkg_name: _description_
+        :return: _description_
+        """
         return self._package_map.get(pkg_name, ())
 
     def _transform_or_deps(self, pkg: Package, deps: OrPackageConditions,
                            dep_type: DependencyType) -> OrPackageConditions:
+        """
+
+        :param pkg: _description_
+        :param deps: _description_
+        :param dep_type: _description_
+        :return: _description_
+        """
         return self._distro_pkgs.transform_or_package_conditions(pkg, deps, dep_type) \
             if not pkg.transformed and deps else deps
 
     def _transform_deps(self, pkg: Package, deps: PackageConditions,
                         dep_type: DependencyType) -> PackageConditions:
+        """
+
+        :param pkg: _description_
+        :param deps: _description_
+        :param dep_type: _description_
+        :return: _description_
+        """
         return self._distro_pkgs.transform_package_conditions(pkg, deps, dep_type) \
             if not pkg.transformed and deps else deps
 
     def finalize_package_desc(self, pkg: Package) -> None:
+        """
+
+        :param pkg: _description_
+        """
         pkg.desc = self._distro_pkgs.transform_description(pkg.desc)
 
     def finalize_package_deps(self, pkg: Package) -> None:
+        """
+
+        :param pkg: _description_
+        """
         if not pkg.transformed:
             pkg.depends = self._transform_or_deps(pkg, pkg.depends, DependencyType.DEPENDS)
             pkg.recommends = self._transform_or_deps(pkg, pkg.recommends, DependencyType.RECOMMENDS)
@@ -322,15 +499,29 @@ class DistributionPackageMap(PackageMap):
             pkg.transformed = True
 
     def clear(self) -> None:
+        """_summary_
+        """
         self._package_map.clear()
 
 
 class ResolvePackage:
+    """_summary_
+    """
 
     def __init__(self, pkg_map: PackageMap):
+        """
+
+        :param pkg_map: _description_
+        """
         self._package_map = pkg_map
 
     def has_conflict(self, pkg: Package, conflicts: ConflictMap) -> bool:
+        """
+
+        :param pkg: _description_
+        :param conflicts: _description_
+        :return: _description_
+        """
         # TODO: SW: do a proper conflict resolution with a conflict map initially populated
         # with the conflicts from all installed packages;
         # if no alternative satisfies due to conflicts then it can be skipped entirely for
@@ -352,6 +543,14 @@ class ResolvePackage:
     def _loop_package_deps(self, deps: OrDependencies, for_suggests: bool,
                            included_pkg_names: set[str], conflicts: ConflictMap,
                            dep_list: list[list[tuple[str, str, str, bool, bool]]]) -> None:
+        """
+
+        :param deps: _description_
+        :param for_suggests: _description_
+        :param included_pkg_names: _description_
+        :param conflicts: _description_
+        :param dep_list: _description_
+        """
         for dep_alternates in deps:
             dep_alternate_list: list[tuple[str, str, str, bool, bool]] = []
             for dep in dep_alternates:
@@ -378,6 +577,12 @@ class ResolvePackage:
                 dep_list.append(dep_alternate_list)
 
     def select_packages(self, resolved: CandidatePackages, conflicts: ConflictMap) -> list[Package]:
+        """
+
+        :param resolved: _description_
+        :param conflicts: _description_
+        :return: _description_
+        """
         selected: list[Package] = []
         for pkg, candidates in resolved:
             preferred: Package | None = None
@@ -402,6 +607,13 @@ class ResolvePackage:
 
     def find_optional_deps(self, packages: list[Package], conflicts: ConflictMap,
                            include_suggests: bool) -> list[list[tuple[str, str, str, bool, bool]]]:
+        """
+
+        :param packages: _description_
+        :param conflicts: _description_
+        :param include_suggests: _description_
+        :return: _description_
+        """
         all_recommends: OrDependencies = []
         all_suggests: OrDependencies = []
         for selected in packages:
@@ -451,7 +663,11 @@ class ResolvePackage:
                           f"{installed}{sep}{desc}")
 
     def __enter__(self):
+        """_summary_
+        """
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):  # type: ignore
+        """_summary_
+        """
         self._package_map.clear()

@@ -8,6 +8,7 @@ import gzip
 import os
 import platform
 import re
+import shutil
 import sys
 import time
 import zlib
@@ -29,7 +30,8 @@ from ybox.resolve import (ConflictMap, DependencyType, DistributionPackageMap,
 class ArchPackages(DistributionPackages):
 
     _AUR_META_URL = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz"
-    _AUR_META_DIR = f"{os.path.expanduser('~/.cache')}/archresolve"
+    _USER_CACHE_DIR = f"{os.path.expanduser('~')}/.cache"
+    _AUR_META_DIR = f"{_USER_CACHE_DIR}/archresolve"
     _AUR_META_FILE = f"{_AUR_META_DIR}/packages-meta-ext-v1.json.gz"
     # parallel download using aria2 is much faster on slower networks
     _FETCH_AUR_META = f"/usr/bin/aria2c -x8 -j8 -s8 -k1M -d{_AUR_META_DIR} {_AUR_META_URL}"
@@ -40,6 +42,10 @@ class ArchPackages(DistributionPackages):
     def __init__(self):
         self._handle = Handle("/", "/var/lib/pacman")
         self._platform_arch = platform.uname().machine
+        # remove the old _AUR_META_DIR
+        old_meta_dir = f"{self._USER_CACHE_DIR}/pkgdeps"
+        if os.path.isdir(old_meta_dir):
+            shutil.rmtree(old_meta_dir, ignore_errors=True)
 
     def _refresh_aur_metadata(self, raise_error: bool) -> bool:
         """
@@ -53,14 +59,16 @@ class ArchPackages(DistributionPackages):
             meta_file = Path(self._AUR_META_FILE)
             meta_file.unlink(missing_ok=True)
             # delete any partial file in case of download failure
-            if (code := int(run_command(self._FETCH_AUR_META, exit_on_error=False))) != 0:
+            if (code := int(run_command(self._FETCH_AUR_META, exit_on_error=False,
+                                        error_msg="fetching AUR metadata file using aria2c"))) != 0:
                 meta_file.unlink(missing_ok=True)
                 if raise_error:
                     raise RuntimeError(f"Download of AUR metadata failed with exit code {code}")
                 return False
         return True
 
-    def _populate_aur_packages(self, package_map: DistributionPackageMap, raise_error: bool) -> bool:
+    def _populate_aur_packages(self, package_map: DistributionPackageMap,
+                               raise_error: bool) -> bool:
         """
         This will build a list of `Package` objects for all packages present in the AUR repository
         and populates them in the given `DistributionPackageMap`.

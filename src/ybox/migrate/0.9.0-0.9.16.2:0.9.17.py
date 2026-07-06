@@ -1,5 +1,5 @@
 """
-Migrate from 0.9.0 upwards to 0.9.10 that requires copying updated scripts to the container.
+Migrate from 0.9.0 upwards to 0.9.16.2 that requires copying updated scripts to the container.
 
 Invoke this script using `exec` passing the `StaticConfiguration` object as `conf` local variable
 and parsed distribution configuration `ConfigParser` object as `distro_config` local variable.
@@ -29,6 +29,15 @@ if pkgmgr_conf.exists():
 # run entrypoint-root.sh again to refresh scripts and configuration
 subprocess.run([static_conf.env.docker_cmd, "exec", "-it", static_conf.box_name, "/usr/bin/sudo",
                 "/bin/bash", f"{static_conf.target_scripts_dir}/entrypoint-root.sh"])
+# 0.9.17 needs pyalpm for arch/cachyos
+if static_conf.distribution in ("arch", "cachyos"):
+    subprocess.run([static_conf.env.docker_cmd, "exec", "-it", static_conf.box_name, "/bin/sh",
+                   "-c", "/usr/bin/yay -Sy && /usr/bin/yay -S --noconfirm pyalpm"])
+elif static_conf.distribution.startswith("ubuntu") or static_conf.distribution.startswith("deb-"):
+    subprocess.run([static_conf.env.docker_cmd, "exec", "-it", static_conf.box_name,
+                    "/usr/bin/sudo", "/bin/sh", "-c",
+                    "/usr/bin/apt-get -y update && /usr/bin/apt -y install python3-apt"])
+
 
 # touch the file to indicate that first run initialization of entrypoint.sh is complete
 Path(f"{scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o644)
