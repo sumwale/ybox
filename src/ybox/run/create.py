@@ -670,7 +670,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
                     enable_x11(docker_args, docker_dynamic_args)
             case "wayland":
                 if _get_boolean(val):
-                    enable_wayland(docker_args, env)
+                    enable_wayland(docker_args, docker_dynamic_args)
             case "pulseaudio":
                 if _get_boolean(val):
                     enable_pulse(docker_args, env)

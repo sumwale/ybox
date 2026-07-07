@@ -55,9 +55,9 @@ def launch_container(env: Environ, container_name: str) -> None:
     dyn_args_file = Path(container_config_dir, Consts.container_dynamic_args_file())
     if dyn_args_file.exists():
         dyn_args_str = dyn_args_file.read_text(encoding="utf-8")
-        resolved_dyn_args = [DynamicToken[fname].value[0]() for fname in dyn_args_str.splitlines()]
-        run_args = run_args_str.format(*resolved_dyn_args).splitlines()
-        if "" in resolved_dyn_args:
+        dyn_args = [DynamicToken[fname].value[0](env) for fname in dyn_args_str.splitlines()]
+        run_args = run_args_str.format(*dyn_args).splitlines()
+        if "" in dyn_args:
             run_args = [arg for arg in run_args if arg]
     else:
         run_args = run_args_str.splitlines()
