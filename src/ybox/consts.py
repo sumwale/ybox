@@ -132,6 +132,11 @@ class Consts:
         return "hkps://keys.openpgp.org"
 
     @staticmethod
+    def container_manager_envvar() -> str:
+        """environment variable used to externally specify the container manager (podman/docker)"""
+        return "YBOX_CONTAINER_MANAGER"
+
+    @staticmethod
     def containers_config_dir() -> str:
         """base directory name having all the container specific configuration directories"""
         return "containers"

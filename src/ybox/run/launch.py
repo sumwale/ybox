@@ -3,6 +3,7 @@ Code for the `ybox-launch` script that is used to launch an existing ybox contai
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -30,6 +31,14 @@ def main_argv(argv: list[str]) -> None:
     args = parse_args(argv)
     env = Environ()
     container_name = args.container
+    # read YBOX_CONTAINER_MANAGER from the env file and update in env if found
+    container_env = f"{env.container_config_dir(container_name)}/{Consts.container_env_file()}"
+    if os.path.exists(container_env):
+        manager_prefix = f"{Consts.container_manager_envvar()}="
+        with open(container_env, "r", encoding="utf-8") as env_fd:
+            while env_line := env_fd.readline():
+                if env_line.startswith(manager_prefix):
+                    env.set_docker_cmd(env_line[len(manager_prefix):].rstrip())
 
     if args.rm:
         stop_container_impl(env.docker_cmd, container_name, timeout=10, remove=True,
