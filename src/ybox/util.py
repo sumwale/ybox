@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 from simple_term_menu import TerminalMenu  # type: ignore
 from tabulate import tabulate
@@ -366,7 +366,8 @@ class DynamicToken(Enum):
     podman/docker argument.
     """
     @staticmethod
-    def _resolve_dbus_mount() -> str:
+    def _resolve_dbus_mount(env: Environ) -> str:
+        # pylint: disable=unused-argument
         """return the podman/docker argument to mount the socket of user's session D-Bus"""
         if dbus_session := os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
             dbus_path = dbus_session[dbus_session.find("=") + 1:]
@@ -376,13 +377,30 @@ class DynamicToken(Enum):
         return ""
 
     @staticmethod
-    def _resolve_any_mount(name: str) -> str:
+    def _resolve_wayland_mount(env: Environ) -> str:
+        """return the podman/docker argument to mount the Wayland socket"""
+        if wayland_display := os.environ.get("WAYLAND_DISPLAY"):
+            wayland_sock = f"{env.xdg_rt_dir}/{wayland_display}"
+            return f"-v={wayland_sock}:{wayland_sock}"
+        return ""
+
+    @staticmethod
+    def _resolve_any_mount(name: str, env: Environ) -> str:
+        # pylint: disable=unused-argument
         """return the podman/docker argument to mount a path in the given environment variable"""
         if mount_path := os.environ.get(name):
             return f"-v={mount_path}:{mount_path}"
         return ""
 
+    _XAUTH_MOUNT_FN: Callable[[Environ], str] = lambda env: DynamicToken._resolve_any_mount(
+        "XAUTHORITY", env)
+    _SSH_MOUNT_FN: Callable[[Environ], str] = lambda env: DynamicToken._resolve_any_mount(
+        "SSH_AUTH_SOCK", env)
+    _GPG_MOUNT_FN: Callable[[Environ], str] = lambda env: DynamicToken._resolve_any_mount(
+        "GPG_AGENT_INFO", env)
+
     DBUS_MOUNT = (_resolve_dbus_mount,)
-    XAUTHORITY_MOUNT = (lambda: DynamicToken._resolve_any_mount("XAUTHORITY"),)
-    SSH_SOCK_MOUNT = (lambda: DynamicToken._resolve_any_mount("SSH_AUTH_SOCK"),)
-    GPG_AGENT_MOUNT = (lambda: DynamicToken._resolve_any_mount("GPG_AGENT_INFO"),)
+    XAUTHORITY_MOUNT = (_XAUTH_MOUNT_FN,)
+    WAYLAND_MOUNT = (_resolve_wayland_mount,)
+    SSH_SOCK_MOUNT = (_SSH_MOUNT_FN,)
+    GPG_AGENT_MOUNT = (_GPG_MOUNT_FN,)

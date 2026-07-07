@@ -670,7 +670,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
                     enable_x11(docker_args, docker_dynamic_args)
             case "wayland":
                 if _get_boolean(val):
-                    enable_wayland(docker_args, env)
+                    enable_wayland(docker_args, docker_dynamic_args)
             case "pulseaudio":
                 if _get_boolean(val):
                     enable_pulse(docker_args, env)
@@ -1391,7 +1391,7 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
     env_content = f"""
         SLEEP_SECS={sleep_secs}
         # set the container manager to the one configured during ybox-create
-        YBOX_CONTAINER_MANAGER={docker_full_cmd[0]}
+        {Consts.container_manager_envvar()}={docker_full_cmd[0]}
     """
     os.makedirs(conf.container_config_dir, Consts.default_directory_mode(), exist_ok=True)
     with open(f"{conf.container_config_dir}/{Consts.container_env_file()}", "w",
@@ -1480,9 +1480,8 @@ def create_autostart_file(conf: StaticConfiguration) -> None:
     tmpl_file = env.search_config_path("resources/ybox-autostart.template", only_sys_conf=True)
     with tmpl_file.open("r", encoding="utf-8") as autostart_fd:
         autostart_tmpl = autostart_fd.read()
-    env_file = Path(conf.container_config_dir, Consts.container_env_file()).relative_to(env.home)
     autostart_content = autostart_tmpl.format(name=conf.box_name, version=product_version,
-                                              date=formatted_now, env_file=env_file,
+                                              date=formatted_now,
                                               # use $HOME instead of user's home to keep it generic
                                               ybox_bin_dir=_ybox_bin_dir("$HOME", env))
     autostart_file.write_text(autostart_content, encoding="utf-8")

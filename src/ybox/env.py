@@ -33,17 +33,17 @@ def get_docker_command() -> str:
              YBOX_CONTAINER_MANAGER environment variable
     """
     # check for podman first then docker
-    if cmd := os.environ.get("YBOX_CONTAINER_MANAGER"):
+    if cmd := os.environ.get(Consts.container_manager_envvar()):
         if os.access(cmd, os.X_OK):
             return cmd
         raise PermissionError(
-            f"Cannot execute '{cmd}' provided in YBOX_CONTAINER_MANAGER environment variable")
+            f"Cannot execute '{cmd}' in {Consts.container_manager_envvar()} environment variable")
     if os.access("/usr/bin/podman", os.X_OK):
         return "/usr/bin/podman"
     if os.access("/usr/bin/docker", os.X_OK):
         return "/usr/bin/docker"
     raise FileNotFoundError(
-        "No podman/docker found in /usr/bin and $YBOX_CONTAINER_MANAGER not defined")
+        f"No podman/docker found in /usr/bin and ${Consts.container_manager_envvar()} not defined")
 
 
 class NotSupportedError(Exception):
@@ -155,6 +155,10 @@ class Environ:
     def docker_cmd(self) -> str:
         """path of the podman/docker executable to use for all the commands"""
         return self._docker_cmd
+
+    def set_docker_cmd(self, docker_cmd: str) -> None:
+        """update the `docker_cmd` to the given value"""
+        self._docker_cmd = docker_cmd
 
     @property
     def uses_podman(self) -> bool:

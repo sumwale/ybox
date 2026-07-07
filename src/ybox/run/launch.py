@@ -3,6 +3,7 @@ Code for the `ybox-launch` script that is used to launch an existing ybox contai
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -30,6 +31,14 @@ def main_argv(argv: list[str]) -> None:
     args = parse_args(argv)
     env = Environ()
     container_name = args.container
+    # read YBOX_CONTAINER_MANAGER from the env file and update in env if found
+    container_env = f"{env.container_config_dir(container_name)}/{Consts.container_env_file()}"
+    if os.path.exists(container_env):
+        manager_prefix = f"{Consts.container_manager_envvar()}="
+        with open(container_env, "r", encoding="utf-8") as env_fd:
+            while env_line := env_fd.readline():
+                if env_line.startswith(manager_prefix):
+                    env.set_docker_cmd(env_line[len(manager_prefix):].rstrip())
 
     if args.rm:
         stop_container_impl(env.docker_cmd, container_name, timeout=10, remove=True,
@@ -55,9 +64,9 @@ def launch_container(env: Environ, container_name: str) -> None:
     dyn_args_file = Path(container_config_dir, Consts.container_dynamic_args_file())
     if dyn_args_file.exists():
         dyn_args_str = dyn_args_file.read_text(encoding="utf-8")
-        resolved_dyn_args = [DynamicToken[fname].value[0]() for fname in dyn_args_str.splitlines()]
-        run_args = run_args_str.format(*resolved_dyn_args).splitlines()
-        if "" in resolved_dyn_args:
+        dyn_args = [DynamicToken[fname].value[0](env) for fname in dyn_args_str.splitlines()]
+        run_args = run_args_str.format(*dyn_args).splitlines()
+        if "" in dyn_args:
             run_args = [arg for arg in run_args if arg]
     else:
         run_args = run_args_str.splitlines()

@@ -10,7 +10,6 @@ from typing import Iterable
 
 from ybox.config import StaticConfiguration
 from ybox.consts import Consts
-from ybox.env import Environ
 from ybox.util import DynamicToken
 
 # standard library directories to search for NVIDIA libraries
@@ -86,19 +85,19 @@ def enable_x11(docker_args: list[str], docker_dynamic_args: list[str]) -> None:
     docker_dynamic_args.append(DynamicToken.XAUTHORITY_MOUNT.name)
 
 
-def enable_wayland(docker_args: list[str], env: Environ) -> None:
+def enable_wayland(docker_args: list[str], docker_dynamic_args: list[str]) -> None:
     """
     Append options to podman/docker arguments to share host machine's Wayland server
     with the new ybox container.
 
     :param docker_args: list of podman/docker arguments to which the options have to be appended
-    :param env: an instance of the current :class:`Environ`
+    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
+                                before each `podman`/`docker run` execution
+                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     """
-    if env.xdg_rt_dir:
-        add_env_option(docker_args, "WAYLAND_DISPLAY")
-        # don't bind wayland sockets rather link in entrypoint so that it works even
-        # when run in X11 setup after being created in Wayland setup
-        add_env_option(docker_args, "ENABLE_WAYLAND", "true")
+    add_env_option(docker_args, "WAYLAND_DISPLAY")  # pick the value set in current env
+    docker_args.append("{}")  # positional str.format() string resolved using docker_dynamic_args
+    docker_dynamic_args.append(DynamicToken.WAYLAND_MOUNT.name)
 
 
 def enable_dri(docker_args: list[str]) -> None:
