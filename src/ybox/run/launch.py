@@ -78,7 +78,7 @@ def launch_container(env: Environ, container_name: str) -> None:
 
     docker_run = [env.docker_cmd, "run"]
     docker_run.extend(run_args)
-    if (code := run_command(docker_run, exit_on_error=False, error_msg="container launch")) != 0:
+    if (code := run_command(docker_run, exit_on_error=False)) != 0:
         print_error(f"Also check 'ybox-logs {container_name}' for details")
         sys.exit(int(code))
 
