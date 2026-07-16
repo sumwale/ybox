@@ -21,3 +21,12 @@ function echo_color() {
   shift
   echo -e $args "$color$@" $fg_reset
 }
+
+function with_retries() {
+  for i in 1 2 3; do
+    if eval "$@"; then
+      return
+    fi
+  done
+  exit $?
+}

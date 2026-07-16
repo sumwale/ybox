@@ -64,7 +64,7 @@ def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "
         docker_args.append(mount_arg)
 
 
-def enable_x11(docker_args: list[str], docker_dynamic_args: list[str]) -> None:
+def enable_x11(docker_args: list[str]) -> None:
     """
     Append options to podman/docker arguments to share host machine's Xorg X11 server
     with the new ybox container. This also sets up sharing of XAUTHORITY file (with automatic
@@ -72,32 +72,27 @@ def enable_x11(docker_args: list[str], docker_dynamic_args: list[str]) -> None:
     X authentication to work.
 
     :param docker_args: list of podman/docker arguments to which the options have to be appended
-    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     """
     add_env_option(docker_args, "DISPLAY")
     xsock = "/tmp/.X11-unix"
     if os.access(xsock, os.R_OK):
         add_mount_option(docker_args, xsock, xsock, "ro")
     add_env_option(docker_args, "XAUTHORITY")  # pick the value set in current env
-    docker_args.append("{}")  # positional str.format() string resolved using docker_dynamic_args
-    docker_dynamic_args.append(DynamicToken.XAUTHORITY_MOUNT.name)
+    # special token string resolved when `ybox-launch` is invoked
+    docker_args.append(f"{{{DynamicToken.XAUTHORITY_MOUNT.name}}}")
 
 
-def enable_wayland(docker_args: list[str], docker_dynamic_args: list[str]) -> None:
+def enable_wayland(docker_args: list[str]) -> None:
     """
     Append options to podman/docker arguments to share host machine's Wayland server
     with the new ybox container.
 
     :param docker_args: list of podman/docker arguments to which the options have to be appended
-    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     """
     add_env_option(docker_args, "WAYLAND_DISPLAY")  # pick the value set in current env
-    docker_args.append("{}")  # positional str.format() string resolved using docker_dynamic_args
-    docker_dynamic_args.append(DynamicToken.WAYLAND_MOUNT.name)
+    # special token strings resolved when `ybox-launch` is invoked
+    docker_args.append(f"{{{DynamicToken.WAYLAND_MOUNT.name}}}")
+    docker_args.append(f"{{{DynamicToken.WAYLAND_LOCK.name}}}")
 
 
 def enable_dri(docker_args: list[str]) -> None:

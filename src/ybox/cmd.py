@@ -18,7 +18,7 @@ from .env import Environ
 from .print import print_error, print_info, print_notice, print_warn
 
 # environment variables passed through from host environment to podman/docker executable
-_PASSTHROUGH_ENVVARS = ("__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
+_PASSTHROUGH_ENVVARS = ("TERM", "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME",
                         "__VK_LAYER_NV_optimus", "VK_DRIVER_FILES", "VK_ICD_FILES",
                         "VK_ICD_FILENAMES")
 # environment variables passed from host to podman/docker executable with empty if not set;

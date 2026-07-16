@@ -150,8 +150,3 @@ class Consts:
     def container_args_file() -> str:
         """file having a container's `podman/docker run` arguments separated by newlines"""
         return "args"
-
-    @staticmethod
-    def container_dynamic_args_file() -> str:
-        """file having a container's dynamic arguments (with `DynamicToken` names)"""
-        return "args.dyn"

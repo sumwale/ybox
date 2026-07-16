@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/entrypoint-common.sh"
 
 current_user="$(id -un)"
-YAY="yay --noconfirm"
+YAY="with_retries yay --noconfirm"
 # install AUR helper yay (original preference was paru whose development is sporadic)
 if ! type -p yay >/dev/null; then
   echo_color "$fg_cyan" "Installing AUR helper 'yay'" >> $status_file
