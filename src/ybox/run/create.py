@@ -99,11 +99,10 @@ def main_argv(argv: list[str]) -> None:
     setup_ybox_scripts(conf, distro_config)
 
     docker_full_args = [docker_cmd, "run", "-d", f"--name={box_name}"]
-    docker_dynamic_args: list[str] = []  # holds the arguments resolved dynamically in every run
     # process the profile before any actions to ensure it is in proper shape
     pkgmgr = distro_config["pkgmgr"]
     shared_root, box_conf, apps_with_deps = process_sections(profile, conf, pkgmgr,
-                                                             docker_full_args, docker_dynamic_args)
+                                                             docker_full_args)
     process_distribution_config(distro_config, docker_full_args)
     current_user = getpass.getuser()
 
@@ -203,8 +202,7 @@ def main_argv(argv: list[str]) -> None:
 
     # set up the final container with all the required arguments
     print_info(f"Initializing container for '{distro}' using '{profile}'")
-    run_container(docker_full_args, docker_dynamic_args, current_user, shared_root,
-                  mount_root_dirs, conf)
+    run_container(docker_full_args, current_user, shared_root, mount_root_dirs, conf)
     print_info("Waiting for the container to initialize (see "
                f"'ybox-logs -f {box_name}' for detailed progress)")
     # wait for container to initialize while printing out its progress from conf.status_file
@@ -215,7 +213,7 @@ def main_argv(argv: list[str]) -> None:
     Path(f"{conf.scripts_dir}/{Consts.entrypoint_init_done_file()}").touch(mode=0o644)
     # create the final argument and environment files
     print_color(f"Updating configuration files in '{conf.container_config_dir}'", fgcolor.cyan)
-    create_container_configs(conf, docker_full_args, docker_dynamic_args, False)
+    create_container_configs(conf, docker_full_args, False)
     if not args.skip_systemd_service and (sys_path := os.pathsep.join(Consts.sys_bin_dirs())) and (
             systemctl := shutil.which("systemctl", path=sys_path)) and run_command(
                 ["/bin/sh", "-c", f"{systemctl} --user daemon-reload 2>/dev/null"],
@@ -335,7 +333,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-C", "--distribution-config", type=str,
                         help="path to distribution configuration file to use instead of the "
                              "'distro.ini' from user/system configuration paths")
-    parser.add_argument("--distribution-image", type=str,
+    parser.add_argument("-I", "--distribution-image", type=str,
                         help="custom container image to use that overrides the one specified in "
                              "the distribution's 'distro.ini'; note that the distribution "
                              "configuration scripts make assumptions on the available utilities "
@@ -498,8 +496,7 @@ def process_args(args: argparse.Namespace, distro: str, profile: PathName) -> st
 
 
 def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: SectionProxy,
-                     docker_args: list[str], docker_dynamic_args: list[str]) -> tuple[
-                         str, ConfigParser, dict[str, list[str]]]:
+                     docker_args: list[str]) -> tuple[str, ConfigParser, dict[str, list[str]]]:
     """
     Process all the sections in the given profile file to return a tuple having:
       * shared root to use for the container (if any)
@@ -514,9 +511,6 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
     :param docker_args: list of arguments to be provided to podman/docker command for creating the
                         final ybox container which is populated with required options as per
                         the configuration in the given profile
-    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     :raises NotSupportedError: if there is an unknown section or key in the ini format profile
     :return: tuple of container's shared root, :class:`ConfigParser` object from parsing the
              profile, and dictionary of apps with dependencies to be installed in the container
@@ -532,8 +526,7 @@ def process_sections(profile: PathName, conf: StaticConfiguration, pkgmgr: Secti
     # [base] section should always be present
     if not config.has_section("base"):
         raise NotSupportedError(f"Missing [base] section in profile '{profile}'")
-    shared_root, config_hardlinks = process_base_section(config["base"], profile, conf,
-                                                         docker_args, docker_dynamic_args)
+    shared_root, config_hardlinks = process_base_section(config["base"], profile, conf, docker_args)
     apps_with_deps: dict[str, list[str]] = {}
     # finally process all the sections and the keys forming the podman/docker command-line
     for section in config.sections():
@@ -618,8 +611,7 @@ def process_distribution_config(distro_config: ConfigParser, docker_args: list[s
 
 
 def process_base_section(base_section: SectionProxy, profile: PathName, conf: StaticConfiguration,
-                         docker_args: list[str], docker_dynamic_args: list[str]) -> tuple[
-                             str, bool | None]:
+                         docker_args: list[str]) -> tuple[str, bool | None]:
     """
     Process the `[base]` section in the container profile to append required podman/docker
     options in the list that has been passed, and return a tuple having the shared root to use for
@@ -631,9 +623,6 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
     :param conf: the :class:`StaticConfiguration` for the container
     :param docker_args: list of podman/docker arguments to which required options as per the
                         configuration in the `[base]` section are appended
-    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     :raises NotSupportedError: if there is an unknown key in the `[base]` section
     :return: tuple of container's shared root and the value of `config_hardlinks` key
     """
@@ -667,23 +656,22 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
                 config_locale = _get_boolean(val)
             case "x11":
                 if _get_boolean(val):
-                    enable_x11(docker_args, docker_dynamic_args)
+                    enable_x11(docker_args)
             case "wayland":
                 if _get_boolean(val):
-                    enable_wayland(docker_args, docker_dynamic_args)
+                    enable_wayland(docker_args)
             case "pulseaudio":
                 if _get_boolean(val):
                     enable_pulse(docker_args, env)
             case "dbus":
                 if _get_boolean(val):
-                    enable_dbus(docker_args, docker_dynamic_args, base_section.getboolean(
-                        "dbus_sys", fallback=False))
+                    enable_dbus(docker_args, base_section.getboolean("dbus_sys", fallback=False))
             case "ssh_agent":
                 if _get_boolean(val):
-                    enable_ssh_agent(docker_args, docker_dynamic_args)
+                    enable_ssh_agent(docker_args)
             case "gpg_agent":
                 if _get_boolean(val):
-                    enable_gpg_agent(docker_args, docker_dynamic_args)
+                    enable_gpg_agent(docker_args)
             case "dri":
                 dri = _get_boolean(val)
             case "nvidia":
@@ -760,21 +748,18 @@ def enable_pulse(docker_args: list[str], env: Environ) -> None:
                 add_mount_option(docker_args, pipewire_path, f"{env.target_xdg_rt_dir}/{pwf}")
 
 
-def enable_dbus(docker_args: list[str], docker_dynamic_args: list[str], sys_enable: bool) -> None:
+def enable_dbus(docker_args: list[str], sys_enable: bool) -> None:
     """
     Append options to podman/docker arguments to share host machine's dbus message bus
     with the new ybox container.
 
     :param docker_args: list of podman/docker arguments to which the options have to be appended
-    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     :param sys_enable: if True then also share host machine's system dbus message bus in addition
                        to the user dbus message bus
     """
     add_env_option(docker_args, "DBUS_SESSION_BUS_ADDRESS")  # pick the value set in current env
-    docker_args.append("{}")  # positional str.format() string resolved using docker_dynamic_args
-    docker_dynamic_args.append(DynamicToken.DBUS_MOUNT.name)
+    # special token string resolved when `ybox-launch` is invoked
+    docker_args.append(f"{{{DynamicToken.DBUS_MOUNT.name}}}")
     if sys_enable:
         for dbus_sys in ("/run/dbus/system_bus_socket", "/var/run/dbus/system_bus_socket"):
             if os.access(dbus_sys, os.W_OK):
@@ -782,34 +767,28 @@ def enable_dbus(docker_args: list[str], docker_dynamic_args: list[str], sys_enab
                 break
 
 
-def enable_ssh_agent(docker_args: list[str], docker_dynamic_args: list[str]) -> None:
+def enable_ssh_agent(docker_args: list[str]) -> None:
     """
     Append options to podman/docker arguments to share host machine's ssh agent socket
     with the new ybox container.
 
     :param docker_args: list of podman/docker arguments to which the options have to be appended
-    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     """
     add_env_option(docker_args, "SSH_AUTH_SOCK")  # pick the value set in current env
-    docker_args.append("{}")  # positional str.format() string resolved using docker_dynamic_args
-    docker_dynamic_args.append(DynamicToken.SSH_SOCK_MOUNT.name)
+    # special token string resolved when `ybox-launch` is invoked
+    docker_args.append(f"{{{DynamicToken.SSH_SOCK_MOUNT.name}}}")
 
 
-def enable_gpg_agent(docker_args: list[str], docker_dynamic_args: list[str]) -> None:
+def enable_gpg_agent(docker_args: list[str]) -> None:
     """
     Append options to podman/docker arguments to share host machine's gpg agent sockets
     with the new ybox container.
 
     :param docker_args: list of podman/docker arguments to which the options have to be appended
-    :param docker_dynamic_args: arguments in `docker_args` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     """
     add_env_option(docker_args, "GPG_AGENT_INFO")  # pick the value set in current env
-    docker_args.append("{}")  # positional str.format() string resolved using docker_dynamic_args
-    docker_dynamic_args.append(DynamicToken.GPG_AGENT_MOUNT.name)
+    # special token string resolved when `ybox-launch` is invoked
+    docker_args.append(f"{{{DynamicToken.GPG_AGENT_MOUNT.name}}}")
 
 
 def add_multi_opt(docker_args: list[str], opt: str, val: str | None) -> None:
@@ -1279,8 +1258,8 @@ def remove_image(docker_cmd: str, image_name: str) -> None:
                 error_msg="image remove")
 
 
-def run_container(docker_full_cmd: list[str], docker_dynamic_args: list[str], current_user: str,
-                  shared_root: str, root_dirs: str, conf: StaticConfiguration) -> None:
+def run_container(docker_full_cmd: list[str], current_user: str, shared_root: str, root_dirs: str,
+                  conf: StaticConfiguration) -> None:
     """
     Create and start the final ybox container applying all the provided configuration.
     The following characteristics of the container are noteworthy:
@@ -1307,9 +1286,6 @@ def run_container(docker_full_cmd: list[str], docker_dynamic_args: list[str], cu
 
     :param docker_full_cmd: the `podman`/`docker run` command with all the options filled
                             in from the container profile specification as a list of string
-    :param docker_dynamic_args: arguments in `docker_full_cmd` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     :param current_user: the current user executing the `ybox-create` script
     :param shared_root: the shared root directory to use for the container
     :param root_dirs: comma-separate list of container's root sub-directories mounted on the host
@@ -1358,12 +1334,12 @@ def run_container(docker_full_cmd: list[str], docker_dynamic_args: list[str], cu
 
     print_color(f"Generating configuration files in '{conf.container_config_dir}' used by "
                 "ybox-launch", fgcolor.cyan)
-    create_container_configs(conf, docker_full_cmd, docker_dynamic_args, True)
+    create_container_configs(conf, docker_full_cmd, True)
     launch_container(conf.env, conf.box_name)
 
 
 def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[str],
-                             docker_dynamic_args: list[str], for_initialization: bool) -> None:
+                             for_initialization: bool) -> None:
     """
     Create an environment variable and podman/docker argument files for the ybox container that are
     used by both the systemd service and the autostart desktop file.
@@ -1371,9 +1347,6 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
     :param conf: the :class:`StaticConfiguration` for the container
     :param docker_full_cmd: the `podman`/`docker run` command with all the options filled
                             in from the container profile specification as a list of string
-    :param docker_dynamic_args: arguments in `docker_full_cmd` that need to be resolved dynamically
-                                before each `podman`/`docker run` execution
-                                (e.g. DBUS_SESSION_ADDRESS that can change across runs)
     :param for_initialization: True if this is invoked for the initial setup of the container,
                                in which case package installation variables will be included and
                                SLEEP_SECS will be 0 for immediate service startup
@@ -1400,12 +1373,6 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
     with open(f"{conf.container_config_dir}/{Consts.container_args_file()}", "w",
               encoding="utf-8") as args_fd:
         print(*container_run_args, sep="\n", file=args_fd)
-    dyn_file = Consts.container_dynamic_args_file()
-    if docker_dynamic_args:
-        with open(f"{conf.container_config_dir}/{dyn_file}", "w", encoding="utf-8") as args_dyn_fd:
-            print(*docker_dynamic_args, sep="\n", file=args_dyn_fd)
-    else:
-        Path(conf.container_config_dir, dyn_file).unlink(missing_ok=True)
 
 
 def _get_ybox_bin_dir_relative(home_prefix: str) -> str:

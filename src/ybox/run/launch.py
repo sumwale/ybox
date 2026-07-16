@@ -61,7 +61,8 @@ def launch_container(env: Environ, container_name: str) -> None:
     container_config_dir = env.container_config_dir(container_name)
     run_args_file = Path(container_config_dir, Consts.container_args_file())
     run_args_str = run_args_file.read_text(encoding="utf-8")
-    dyn_args_file = Path(container_config_dir, Consts.container_dynamic_args_file())
+    # resolve dynamic args using the obsolete dynamic arguments file or in-place tokens
+    dyn_args_file = Path(container_config_dir, "args.dyn")
     if dyn_args_file.exists():
         dyn_args_str = dyn_args_file.read_text(encoding="utf-8")
         dyn_args = [DynamicToken[fname].value[0](env) for fname in dyn_args_str.splitlines()]
@@ -70,6 +71,10 @@ def launch_container(env: Environ, container_name: str) -> None:
             run_args = [arg for arg in run_args if arg]
     else:
         run_args = run_args_str.splitlines()
+        # resolve the dynamic tokens of the form {<NAME>}
+        for arg_idx, arg in enumerate(run_args):
+            if arg[0] == "{" and arg[len(arg) - 1] == "}":
+                run_args[arg_idx] = DynamicToken[arg[1:len(arg) - 1]].value[0](env)
 
     docker_run = [env.docker_cmd, "run"]
     docker_run.extend(run_args)
