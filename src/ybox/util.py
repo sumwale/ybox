@@ -299,6 +299,7 @@ def check_package(docker_cmd: str, check_cmd: str, package: str,
     :param container_name: name of the container
              and name of matching package names which can be different for a virtual package
     """
+    package = package.rpartition("/")[2]  # remove any repository name at the start
     check_result = subprocess.run(build_shell_command(
         docker_cmd, container_name, check_cmd.format(package=package), enable_pty=False),
         check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
