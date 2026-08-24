@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from configparser import ConfigParser
 from dataclasses import dataclass
@@ -112,6 +113,7 @@ class DistributionBase:
                     failure = future.exception() or e
                     print_error(f"Error running '{test_func.__qualname__}' for container "
                                 f"'{helper.box_name}': {failure}")
+                    traceback.print_exception(failure)
                 finally:
                     self.cleanup(helper)
         if failure:

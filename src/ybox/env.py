@@ -40,10 +40,15 @@ def get_docker_command() -> str:
             f"Cannot execute '{cmd}' in {Consts.container_manager_envvar()} environment variable")
     if os.access("/usr/bin/podman", os.X_OK):
         return "/usr/bin/podman"
+    if os.access("/usr/local/bin/podman", os.X_OK):
+        return "/usr/local/bin/podman"
     if os.access("/usr/bin/docker", os.X_OK):
         return "/usr/bin/docker"
+    if os.access("/usr/local/bin/docker", os.X_OK):
+        return "/usr/local/bin/docker"
     raise FileNotFoundError(
-        f"No podman/docker found in /usr/bin and ${Consts.container_manager_envvar()} not defined")
+        "No podman/docker found in /usr/bin or /usr/local/bin and "
+        f"${Consts.container_manager_envvar()} not defined")
 
 
 class NotSupportedError(Exception):
