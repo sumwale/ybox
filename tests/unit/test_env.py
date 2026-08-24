@@ -77,7 +77,10 @@ def test_get_docker_command(g_env: Environ):
     """check `Environ.get_docker_command` function"""
     docker_cmd = get_docker_command()
     assert docker_cmd is not None
-    assert re.match(r"/usr/(local/)?bin/(podman|docker)", docker_cmd)
+    if "YBOX_CONTAINER_MANAGER" in os.environ:
+        assert docker_cmd == os.environ.get("YBOX_CONTAINER_MANAGER")
+    else:
+        assert re.match(r"/usr/(local/)?bin/(podman|docker)", docker_cmd)
     assert os.access(docker_cmd, os.X_OK)
     assert docker_cmd == g_env.docker_cmd
     assert g_env.uses_podman == ("podman" in docker_cmd)

@@ -1256,10 +1256,15 @@ def filter_tar(cmd: list[str], excludes: list[str], output_obj: IO[Any]) -> int:
                 for member in tar_in:
                     if any(member.name.startswith(exclude) for exclude in excludes_for_match):
                         continue
-                    tar_out.addfile(member, tar_in.extractfile(member)
-                                    if member.isreg() else None)
-        proc_out.communicate(timeout=120)
-    if (exit_code := proc_out.returncode) != 0:
+                    file_obj = tar_in.extractfile(member) if member.isreg() else None
+                    try:
+                        tar_out.addfile(member, file_obj)
+                    finally:
+                        if file_obj:
+                            file_obj.close()
+        while proc_out.stdout.read(32768):  # drain any trailing bytes in 'podman/docker export'
+            pass
+    if (exit_code := proc_out.wait(120)) != 0:
         print_warn(f"FAILURE when running [{' '.join(cmd)}]")
     return exit_code
 
