@@ -1238,23 +1238,34 @@ def run_root_copy_container(docker_cmd: str, image_name: str, container_root: st
     run_command(docker_full_cmd, error_msg="running container for copying container's root")
 
 
-def filter_tar(cmd: list[str], excludes: list[str], output_obj: IO[Any]) -> int:
+def _normalize_name(name: str) -> str:
     """
-    Filter out a set of directories and files (specified by `excludes`) from a tar output on stdout
-    obtained by running a given command, and write the result to given output file.
+    Trim off any leading './', '/' and trailing '/' from given string.
+
+    :param name: the string to be normalized
+    """
+    name_n = name[2:] if name.startswith("./") else (name[1:] if name.startswith("/") else name)
+    return name_n[:-1] if name_n.endswith("/") else name_n
+
+
+def filter_tar(cmd: list[str], exclude_dirs: list[str], output_obj: IO[Any]) -> int:
+    """
+    Filter out a set of directories (specified by `exclude_dirs`) from a tar output on stdout
+    obtained by running a given command, and write the result to given output file. The base
+    directory itself is kept while all the contents are removed.
 
     :param cmd: command to run which should provide the tar output on its stdout
-    :param excludes: list of directories and files to exclude from the output tar file
+    :param exclude_dirs: list of directories whose contents are excluded from the output tar file
     :param output_obj: output file object (in binary mode) to write the tar
     :return: exit code of the given command `cmd`
     """
-    excludes_for_match = [s[1:] + "/" if s[0] == "/" else s + "/" for s in excludes]
+    excludes_for_match = [s.lstrip("/").rstrip("/") + "/" for s in exclude_dirs]
     with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc_out:
         assert proc_out.stdout is not None
         with tarfile.open(fileobj=proc_out.stdout, mode="r|") as tar_in:
             with tarfile.open(fileobj=output_obj, mode="w|") as tar_out:
                 for member in tar_in:
-                    if any(member.name.startswith(exclude) for exclude in excludes_for_match):
+                    if any(_normalize_name(member.name).startswith(e) for e in excludes_for_match):
                         continue
                     file_obj = tar_in.extractfile(member) if member.isreg() else None
                     try:
@@ -1264,13 +1275,13 @@ def filter_tar(cmd: list[str], excludes: list[str], output_obj: IO[Any]) -> int:
                             file_obj.close()
         while proc_out.stdout.read(32768):  # drain any trailing bytes in 'podman/docker export'
             pass
-    if (exit_code := proc_out.wait(120)) != 0:
+    if (exit_code := proc_out.wait(60)) != 0:
         print_warn(f"FAILURE when running [{' '.join(cmd)}]")
     return exit_code
 
 
-def optimize_image_remove_mounted_dirs(docker_cmd: str, custom_box_image: str, excludes: list[str],
-                                       conf: StaticConfiguration) -> None:
+def optimize_image_remove_mounted_dirs(docker_cmd: str, custom_box_image: str,
+                                       exclude_dirs: list[str], conf: StaticConfiguration) -> None:
     """
     Create an optimized image after excluding all the directories that are mounted in the host
     (for persistence). This does a podman/docker export-> filter -> podman/docker import to remove
@@ -1278,7 +1289,7 @@ def optimize_image_remove_mounted_dirs(docker_cmd: str, custom_box_image: str, e
 
     :param docker_cmd: the podman/docker executable to use
     :param custom_box_image: the image to be created used by the final ybox container
-    :param excludes: list of directories and files to exclude from the `custom_box_image`
+    :param exclude_dirs: list of directories whose contents are excluded from the `custom_box_image`
     :param conf: the :class:`StaticConfiguration` for the container
     """
     exit_code = 0
@@ -1287,12 +1298,20 @@ def optimize_image_remove_mounted_dirs(docker_cmd: str, custom_box_image: str, e
         with subprocess.Popen(import_cmd, stdin=subprocess.PIPE) as import_proc:
             assert import_proc.stdin is not None
             try:
-                exit_code = filter_tar([docker_cmd, "export", conf.box_name], excludes,
+                exit_code = filter_tar([docker_cmd, "export", conf.box_name], exclude_dirs,
                                        import_proc.stdin)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                print_warn(f"EXCEPTION in filter_tar(): {e}")
+                exit_code = 1
             finally:
                 import_proc.stdin.close()  # explicit close to signal EOF for the import
+        try:
+            import_cmd_code = import_proc.wait(60)
+        except subprocess.TimeoutExpired:
+            import_proc.kill()
+            import_cmd_code = -1
         if exit_code == 0:
-            if (exit_code := import_proc.wait(120)) == 0:
+            if (exit_code := import_cmd_code) == 0:
                 break
             print_warn(f"FAILURE when running [{' '.join(import_cmd)}]")
         else:
