@@ -109,46 +109,39 @@ def main_argv(argv: list[str]) -> None:
     current_user = getpass.getuser()
 
     # The sequence for container creation and run is thus:
-    # 1) First start a basic container with the smallest upstream distro image (important to save
+    # 1) Acquire a file/process lock so that no other container creation can interfere.
+    # 2) Check if the shared/non-shared container image already exists. If so, then skip to step 7.
+    # 3) Start a basic container with the smallest upstream distro image (important to save
     #    space when `base.shared_root` is provided) with "entrypoint-base.sh" as the entrypoint
     #    script giving user/group arguments to be same as the user as on the host machine.
-    # 2) Next do a podman/docker commit and save the stopped container as local image which
+    #    Acquire a file/process lock so that no other container creation can interfere.
+    # 4) Next do a podman/docker commit and save the stopped container as local image which
     #    will be used henceforth. The main point of doing #1 is to ensure that a sudo enabled
     #    user is available which matches the current host user so that "--userns" option
     #    will not try to remap the image that can substantially increase the size of image.
     #    Either way, the user created by "--userns" in the container does not have sudo
     #    permissions, so temporarily need to run such a container as root user in any case.
-    #    Hence, step 1 uses a cleaner and better option that also creates separate
+    #    Hence, step 3 uses a cleaner and better option that also creates separate
     #    container-specific images that can be enhanced with more container-specific stuff
     #    later if required. Also change the USER and WORKDIR of the commit to point to the
     #    user added in step 1).
-    # 3) Start up the saved image of step 2 and run the distro specific entrypoint script
-    #    that will do basic configuration and package installation (e.g. git/neovim/... on arch)
+    # 5) Run a copy script on a temporary image to copy the persistent directories (normally
+    #      include /usr,/etc,/var) to shared/non-shared root directory. Start the container with
+    #    "--userns=keep-id" for podman while for docker that does not support the "--userns=keep-id"
+    #    option, the container image needs to be run as root user that maps to host's user.
+    #    To minimize the image size, use podman/docker export command, filter out the persistent
+    #    directories, and create the final container image with podman/docker import. This gets rid
+    #    of the persistent directories from all image layers.
+    # 6) Delete the previous temporary image. Release the file lock acquired in step 1).
+    # 7) Start up the saved image and run the distro specific entrypoint script that
+    #    will do basic configuration and package installation (e.g. git/neovim/... on arch)
     #    followed by the generic "entrypoint.sh" script which will create the configuration
     #    file links (from [configs] section), install required apps (from [apps] section),
     #    followed by invoking the startup scripts from the [startup] section.
-    # 4) The container is now ready to use so 'ybox-cmd' will only do a podman/docker exec
+    # 8) The container is now ready to use so 'ybox-cmd' will only do a podman/docker exec
     #    of /bin/bash to open a shell (or any given command).
-    # 5) Mounts and environment variables are set up for step 3 which are automatically also
+    # 9) Mounts and environment variables are set up for step 3 which are automatically also
     #    available in step 4, and hence no special setup is required in step 4.
-    #
-    # If `base.shared_root` is provided, the above sequence has the following changes:
-    # 1) First acquire a file/process lock so that no other container creation can interfere.
-    # 2) Once the lock has been acquired, check if the shared container image already exists.
-    #    If it does exist, then skip to step 7.
-    # 3) If not, then start the basic container like in step 1) of previous sequence.
-    # 4) Like step 2) of the previous sequence, commit the container but with a temporary name.
-    # 5) Unlike step 3) of the previous sequence, do a temporary restart of the previous
-    #    committed image with "--userns=keep-id" option (podman), and then copy the shared root
-    #    directories to the shared mount point. This copying cannot be done in step 4) above
-    #    because the file permissions are different with and without the --userns option.
-    #    For docker that does not support the "--userns=keep-id" option, the container image
-    #    needs to be run as root user that maps to host's user.
-    # 6) Stop the container and commit the image again with the final shared image name.
-    #    Delete the previous temporary image. Release the file lock acquired in step 1).
-    # 7) Now start the shared image like in step 3) of the previous sequence but with the
-    #    additional root directory mounts that were copied in step 5 above.
-    # Finally, continue with step 4) onwards of previous sequence.
 
     # handle the shared_root case: acquire file lock and check if shared container image exists
     if shared_root:
