@@ -13,11 +13,13 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import time
 from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
 from textwrap import dedent
+from typing import IO, Any
 
 from ybox import __version__ as product_version
 from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
@@ -178,15 +180,20 @@ def main_argv(argv: list[str]) -> None:
             # the 'entrypoint-base.sh' script to create the user and group in the container
             run_base_container(base_image_name, current_user, secondary_groups, docker_cmd, conf)
             # commit the stopped container with a temporary name, then remove the container;
-            # keeping a separate tmp_image helps reduce size of final image a bit because
-            # this one is without --userns while the final custom image is with --userns
+            # keeping a separate tmp_image helps restart the same container with the --userns
+            # option (only with podman) which is also used by the final image
             commit_container(docker_cmd, tmp_image, conf)
             # start a container using the temporary image with "--userns" option to make
             # a copy of the container root directories to the host mounted location
             run_root_copy_container(docker_cmd, tmp_image, container_root, mount_root_dirs,
                                     conf, args.quiet)
-            # finally commit this container with the name of the custom image
-            commit_container(docker_cmd, custom_box_image, conf)
+            # since most of the container data is now in the host mounted location, export the
+            # container image excluding `mount_root_dirs` and import it as the final image to use;
+            # the export, filter and import are tied through pipes without needing a temporary file
+            optimize_image_remove_mounted_dirs(docker_cmd, custom_box_image,
+                                               mount_root_dirs.split(","), conf)
+            # finally remove this container and the temporary image
+            remove_container(docker_cmd, conf.box_name)
             remove_image(docker_cmd, tmp_image)
         # in case the container root directory is not present but the custom image is present,
         # need to run the container to copy to container root
@@ -1229,6 +1236,66 @@ def run_root_copy_container(docker_cmd: str, image_name: str, container_root: st
         docker_full_cmd.append("--userns=keep-id")
     docker_full_cmd.extend((image_name, mount_root_dirs, Consts.root_mount_dir()))
     run_command(docker_full_cmd, error_msg="running container for copying container's root")
+
+
+def filter_tar(cmd: list[str], excludes: list[str], output_obj: IO[Any]) -> int:
+    """
+    Filter out a set of directories and files (specified by `excludes`) from a tar output on stdout
+    obtained by running a given command, and write the result to given output file.
+
+    :param cmd: command to run which should provide the tar output on its stdout
+    :param excludes: list of directories and files to exclude from the output tar file
+    :param output_obj: output file object (in binary mode) to write the tar
+    :return: exit code of the given command `cmd`
+    """
+    excludes_for_match = [s[1:] + "/" if s[0] == "/" else s + "/" for s in excludes]
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc_out:
+        assert proc_out.stdout is not None
+        with tarfile.open(fileobj=proc_out.stdout, mode="r|") as tar_in:
+            with tarfile.open(fileobj=output_obj, mode="w|") as tar_out:
+                for member in tar_in:
+                    if any(member.name.startswith(exclude) for exclude in excludes_for_match):
+                        continue
+                    tar_out.addfile(member, tar_in.extractfile(member)
+                                    if member.isreg() else None)
+        proc_out.communicate(timeout=120)
+    if (exit_code := proc_out.returncode) != 0:
+        print_warn(f"FAILURE when running [{' '.join(cmd)}]")
+    return exit_code
+
+
+def optimize_image_remove_mounted_dirs(docker_cmd: str, custom_box_image: str, excludes: list[str],
+                                       conf: StaticConfiguration) -> None:
+    """
+    Create an optimized image after excluding all the directories that are mounted in the host
+    (for persistence). This does a podman/docker export-> filter -> podman/docker import to remove
+    all the directories from all layers cleanly.
+
+    :param docker_cmd: the podman/docker executable to use
+    :param custom_box_image: the image to be created used by the final ybox container
+    :param excludes: list of directories and files to exclude from the `custom_box_image`
+    :param conf: the :class:`StaticConfiguration` for the container
+    """
+    exit_code = 0
+    import_cmd = [docker_cmd, "import", "-", custom_box_image]
+    for _ in range(3):  # run with retries
+        with subprocess.Popen(import_cmd, stdin=subprocess.PIPE) as import_proc:
+            assert import_proc.stdin is not None
+            try:
+                exit_code = filter_tar([docker_cmd, "export", conf.box_name], excludes,
+                                       import_proc.stdin)
+            finally:
+                import_proc.stdin.close()  # explicit close to signal EOF for the import
+            import_proc.communicate(timeout=120)
+        if exit_code == 0:
+            if (exit_code := import_proc.returncode) == 0:
+                break
+            print_warn(f"FAILURE when running [{' '.join(import_cmd)}]")
+        else:
+            subprocess.run([docker_cmd, "rmi", custom_box_image], check=False,
+                           stderr=subprocess.DEVNULL)
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 def commit_container(docker_cmd: str, image_name: str, conf: StaticConfiguration) -> None:

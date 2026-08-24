@@ -28,7 +28,7 @@ max-positional-arguments = 20 # EDIT: increased from 5 to 20
 [FORMAT]
 
 # Maximum number of lines in a module.
-max-module-lines = 1500 # EDIT: increased from 1000 to 1500
+max-module-lines = 2000 # EDIT: increased from 1000 to 2000
 
 
 [MISCELLANEOUS]
