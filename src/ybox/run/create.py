@@ -1286,9 +1286,8 @@ def optimize_image_remove_mounted_dirs(docker_cmd: str, custom_box_image: str, e
                                        import_proc.stdin)
             finally:
                 import_proc.stdin.close()  # explicit close to signal EOF for the import
-            import_proc.communicate(timeout=120)
         if exit_code == 0:
-            if (exit_code := import_proc.returncode) == 0:
+            if (exit_code := import_proc.wait(120)) == 0:
                 break
             print_warn(f"FAILURE when running [{' '.join(import_cmd)}]")
         else:
