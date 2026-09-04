@@ -38,7 +38,7 @@ fi
 if [ "$(sed -n 's/^ID=//p' /etc/os-release)" = "ubuntu" ]; then
   apt_fast_rel="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)"
 else
-  apt_fast_rel=focal # use focal for apt-fast install which works on all recent Debian releases
+  apt_fast_rel=jammy # use jammy for apt-fast install which works on all recent Debian releases
   # enable contrib and non-free repositories for debian
   if [ -f /etc/apt/sources.list.d/debian.sources ]; then
     sed -i 's/^Components: main[ ]*$/Components: main contrib non-free non-free-firmware/' \
@@ -53,11 +53,16 @@ echo_color "$fg_cyan" "Setting up apt-fast" >> $status_file
 apt-get install --install-recommends -y curl gnupg lsb-release
 keyring_file=/etc/apt/keyrings/apt-fast.gpg
 rm -f $keyring_file
-echo -e "deb [signed-by=$keyring_file] http://ppa.launchpad.net/apt-fast/stable/ubuntu $apt_fast_rel main" \
-    > /etc/apt/sources.list.d/apt-fast.list
-mkdir -p /etc/apt/keyrings
+mkdir -p $(dirname $keyring_file)
 bash "$SCRIPT_DIR/fetch-gpg-key-id.sh" 0xBC5934FD3DEBD4DAEA544F791E2824A7F22B44BD \
      "$DEFAULT_GPG_KEY_SERVER" $keyring_file
+cat > /etc/apt/sources.list.d/apt-fast-$apt_fast_rel.sources << EOF
+Types: deb
+URIs: https://ppa.launchpadcontent.net/apt-fast/stable/ubuntu/
+Suites: $apt_fast_rel
+Components: main
+Signed-By: $keyring_file
+EOF
 
 apt-get update
 apt-get install -y apt-fast
