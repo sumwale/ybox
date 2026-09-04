@@ -35,7 +35,7 @@ if [[ -n "$LANG" && ! "$LANG" =~ ^C(\..+)?$ && "$LANG" != "POSIX" && ! "$LANG" =
   rm -f /etc/apt/apt.conf.d/docker-no-languages
 fi
 
-if [ "$(sed -n 's/^ID=//p' /etc/os-release)" = "ubuntu" ]; then
+if grep -q '^ID=ubuntu' /etc/os-release; then
   apt_fast_rel="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)"
 else
   apt_fast_rel=focal # use focal for apt-fast install which works on all recent Debian releases

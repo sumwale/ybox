@@ -11,13 +11,18 @@ YAY="with_retries yay --noconfirm"
 # install AUR helper yay (original preference was paru whose development is sporadic)
 if ! type -p yay >/dev/null; then
   echo_color "$fg_cyan" "Installing AUR helper 'yay'" >> $status_file
-  export HOME=$(getent passwd "$current_user" | cut -d: -f6)
-  cd "$HOME"
-  rm -rf yay
-  git clone https://aur.archlinux.org/yay.git
-  cd yay
-  makepkg --noconfirm -si
-  cd ..
+  # CachyOS has yay in its repos
+  if grep -q '^ID=cachyos' /etc/os-release; then
+    with_retries sudo pacman -S --noconfirm yay
+  else
+    export HOME=$(getent passwd "$current_user" | cut -d: -f6)
+    cd "$HOME"
+    rm -rf yay
+    git clone https://aur.archlinux.org/yay.git
+    cd yay
+    makepkg --noconfirm -si
+    cd ..
+  fi
 fi
 if [ -n "$EXTRA_PKGS" ]; then
   echo_color "$fg_cyan" "Installing $EXTRA_PKGS" >> $status_file
