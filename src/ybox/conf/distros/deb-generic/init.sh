@@ -131,11 +131,3 @@ if ! grep -q '^export LANG=' /etc/bash.bashrc && [ -n "$LANG" -a "$LANG" != "C.U
     echo "export LANGUAGE=\"$LANGUAGE\"" >> /etc/bash.bashrc
   fi
 fi
-
-# skip starship if not installing any recommended packages which should happen only in testing
-if [ -n "$RECOMMENDED_PKGS" ]; then
-  echo_color "$fg_cyan" "Installing starship for fancy bash prompt" >> $status_file
-  curl -sSL https://starship.rs/install.sh -o starship-install.sh && \
-    /bin/sh starship-install.sh -y && rm -f starship-install.sh /tmp/tmp.*
-  echo -e 'eval "$(starship init bash)"' >> /etc/bash.bashrc
-fi

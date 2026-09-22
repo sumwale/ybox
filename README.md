@@ -361,7 +361,7 @@ starting with a hyphen, then first end the options to `ybox-cmd` with a double h
 ybox-cmd ybox-arch_apps -- ls -l
 ```
 
-The default profiles also link the .bashrc and starship configuration files from your host
+The default profiles also link the .bashrc, .zshrc and fish shell configuration files from your host
 `$HOME` directory by default, so you should see the same bash shell configuration as in your
 host. These are linked in read-only mode, so if you want to change these auto-linked
 configuration files inside the container, then you will need to create a copy from the symlink
