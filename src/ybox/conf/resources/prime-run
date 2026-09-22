@@ -7,6 +7,14 @@ VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json
 VK_ICD_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json
 VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
 
+# settings for nvidia-vaapi-driver (https://github.com/elFarto/nvidia-vaapi-driver)
+if [ -r /usr/lib/dri/nvidia_drv_video.so ] || /bin/ls /usr/lib/*/dri/nvidia_drv_video.so >/dev/null 2>/dev/null; then
+  LIBVA_DRIVER_NAME=nvidia
+  NVD_BACKEND=direct
+  MOZ_DISABLE_RDD_SANDBOX=1
+  export LIBVA_DRIVER_NAME NVD_BACKEND MOZ_DISABLE_RDD_SANDBOX
+fi
+
 export __NV_PRIME_RENDER_OFFLOAD __GLX_VENDOR_LIBRARY_NAME __VK_LAYER_NV_optimus VK_DRIVER_FILES VK_ICD_FILES VK_ICD_FILENAMES
 
 exec "$@"
