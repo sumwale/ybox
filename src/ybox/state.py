@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 from configparser import ConfigParser
 from contextlib import closing
 from dataclasses import dataclass
@@ -24,7 +25,7 @@ from ybox import __version__ as product_version
 from .config import StaticConfiguration
 from .consts import Consts
 from .env import Environ, PathName
-from .print import print_color, print_warn
+from .print import print_color, print_error, print_warn
 from .util import ini_file_reader, resolve_inc_path, write_ybox_version
 
 
@@ -117,14 +118,14 @@ class YboxStateManagement:
                                        "nvidia", "nvidia_ctk", "shm_size", "pids_limit",
                                        "log_driver", "log_opts"]
 
-    def __init__(self, env: Environ, connect_timeout: float = 60.0):
+    def __init__(self, env: Environ, connect_timeout: float = 30.0):
         """
         Initialize connection to database and create tables+indexes if not present. If the
         product version has upgraded that needs updated schema, then also run the required
         schema migration scripts.
 
         :param env: an instance of the current :class:`Environ`
-        :param connect_timeout: database connection timeout in seconds as a `float`, default = 60.0
+        :param connect_timeout: database connection timeout in seconds as a `float`, default = 30.0
         """
         # explicitly control transaction begin (in exclusive mode) since SERIALIZABLE isolation
         # level is required while sqlite3 module will not start transactions before reads
@@ -301,7 +302,11 @@ class YboxStateManagement:
         :param cursor: the `Cursor` object to use for execution
         """
         if not self._explicit_transaction:
-            cursor.execute(self._BEGIN_EX_TXN_SQL)
+            try:
+                cursor.execute(self._BEGIN_EX_TXN_SQL)
+            except sqlite3.OperationalError as err:
+                print_error(f"Transaction failed to start: {err}")
+                sys.exit(1)
 
     def _internal_commit(self) -> None:
         """

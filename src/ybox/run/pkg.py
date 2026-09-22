@@ -242,6 +242,9 @@ def add_install(subparser: argparse.ArgumentParser) -> None:
                                 "the standard output and combines STDOUT and STDERR which can hang "
                                 "pipes among others, so should only be used for running "
                                 "applications interactively in a terminal")
+    subparser.add_argument("-e", "--env", nargs="*", type=str,
+                           help="additional environment arguments to pass to the command from the "
+                                "host environment which can be of the form <key> or <key>=<value>")
     subparser.add_argument("-K", "--keep-ambient-caps", action="store_true",
                            help="skip adding 'setpriv --ambient-caps -all' to the executable that "
                                 "drops ambient capabilities; the default adds the 'setpriv' call "

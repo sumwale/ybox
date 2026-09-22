@@ -4,15 +4,18 @@ Methods for package installation on an active ybox container.
 
 import argparse
 import io
+import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 from configparser import ConfigParser, SectionProxy
+from itertools import chain
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable, cast
 
 from simple_term_menu import TerminalMenu  # type: ignore
 
@@ -176,6 +179,8 @@ def _install_package(package: str, args: argparse.Namespace, install_cmd: str, l
         # add entries in app_flags for tty and ambient_caps so that they are stored in the database
         if args.tty:
             app_flags[package + ":tty"] = "true"
+        if args.env:
+            app_flags[package + ":envs"] = json.dumps(args.env)
         if args.keep_ambient_caps:
             app_flags[package + ":ambient_caps"] = "keep"
         local_copies = wrap_container_files(package, copy_type, app_flags, list_cmd, docker_cmd,
@@ -365,6 +370,9 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
     # if the app needs stdin then Terminal must be true in its desktop file in which case
     # a terminal will be opened during execution
     needs_tty = app_flags.get(package + ":tty", "") == "true"
+    env_list = ()
+    if envs := app_flags.get(package + ":envs", ""):
+        env_list = [e for kv in cast(list[str], json.loads(envs)) for e in ("-e", shlex.quote(kv))]
     keep_ambient_caps = app_flags.get(package + ":ambient_caps", "") == "keep"
     for file_dir, filename, file in file_paths:
         # check if this is a .desktop directory and copy it over adding appropriate
@@ -372,14 +380,14 @@ def wrap_container_files(package: str, copy_type: CopyType, app_flags: dict[str,
         if copy_type & CopyType.DESKTOP:
             if file_dir in desktop_dirs:
                 _wrap_desktop_file(filename, file, docker_cmd, conf, app_flags, needs_tty,
-                                   keep_ambient_caps, wrapper_files)
+                                   env_list, keep_ambient_caps, wrapper_files)
                 continue  # if it is a .desktop file, then skip executable check
             if _select_app_icon(file_dir, filename, file, icon_dir_pattern, selected_icons):
                 continue  # if it is an icon file, then skip executable check
         if copy_type & CopyType.EXECUTABLE:
             if file_dir in executable_dirs:
                 _wrap_executable(filename, file, docker_cmd, conf, app_flags, needs_tty,
-                                 keep_ambient_caps, wrapper_files)
+                                 env_list, keep_ambient_caps, wrapper_files)
             elif container_root and man_dir_pattern.match(file_dir):
                 _link_man_page(file, container_root, conf, wrapper_files)
     if selected_icons:
@@ -449,8 +457,8 @@ def docker_cp_action(docker_cmd: str, box_name: str, src: str,
 
 
 def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
-                       app_flags: dict[str, str], needs_tty: bool, keep_ambient_caps: bool,
-                       wrapper_files: list[str]) -> None:
+                       app_flags: dict[str, str], needs_tty: bool, extra_args: Iterable[str],
+                       keep_ambient_caps: bool, wrapper_files: list[str]) -> None:
     """
     For a desktop file, add "podman/docker exec ..." to its `Exec` lines. Also read the additional
     flags for the command passed in `app_flags` and add them to an appropriate position in the
@@ -463,6 +471,7 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
     :param app_flags: map of executable file name to the value from [app_flags] section from the
                       container configuration
     :param needs_tty: allocate a pseudo-tty when running the application in a terminal
+    :param extra_args: extra podman/docker arguments to be passed to the command
     :param keep_ambient_caps: don't drop ambient capabilities for the program which is otherwise
                               required for executables that need explicit namespace support
     :param wrapper_files: the accumulated list of all wrapper files so far
@@ -482,7 +491,7 @@ def _wrap_desktop_file(filename: str, file: str, docker_cmd: str, conf: StaticCo
         cmdline = [str(exec_word), '/bin/sh -c "']
         # pseudo-tty cannot be allocated with rootless docker outside of a terminal app
         populate_exec_cmdline(docker_cmd, conf.box_name, r'\\', needs_terminal, needs_tty,
-                              (), "", cmdline)
+                              extra_args, "", cmdline)
         # clear ambient capabilities by default to support running executables that
         # invoke bubblewrap or equivalent for namespaces (e.g. steam or usage of glycin
         #   by recent gdk-pixbuf releases or otherwise)
@@ -627,8 +636,8 @@ def _can_wrap_executable(filename: str, file: str, conf: StaticConfiguration, qu
 
 
 def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConfiguration,
-                     app_flags: dict[str, str], needs_tty: bool, keep_ambient_caps: bool,
-                     wrapper_files: list[str]) -> None:
+                     app_flags: dict[str, str], needs_tty: bool, extra_args: Iterable[str],
+                     keep_ambient_caps: bool, wrapper_files: list[str]) -> None:
     """
     For an executable, create a wrapper executable that invokes "podman/docker exec".
 
@@ -639,6 +648,7 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     :param app_flags: map of executable file name to the value from [app_flags] section from the
                       container configuration
     :param needs_tty: allocate a pseudo-tty when running the application in a terminal
+    :param extra_args: extra podman/docker arguments to be passed to the command
     :param keep_ambient_caps: don't drop ambient capabilities for the program which is otherwise
                               required for executables that need explicit namespace support
     :param wrapper_files: the accumulated list of all wrapper files so far
@@ -648,12 +658,19 @@ def _wrap_executable(filename: str, file: str, docker_cmd: str, conf: StaticConf
     wrapper_exec = _get_wrapper_executable(filename, conf)
     print_notice(f"Linking container executable {file} to {wrapper_exec}")
     term_flags = "-it" if needs_tty else "-i"
-    # the special first argument "--no-terminal" will skip -it flags to podman/docker exec
-    exec_content = ['#!/bin/sh\nif [ "$1" = "--no-terminal" ]; then\n  term_flags=""\n  shift\n']
-    exec_content.append(f'else\n  term_flags="{term_flags}"\nfi\nexec ')
+    # the special argument "--no-terminal" will skip -it flags to podman/docker exec
+    # the special argument "--container-run-args" can be used to pass additional podman/docker args
+    exec_content = ['#!/bin/sh\nif [ "$1" = "--no-terminal" ]; then\n  term_flags=""\n  shift\n'
+                    f'else\n  term_flags="{term_flags}"\nfi\n'
+                    'if [ "$1" = "--container-run-args" ]; then\n  container_run_args="$2"\n'
+                    '  shift; shift\nfi\nexec ']
     # ensure to change working directory to same on as on host if possible using `run-in-dir`
-    populate_exec_cmdline(docker_cmd, conf.box_name, "", False, False, (), "`pwd`",
-                          exec_content, extra_flags=" $term_flags")
+    if extra_args:
+        extra_args = chain(extra_args, ("$container_run_args",))
+    else:
+        extra_args = ("$container_run_args",)
+    populate_exec_cmdline(docker_cmd, conf.box_name, "", False, False,
+                          extra_args, "`pwd`", exec_content, extra_flags=" $term_flags")
     # check if ambient capabilities have to be cleared
     if not keep_ambient_caps:
         exec_content.append("/usr/bin/setpriv --ambient-caps -all ")

@@ -9,8 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ybox.cmd import (delete_container_directory, parser_version_check,
-                      run_command)
+from ybox.cmd import (YboxLabel, delete_container_directory,
+                      parser_version_check, run_command)
 from ybox.config import StaticConfiguration
 from ybox.consts import Consts
 from ybox.env import Environ
@@ -150,23 +150,25 @@ def check_systemd_service_present(user_svc: str) -> str:
     :param user_svc: name the user systemd service file
     :return: full path of `systemctl` if installed and user systemd service is available else empty
     """
-    if (systemctl := shutil.which("systemctl", path=os.pathsep.join(Consts.sys_bin_dirs()))) and \
-            subprocess.run([systemctl, "--user", "--quiet", "list-unit-files", user_svc],
-                           check=False, capture_output=True).returncode == 0:
+    if (systemctl := shutil.which("systemctl", path=os.pathsep.join(Consts.sys_bin_dirs()))) \
+            and subprocess.run([systemctl, "--user", "--quiet", "list-unit-files", user_svc],
+                               check=False, capture_output=True).returncode == 0:
         return systemctl
     return ""
 
 
 def get_all_containers(docker_cmd: str, env: Environ, only_unlaunched: bool = False) -> set[str]:
     """
-    Get all the valid containers as known to the container manager.
+    Get all the valid ybox containers as known to the container manager including unlaunched ybox
+    containers that have been created.
 
     :param docker_cmd: the podman/docker executable to use
     :param env: an instance of the current :class:`Environ`
     :param only_unlaunched: if True then return only the containers that have not been launched yet
     :return: list of valid container names
     """
-    result = run_command([docker_cmd, "container", "ls", "--all", "--format={{ .Names }}"],
+    result = run_command([docker_cmd, "container", "ls", "--all", "--format={{ .Names }}",
+                         f"--filter=label={YboxLabel.CONTAINER_TYPE.value}"],
                          capture_output=True, exit_on_error=False, error_msg="listing containers")
     if isinstance(result, int):
         return set[str]()
