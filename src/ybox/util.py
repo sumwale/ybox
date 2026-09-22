@@ -233,7 +233,8 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
     :param docker_cmd: the podman/docker executable to use
     :param conf: the :class:`StaticConfiguration` for the container
     :param timeout: seconds to wait for container to start before exiting with failure code 1
-    :param for_stop: if True then wait for container to completely stop before returning
+    :param for_stop: if True then wait for container to stop cleanly before returning (i.e.
+                     the container's status file should have `stopped` as the last entry)
     """
     sys.stdout.flush()
     box_name = conf.box_name
@@ -247,8 +248,8 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
             """
             nonlocal status_line
             while line := status_fd.readline():
-                status_line = line
-                if status_line.strip() in ("started", "stopped"):
+                status_line = line.strip()
+                if status_line in ("started", "stopped"):
                     # clear the status file and return
                     truncate_file(conf.status_file)
                     return True
@@ -262,6 +263,10 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
                 if read_lines() and not for_stop:
                     return
             elif for_stop:
+                read_lines()
+                # break the loop and fail if the container was not stopped cleanly
+                if status_line != "stopped":  # pyright: ignore[reportUnnecessaryComparison]
+                    break
                 return
             else:
                 # wait for a while for the container to become active before failing
@@ -276,8 +281,13 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
             # using simple poll per second rather than inotify or similar because the
             # initialization can take a good amount of time and second granularity is enough
             time.sleep(1)
-        print_error(f"FAILED waiting for container to be ready with timeout={timeout}secs "
-                    f"(last status: {status_line}).\nCheck 'ybox-logs {box_name}' for details.")
+        if for_stop:
+            print_error(f"FAILED to stop the container cleanly within {timeout} seconds "
+                        f"(last status: {status_line}).")
+        else:
+            print_error(f"FAILED waiting for container to be ready within {timeout} seconds "
+                        f"(last status: {status_line}).")
+        print_error(f"Check 'ybox-logs {box_name}' for details.")
         sys.exit(1)
 
 
