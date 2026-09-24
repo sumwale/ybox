@@ -384,10 +384,10 @@ def populate_exec_cmdline(docker_cmd: str, box_name: str, escape_str: str, is_in
 
 def delete_container_directory(container_dir: str, env: Environ) -> None:
     """delete given directory which hosts a directory mounted in a container"""
-    if env.uses_podman:
-        if run_command([env.docker_cmd, "unshare", "/bin/rm", "-rf", container_dir],
-                       exit_on_error=False, error_msg="deleting container directory") == 0:
-            return
+    if env.uses_podman and \
+        run_command([env.docker_cmd, "unshare", "/bin/rm", "-rf", container_dir],
+                    exit_on_error=False, error_msg="deleting container directory") == 0:
+        return
     try:
         shutil.rmtree(container_dir)
     except OSError:
