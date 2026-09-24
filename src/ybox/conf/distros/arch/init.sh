@@ -45,13 +45,18 @@ if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/local
 fi
 
 # setup fastest mirrors and update the installation
-if [ -n "$CONFIGURE_FASTEST_MIRRORS" ] && ! pacman -Qq reflector 2>/dev/null >/dev/null; then
-  echo_color "$fg_cyan" "Installing reflector and searching for the fastest mirrors" >> $status_file
+if [ -n "$CONFIGURE_FASTEST_MIRRORS" ] && ! pacman -Qq rate-mirrors 2>/dev/null >/dev/null; then
+  mirror_tool=rate-mirrors
+  grep -q '^ID=cachyos' /etc/os-release && mirror_tool=cachyos-rate-mirrors
+  echo_color "$fg_cyan" "Installing $mirror_tool and searching for the fastest mirrors" >> $status_file
   $PAC -Syy
-  $PAC -S --needed reflector
-  sed -i 's/^--latest.*/--latest 30\n--number 5\n--threads 5/' /etc/xdg/reflector/reflector.conf
-  sed -i 's/^--sort.*/--sort rate/' /etc/xdg/reflector/reflector.conf
-  reflector @/etc/xdg/reflector/reflector.conf || true
+  $PAC -S --needed $mirror_tool
+  if [ "$mirror_tool" = "cachyos-rate-mirrors" ]; then
+    cachyos-rate-mirrors || /bin/true
+  else
+    /bin/cp -a /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist-backup || /bin/true
+    rate-mirrors --allow-root --protocol=https --save=/etc/pacman.d/mirrorlist arch || /bin/true
+  fi
 fi
 $PAC -Syu
 
