@@ -36,6 +36,14 @@ keywords = ["Linux in container", "toolbox", "distrobox"]
 Homepage = "https://github.com/sumwale/ybox"
 Issues = "https://github.com/sumwale/ybox/issues"
 
+[project.optional-dependencies]
+docs = [
+    "mkdocs>=1.6.0,<2.0.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.25.0",
+    "mkdocs-minify-plugin>=0.8.0",
+]
+
 [project.scripts]
 ybox-cmd = "ybox.run.cmd:main"
 ybox-control = "ybox.run.control:main"
@@ -48,6 +56,9 @@ ybox-pkg = "ybox.run.pkg:main"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "ybox.__version__" }

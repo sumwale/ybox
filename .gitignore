@@ -1,6 +1,10 @@
 **/__pycache__/
 dist/
 src/ybox.egg-info
+docs/index.md
+docs/license.md
+docs/privacy.md
+site/
 .python-version
 .tox
 .venv

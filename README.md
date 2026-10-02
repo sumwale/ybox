@@ -320,7 +320,8 @@ will list the active ybox containers
 ybox-ls -a
 ```
 
-will list all ybox containers including stopped ones
+will list all ybox containers including those that are stopped or have not been launched
+(i.e. stopped and removed)
 
 
 ### Destroy a container
@@ -404,6 +405,30 @@ You can check using `ybox-ls -a` and restart a stopped container as below:
 ybox-control start ybox-arch_apps
 ```
 
+However, it is usually not a good idea to just start a stopped container because
+the mount paths of some shared services like `XAUTHORITY`, `SSH_AUTH_SOCK` may
+have changed in the subsequent login. It is recommeded to remove the container with the
+`-R`/`--rm` option and launch it afresh using `ybox-launch` which adjusts the paths
+for such services automatically:
+
+```sh
+# this will stop and remove any existing container before launching it
+ybox-launch ybox-arch_apps --rm
+
+# if manually stopping later, then also remove the container
+ybox-control stop ybox-arch_apps --rm
+```
+
+Directories having system or user data in the container that include `/home`, `/usr`,
+`/etc`, `/var`, `/opt`, `/home` are always on a shared mount on the host system whether
+the box has `shared_root` enabled or not, so there is no loss of data on removing the
+container. Only ephermal data like `/tmp` is lost, but even that can be retained if
+really required (or any other directories that need persistence) by specifying a custom
+`distro.ini` (`-C`/`--distribution-config` option to `ybox-create`) having a custom
+`mount_root_dirs`. Copy the `distro.ini` file of your required distribution that is
+shipped with the project (in `conf/distro` subdirectory of the ybox module) and make
+the required changes.
+
 The `ybox-control` script also allows for other actions `stop`, `restart` and `status`
 for a ybox container. See the full set of options with `ybox-control -h/--help`.
 
@@ -412,7 +437,7 @@ for a ybox container. See the full set of options with `ybox-control -h/--help`.
 
 Containers can be auto-started as per the usual way for rootless podman/docker services.
 This is triggered by systemd on user login which is exactly what is required for ybox
-containers so that the container applications are available on login and are stopped on
+containers so that the container applications are available on login and are removed on
 session logout. All the tested Linux distributions support this and provide for user
 systemd daemon on user login.
 
@@ -431,11 +456,14 @@ systemctl --user start <SERVICE_NAME>   # start the service
 ```
 
 If your Linux distribution does not use systemd, then the autostart has to be handled
-manually as per the distribution's preferred way. For instance an appropriate desktop
-file can be added to `~/.config/autostart` directory to start a ybox container on
-graphical login, though performing a clean stop can be hard with this approach.
+as per the distribution's preferred way. By default, if creation of systemd service
+files has been skipped, then `.desktop` files are created in `~/.config/autostart`
+directory to start a ybox container on graphical login (which in turn can also be skipped
+  with the `-A`/`--no-autostart-file` option).
+
 Note that the preferred way to start/stop a ybox container is using the `ybox-control`
-command rather than directly using podman/docker.
+command rather than directly using podman/docker. If the systemd service has been created
+and the service is running, then use `systemctl` to manage the box as shown above.
 
 
 ## Development
