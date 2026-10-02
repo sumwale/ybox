@@ -1,0 +1,21 @@
+site_name: ybox
+site_url: https://sumwale.github.io/ybox
+site_description: Project documentation for ybox container manager
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+
+nav:
+  - Overview: index.md
+  - API Reference: api.md
+  - License: license.md
+  - Privacy Policy: privacy.md
