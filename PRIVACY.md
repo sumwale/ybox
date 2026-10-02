@@ -7,4 +7,5 @@ This project does not collect, store, process, or share any user data.
 
 ## Contact
 
-For questions, please open an issue in github issues section of the project.
+For questions, please open an issue in [github issues](https://github.com/sumwale/ybox/issues)
+section of the project.
