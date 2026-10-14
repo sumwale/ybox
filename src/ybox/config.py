@@ -20,7 +20,7 @@ class StaticConfiguration:
     def __init__(self, env: Environ, distribution: str, box_name: str):
         self._env = env
         # set up the additional environment variables
-        os.environ["YBOX_DISTRIBUTION_NAME"] = distribution
+        os.environ[Consts.container_distribution_envvar()] = distribution
         os.environ["YBOX_CONTAINER_NAME"] = box_name
         self._distribution = distribution
         self._box_name = box_name

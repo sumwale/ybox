@@ -6,13 +6,15 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from ybox.cmd import parser_version_check, run_command
+from ybox.config import StaticConfiguration
 from ybox.consts import Consts
+from ybox.dyn_token import DynamicToken
 from ybox.env import Environ
 from ybox.print import print_error, print_info
 from ybox.run.control import stop_container_impl, wait_for_container_stop
-from ybox.util import DynamicToken
 
 
 def main() -> None:
@@ -31,55 +33,69 @@ def main_argv(argv: list[str]) -> None:
     args = parse_args(argv)
     env = Environ()
     container_name = args.container
-    # read YBOX_CONTAINER_MANAGER from the env file and update in env if found
+    # distribution can be missing for boxes created using older releases but it is not used
+    # by DynamicToken, and older releases don't even have dynamic resolution for NVIDIA that
+    # uses StaticConfiguration object
+    distribution = "unknown"
+    # read YBOX_CONTAINER_MANAGER and YBOX_DISTRIBUTION_NAME from the env file and update in env
     container_env = f"{env.container_config_dir(container_name)}/{Consts.container_env_file()}"
     if os.path.exists(container_env):
         manager_prefix = f"{Consts.container_manager_envvar()}="
+        distribution_prefix = f"{Consts.container_distribution_envvar()}="
         with open(container_env, "r", encoding="utf-8") as env_fd:
             while env_line := env_fd.readline():
                 if env_line.startswith(manager_prefix):
                     env.set_docker_cmd(env_line[len(manager_prefix):].rstrip())
+                elif env_line.startswith(distribution_prefix):
+                    distribution = env_line[len(distribution_prefix):].rstrip()
 
+    conf = StaticConfiguration(env, distribution, container_name)
     if args.rm:
         stop_container_impl(env.docker_cmd, container_name, timeout=10, remove=True,
                             force_remove=False, ignore_stopped=True)
     print_info(f"Launching ybox container '{container_name}'")
-    launch_container(env, container_name)
+    launch_container(conf)
     if args.wait:
         # arguments are a superset of those for `ybox-control stop`, so can pass args as is
         wait_for_container_stop(env.docker_cmd, args)
 
 
-def launch_container(env: Environ, container_name: str) -> None:
+def launch_container(conf: StaticConfiguration) -> None:
     """
     Launches a ybox container using `podman`/`docker run` with the arguments and environment as
     defined in the container's configuration directory (~/.config/ybox/containers/<name>).
 
-    :param env: an instance of the current :class:`Environ`
-    :param container_name: name of the ybox container
+    :param conf: the :class:`StaticConfiguration` for the container
     """
-    container_config_dir = env.container_config_dir(container_name)
-    run_args_file = Path(container_config_dir, Consts.container_args_file())
+    run_args_file = Path(conf.container_config_dir, Consts.container_args_file())
     run_args_str = run_args_file.read_text(encoding="utf-8")
     # resolve dynamic args using the obsolete dynamic arguments file or in-place tokens
-    dyn_args_file = Path(container_config_dir, "args.dyn")
+    dyn_args_file = Path(conf.container_config_dir, "args.dyn")
     if dyn_args_file.exists():
         dyn_args_str = dyn_args_file.read_text(encoding="utf-8")
-        dyn_args = [DynamicToken[dyn_arg].value[0](env) for dyn_arg in dyn_args_str.splitlines()]
+        dyn_args: list[str] = []
+        for arg in dyn_args_str.splitlines():
+            if isinstance(dyn_arg := DynamicToken[arg].value[0](conf), str):
+                dyn_args.append(dyn_arg)
+            else:
+                dyn_args.extend(dyn_arg)
         run_args = run_args_str.format(*dyn_args).splitlines()
     else:
-        run_args = run_args_str.splitlines()
+        run_args: list[Any] = run_args_str.splitlines()
         # resolve the dynamic tokens of the form {<NAME>}
         for arg_idx, arg in enumerate(run_args):
             if arg[0] == "{" and arg[len(arg) - 1] == "}":
-                run_args[arg_idx] = DynamicToken[arg[1:len(arg) - 1]].value[0](env)
+                run_args[arg_idx] = DynamicToken[arg[1:len(arg) - 1]].value[0](conf)
 
-    docker_run = [env.docker_cmd, "run"]
+    docker_run = [conf.env.docker_cmd, "run"]
     for arg in run_args:
         if arg:
-            docker_run.append(arg)
+            if isinstance(arg, str):
+                docker_run.append(arg)
+            else:
+                docker_run.extend(arg)
     if (code := run_command(docker_run, exit_on_error=False)) != 0:
-        print_error(f"Also check 'ybox-logs {container_name}' for details")
+        print_error(f"Also check 'ybox-logs {conf.box_name}' for details")
         sys.exit(int(code))
 
 

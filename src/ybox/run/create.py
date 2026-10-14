@@ -27,6 +27,7 @@ from ybox.cmd import (PkgMgr, RepoCmd, YboxLabel, check_ybox_exists,
                       run_command)
 from ybox.config import StaticConfiguration
 from ybox.consts import Consts
+from ybox.dyn_token import DynamicToken
 from ybox.env import Environ, NotSupportedError, PathName
 from ybox.filelock import FileLock
 from ybox.pkg.inst import install_package, wrap_container_files
@@ -34,12 +35,12 @@ from ybox.print import (bgcolor, fgcolor, print_color, print_error, print_info,
                         print_notice, print_warn)
 from ybox.run.destroy import (get_all_containers, remove_orphans_from_db,
                               ybox_service_prefix)
-from ybox.run.graphics import (add_env_option, add_mount_option, enable_dri,
-                               enable_nvidia, enable_wayland, enable_x11)
+from ybox.run.graphics import (add_env_option, enable_dri, enable_wayland,
+                               enable_x11)
 from ybox.run.launch import launch_container
 from ybox.run.pkg import parse_args as pkg_parse_args
 from ybox.state import RuntimeConfiguration, YboxStateManagement
-from ybox.util import (DynamicToken, EnvInterpolation, config_reader,
+from ybox.util import (EnvInterpolation, add_mount_option, config_reader,
                        copy_ybox_scripts_to_container, ini_file_reader,
                        select_item_from_menu, truncate_file,
                        wait_for_ybox_container, write_ybox_version)
@@ -720,7 +721,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
     if nvidia_ctk:  # takes precedence over "nvidia" option
         docker_args.append("--device=nvidia.com/gpu=all")
     elif nvidia:
-        enable_nvidia(docker_args, conf)
+        docker_args.append(f"{{{DynamicToken.ENABLE_NVIDIA.name}}}")
     return shared_root, config_hardlinks
 
 
@@ -1425,7 +1426,7 @@ def run_container(docker_full_cmd: list[str], current_user: str, shared_root: st
     print_color(f"Generating configuration files in '{conf.container_config_dir}' used by "
                 "ybox-launch", fgcolor.cyan)
     create_container_configs(conf, docker_full_cmd, True)
-    launch_container(conf.env, conf.box_name)
+    launch_container(conf)
 
 
 def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[str],
@@ -1455,6 +1456,8 @@ def create_container_configs(conf: StaticConfiguration, docker_full_cmd: list[st
         SLEEP_SECS={sleep_secs}
         # set the container manager to the one configured during ybox-create
         {Consts.container_manager_envvar()}={docker_full_cmd[0]}
+        # set the distribution name
+        {Consts.container_distribution_envvar()}={conf.distribution}
     """
     os.makedirs(conf.container_config_dir, Consts.default_directory_mode(), exist_ok=True)
     with open(f"{conf.container_config_dir}/{Consts.container_env_file()}", "w",
