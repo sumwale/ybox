@@ -114,9 +114,9 @@ class YboxStateManagement:
     # (note that "includes" can be safely removed here since the provided configurations to state
     #  have already processed all the inclusions)
     _CONFIG_NORMALIZE_DEL_SECTIONS = ["mounts", "configs", "env", "apps", "app_flags", "startup"]
-    _CONFIG_NORMALIZE_DEL_BASE_KEYS = ["name", "includes", "home", "config_hardlinks",
-                                       "nvidia", "nvidia_ctk", "shm_size", "pids_limit",
-                                       "log_driver", "log_opts"]
+    _CONFIG_NORMALIZE_DEL_BASE_KEYS = ["name", "includes", "home", "config_hardlinks", "ssh_agent",
+                                       "gpg_agent", "nvidia", "nvidia_ctk", "webcam", "shm_size",
+                                       "pids_limit", "log_driver", "log_opts"]
 
     def __init__(self, env: Environ, connect_timeout: float = 30.0):
         """
