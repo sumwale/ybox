@@ -87,6 +87,12 @@ def launch_container(conf: StaticConfiguration) -> None:
             if arg[0] == "{" and arg[len(arg) - 1] == "}":
                 run_args[arg_idx] = DynamicToken[arg[1:len(arg) - 1]].value[0](conf)
 
+    # ensure that the shared TMPDIR exists (may not be used but it is not worth the effort to check)
+    tmpdir = conf.tmpdir()
+    if not os.path.exists(tmpdir):
+        os.makedirs(tmpdir, exist_ok=True)
+        os.chmod(tmpdir, 0o1777)
+
     docker_run = [conf.env.docker_cmd, "run"]
     for arg in run_args:
         if arg:

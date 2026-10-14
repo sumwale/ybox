@@ -95,6 +95,12 @@ class StaticConfiguration:
         """
         return f"{self._env.data_dir}/{self._box_name}/ROOT"
 
+    def tmpdir(self) -> str:
+        """path of the temporary dir on the host that is shared as TMPDIR with the container"""
+        # use /var/tmp rather than /tmp since latter is a tmpfs system in many setups that will not
+        # retain the created tmpdir after a reboot
+        return f"/var/tmp/ybox.{self._box_name}"
+
     @property
     def localtime(self) -> str | None:
         """the target link for /etc/localtime"""

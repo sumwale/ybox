@@ -989,9 +989,7 @@ def process_env_section(env_section: SectionProxy, conf: StaticConfiguration,
     # add a TMPDIR to share between host and container since some apps require TMPDIR to be
     # visible on the host (e.g. electron uses it to expose the app/tray icon available via dbus)
     if "TMPDIR" not in env_section:
-        # use /var/tmp rather than /tmp since latter is a tmpfs system in many setups that will not
-        # retain the created tmpdir after a reboot
-        tmpdir = f"/var/tmp/ybox.{conf.box_name}"
+        tmpdir = conf.tmpdir()
         os.makedirs(tmpdir, exist_ok=True)
         os.chmod(tmpdir, 0o1777)
         add_mount_option(docker_args, tmpdir, tmpdir)
