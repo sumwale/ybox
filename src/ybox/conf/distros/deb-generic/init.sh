@@ -35,41 +35,28 @@ if [[ -n "$LANG" && ! "$LANG" =~ ^C(\..+)?$ && "$LANG" != "POSIX" && ! "$LANG" =
   rm -f /etc/apt/apt.conf.d/docker-no-languages
 fi
 
-if grep -q '^ID=ubuntu' /etc/os-release; then
-  apt_fast_rel="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)"
-else
-  apt_fast_rel=focal # use focal for apt-fast install which works on all recent Debian releases
-  # enable contrib and non-free repositories for debian
-  if [ -f /etc/apt/sources.list.d/debian.sources ]; then
-    sed -i 's/^Components: main[ ]*$/Components: main contrib non-free non-free-firmware/' \
-        /etc/apt/sources.list.d/debian.sources
-  else
-    sed -i 's/ main[ ]*$/ main contrib non-free/' /etc/apt/sources.list
-  fi
-fi
-apt-get update
+echo_color "$fg_cyan" "Setting up upstream mozilla repo for firefox and thunderbird" >> $status_file
+install -d -m 0755 /etc/apt/keyrings
+wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O /etc/apt/keyrings/packages.mozilla.org.asc
+cat > /etc/apt/sources.list.d/mozilla.sources << EOF
+Types: deb
+URIs: https://packages.mozilla.org/apt
+Suites: mozilla thunderbird-deb
+Components: main
+Signed-By: /etc/apt/keyrings/packages.mozilla.org.asc
+EOF
+cat > /etc/apt/preferences.d/mozilla << EOF
+Package: *
+Pin: origin packages.mozilla.org
+Pin-Priority: 600
+EOF
 
-echo_color "$fg_cyan" "Setting up apt-fast" >> $status_file
-apt-get install --install-recommends -y curl gnupg lsb-release
-keyring_file=/etc/apt/keyrings/apt-fast.gpg
-rm -f $keyring_file
-echo -e "deb [signed-by=$keyring_file] http://ppa.launchpad.net/apt-fast/stable/ubuntu $apt_fast_rel main" \
-    > /etc/apt/sources.list.d/apt-fast.list
-mkdir -p /etc/apt/keyrings
-bash "$SCRIPT_DIR/fetch-gpg-key-id.sh" 0xBC5934FD3DEBD4DAEA544F791E2824A7F22B44BD \
-     "$DEFAULT_GPG_KEY_SERVER" $keyring_file
-
+echo_color "$fg_cyan" "Setting up nala" >> $status_file
 apt-get update
-apt-get install -y apt-fast
-# update couple of apt-fast defaults (both conf file and debconf selection need to be changed)
-sed -i 's/^_APTMGR=.*/_APTMGR=apt/' /etc/apt-fast.conf
-sed -i 's/^_MAXNUM=.*/_MAXNUM=6/' /etc/apt-fast.conf
-echo "apt-fast apt-fast/aptmanager select apt" | debconf-set-selections
-echo "apt-fast apt-fast/maxdownloads select 6" | debconf-set-selections
+apt-get install --install-recommends -y curl gnupg lsb-release nala
 
 echo_color "$fg_cyan" "Upgrading all packages" >> $status_file
-export DOWNLOADBEFORE=true
-apt-fast full-upgrade -y --autoremove
+nala upgrade --full --purge -y
 
 # skip unminimize if not installing any recommended packages which should happen only in testing
 if [ -n "$RECOMMENDED_PKGS" ]; then
@@ -80,7 +67,6 @@ if [ -n "$RECOMMENDED_PKGS" ]; then
   unminimize_path="$(type -p unminimize 2>/dev/null || true)"
   if [ -n "$unminimize_path" ]; then
     echo_color "$fg_cyan" "Running unminimize" >> $status_file
-    sed -i 's/apt-get/apt-fast/g' "$unminimize_path"
     yes | "$unminimize_path"
     apt-get remove --purge -y unminimize 2>/dev/null || true
   fi
@@ -88,11 +74,11 @@ fi
 
 # packages can be marked as manually installed in the base image, so mark most of them as auto
 apt-mark auto $(apt-mark showinstall) >/dev/null
-apt-mark manual procps sudo curl gnupg lsb-release apt-fast
+apt-mark manual procps sudo curl gnupg lsb-release nala wget
 
 # generate the configured locale and assume it is UTF-8
 echo_color "$fg_cyan" "Configuring locale" >> $status_file
-apt-fast install -y locales
+nala install --no-update --no-autoremove -y locales
 if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/locale.gen; then
   echo "$LANG UTF-8" >> /etc/locale.gen
   # always add en_US.UTF-8 regardless since some apps seem to depend on it
@@ -111,10 +97,10 @@ if [ -n "$LANG" -a "$LANG" != "C.UTF-8" ] && ! grep -q "^$LANG UTF-8" /etc/local
 fi
 
 echo_color "$fg_cyan" "Installing base set of packages" >> $status_file
-apt-fast install -y $REQUIRED_PKGS $RECOMMENDED_PKGS $SUGGESTED_PKGS \
-                    $REQUIRED_DEPS $RECOMMENDED_DEPS $SUGGESTED_DEPS
+nala install --no-update -y $REQUIRED_PKGS $RECOMMENDED_PKGS $SUGGESTED_PKGS \
+                            $REQUIRED_DEPS $RECOMMENDED_DEPS $SUGGESTED_DEPS
 apt-mark auto $REQUIRED_DEPS $RECOMMENDED_DEPS $SUGGESTED_DEPS
-apt-fast clean
+nala autopurge
 apt clean
 
 # common environment variables

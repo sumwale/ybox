@@ -293,6 +293,9 @@ def add_update(subparser: argparse.ArgumentParser) -> None:
 
     :param subparser: the :class:`argparse.ArgumentParser` object for the sub-command
     """
+    subparser.add_argument("-k", "--keep-config-files", action="store_true",
+                           help="keep system configuration and/or data files of packages that may "
+                                "get removed due to update")
     subparser.add_argument("packages", nargs="*",
                            help="the packages to update if provided, else update the entire "
                                 "installation of the container (which will end up updating all "

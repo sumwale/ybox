@@ -313,6 +313,10 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
             # initialization can take a good amount of time and second granularity is enough
             time.sleep(1)
         if for_stop:
+            time.sleep(1)
+            read_lines()
+            if status_line == "stopped":  # pyright: ignore[reportUnnecessaryComparison]
+                return
             print_error(f"FAILED to stop the container cleanly within {timeout} seconds "
                         f"(last status: {status_line}).")
         else:
