@@ -687,7 +687,7 @@ def process_base_section(base_section: SectionProxy, profile: PathName, conf: St
             case "nvidia_ctk":
                 nvidia_ctk = _get_boolean(val)
             case "webcam":
-                if val:
+                if _get_boolean(val):
                     docker_args.append(f"{{{DynamicToken.ENABLE_V4L.name}}}")
             case "shm_size":
                 if val:
