@@ -10,10 +10,9 @@ import sys
 import time
 from configparser import BasicInterpolation, ConfigParser, Interpolation
 from dataclasses import dataclass, field
-from enum import Enum
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 from simple_term_menu import TerminalMenu  # type: ignore
 from tabulate import tabulate
@@ -138,6 +137,38 @@ def ini_file_reader(fd: Iterable[str], interpolation: Interpolation | None,
         config.optionxform = str  # type: ignore
     config.read_file(fd)
     return config
+
+
+def add_env_option(docker_args: list[str], env_var: str, env_val: str | None = None) -> None:
+    """
+    Add option to the list of podman/docker arguments to set an environment variable.
+
+    :param docker_args: list of podman/docker arguments to which required option has to be appended
+    :param env_var: the environment variable to be set
+    :param env_val: the value of the environment variable, defaults to None which implies that
+                    its value will be set to be the same as in the host environment
+    """
+    if env_val is None:
+        docker_args.append(f"-e={env_var}")
+    else:
+        docker_args.append(f"-e={env_var}={env_val}")
+
+
+def add_mount_option(docker_args: list[str], src: str, dest: str, flags: str = "",
+                     check_exists: bool = False) -> None:
+    """
+    Add option to the list of podman/docker arguments to bind mount a source directory to
+    given destination directory.
+
+    :param docker_args: list of podman/docker arguments to which required option has to be appended
+    :param src: the source directory in the host system
+    :param dest: the destination directory in the container
+    :param flags: any additional flags to be passed to `-v` podman/docker argument, defaults to ""
+    :param check_exists: check if the bind mount was already added (and skip if so)
+    """
+    mount_arg = f"-v={src}:{dest}:{flags}" if flags else f"-v={src}:{dest}"
+    if not check_exists or mount_arg not in docker_args:
+        docker_args.append(mount_arg)
 
 
 def copy_file(src: PathName, dest: str, permissions: int | None = None) -> None:
@@ -282,6 +313,10 @@ def wait_for_ybox_container(docker_cmd: str, conf: StaticConfiguration, timeout:
             # initialization can take a good amount of time and second granularity is enough
             time.sleep(1)
         if for_stop:
+            time.sleep(1)
+            read_lines()
+            if status_line == "stopped":  # pyright: ignore[reportUnnecessaryComparison]
+                return
             print_error(f"FAILED to stop the container cleanly within {timeout} seconds "
                         f"(last status: {status_line}).")
         else:
@@ -368,54 +403,3 @@ class FormatTable:
         headers = [f"{c}{h}{fg.reset}" for h, c in zip(self.headers, self.colors)]
         return tabulate(table, headers, tablefmt=self.fmt, disable_numparse=True,
                         maxcolwidths=self.max_col_widths)
-
-
-class DynamicToken(Enum):
-    """
-    Holds the allowed 'tokens' in the container launch arguments file that are resolved at runtime.
-    The value of each 'token' is a zero-argument function to be invoked to obtain the corresponding
-    podman/docker argument.
-    """
-    @staticmethod
-    def _resolve_dbus_mount(env: Environ) -> str:
-        # pylint: disable=unused-argument
-        """return the podman/docker argument to mount the socket of user's session D-Bus"""
-        if dbus_session := os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
-            dbus_path = dbus_session[dbus_session.find("=") + 1:]
-            if (dbus_opts_idx := dbus_path.find(",")) != -1:
-                dbus_path = dbus_path[:dbus_opts_idx]
-            return f"-v={dbus_path}:{dbus_path}"
-        return ""
-
-    @staticmethod
-    def _resolve_wayland_mount(env: Environ, file_ext: str = "") -> str:
-        """return the podman/docker argument to mount the Wayland socket or lock file"""
-        if (wayland_display := os.environ.get("WAYLAND_DISPLAY")) and os.path.exists(
-                wayland_file := f"{env.xdg_rt_dir}/{wayland_display}{file_ext}"):
-            wayland_target_file = f"{env.target_xdg_rt_dir}/{wayland_display}{file_ext}"
-            return f"-v={wayland_file}:{wayland_target_file}"
-        return ""
-
-    @staticmethod
-    def _resolve_any_mount(name: str, env: Environ) -> str:
-        # pylint: disable=unused-argument
-        """return the podman/docker argument to mount a path in the given environment variable"""
-        if mount_path := os.environ.get(name):
-            return f"-v={mount_path}:{mount_path}"
-        return ""
-
-    _XAUTH_MOUNT_FN: Callable[[Environ], str] = lambda env: DynamicToken._resolve_any_mount(
-        "XAUTHORITY", env)
-    _WAYLAND_LOCK_FN: Callable[[Environ], str] = lambda env: DynamicToken._resolve_wayland_mount(
-        env, ".lock")
-    _SSH_MOUNT_FN: Callable[[Environ], str] = lambda env: DynamicToken._resolve_any_mount(
-        "SSH_AUTH_SOCK", env)
-    _GPG_MOUNT_FN: Callable[[Environ], str] = lambda env: DynamicToken._resolve_any_mount(
-        "GPG_AGENT_INFO", env)
-
-    DBUS_MOUNT = (_resolve_dbus_mount,)
-    XAUTHORITY_MOUNT = (_XAUTH_MOUNT_FN,)
-    WAYLAND_MOUNT = (_resolve_wayland_mount,)
-    WAYLAND_LOCK = (_WAYLAND_LOCK_FN,)
-    SSH_SOCK_MOUNT = (_SSH_MOUNT_FN,)
-    GPG_AGENT_MOUNT = (_GPG_MOUNT_FN,)

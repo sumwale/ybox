@@ -137,6 +137,11 @@ class Consts:
         return "YBOX_CONTAINER_MANAGER"
 
     @staticmethod
+    def container_distribution_envvar() -> str:
+        """environment variable set to the distribution of the current container"""
+        return "YBOX_DISTRIBUTION_NAME"
+
+    @staticmethod
     def containers_config_dir() -> str:
         """base directory name having all the container specific configuration directories"""
         return "containers"

@@ -20,7 +20,7 @@ class StaticConfiguration:
     def __init__(self, env: Environ, distribution: str, box_name: str):
         self._env = env
         # set up the additional environment variables
-        os.environ["YBOX_DISTRIBUTION_NAME"] = distribution
+        os.environ[Consts.container_distribution_envvar()] = distribution
         os.environ["YBOX_CONTAINER_NAME"] = box_name
         self._distribution = distribution
         self._box_name = box_name
@@ -94,6 +94,12 @@ class StaticConfiguration:
         case when `shared_root` is not set (i.e. a unique directory is used for the container).
         """
         return f"{self._env.data_dir}/{self._box_name}/ROOT"
+
+    def tmpdir(self) -> str:
+        """path of the temporary dir on the host that is shared as TMPDIR with the container"""
+        # use /var/tmp rather than /tmp since latter is a tmpfs system in many setups that will not
+        # retain the created tmpdir after a reboot
+        return f"/var/tmp/ybox.{self._box_name}"
 
     @property
     def localtime(self) -> str | None:

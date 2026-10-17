@@ -39,14 +39,15 @@ def update_packages(args: argparse.Namespace, pkgmgr: SectionProxy, docker_cmd: 
     :return: integer exit status of update command where 0 represents success
     """
     quiet_flag = pkgmgr[PkgMgr.QUIET_FLAG.value] if args.quiet else ""
+    purge_flag = "" if args.keep_config_files else pkgmgr[PkgMgr.PURGE_FLAG.value]
     packages: list[str] = args.packages
     if packages:
         update_meta_cmd = pkgmgr[PkgMgr.UPDATE_META.value]
-        update_pkgs_cmd = pkgmgr[PkgMgr.UPDATE.value].format(quiet=quiet_flag,
+        update_pkgs_cmd = pkgmgr[PkgMgr.UPDATE.value].format(quiet=quiet_flag, purge=purge_flag,
                                                              packages=' '.join(packages))
         update_cmd = f"{{ {update_meta_cmd}; }} && {{ {update_pkgs_cmd}; }}"
     else:
-        update_cmd = pkgmgr[PkgMgr.UPDATE_ALL.value].format(quiet=quiet_flag)
+        update_cmd = pkgmgr[PkgMgr.UPDATE_ALL.value].format(quiet=quiet_flag, purge=purge_flag)
     if shared_containers := state.get_other_shared_containers(conf.box_name,
                                                               runtime_conf.shared_root):
         # show all the containers sharing the same shared root

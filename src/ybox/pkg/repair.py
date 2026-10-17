@@ -12,6 +12,7 @@ from ybox.cmd import (PkgMgr, build_shell_command, check_active_ybox,
 from ybox.config import StaticConfiguration
 from ybox.print import (fgcolor, print_color, print_error, print_info,
                         print_warn)
+from ybox.run.destroy import check_systemd_service_present, ybox_service_prefix
 from ybox.state import RuntimeConfiguration, YboxStateManagement
 
 # TODO: SW: repair should work even if no containers are active (just remove the locks)
@@ -65,11 +66,19 @@ def repair_package_state(args: argparse.Namespace, pkgmgr: SectionProxy, docker_
     if resp.strip().lower() == "y":
         for container in containers:
             print_color(f"Restarting ybox container '{container}'", fg=fgcolor.cyan)
-            if run_command([docker_cmd, "container", "stop", container],
-                           exit_on_error=False, error_msg="container stop") == 0:
-                time.sleep(2)
-                run_command([docker_cmd, "container", "start", container],
-                            exit_on_error=False, error_msg="container start")
+            # restart systemd service, if present, else do a container stop and start
+            ybox_svc = f"{ybox_service_prefix(container)}.service"
+            systemctl = check_systemd_service_present(ybox_svc)
+            if systemctl:
+                print_color(f"Restarting ybox service '{ybox_svc}'", fg=fgcolor.cyan)
+                run_command([systemctl, "--user", "restart", ybox_svc],
+                            exit_on_error=False, error_msg=f"restarting service '{ybox_svc}'")
+            else:
+                if run_command([docker_cmd, "container", "stop", container],
+                               exit_on_error=False, error_msg="container stop") == 0:
+                    time.sleep(2)
+                    run_command([docker_cmd, "container", "start", container],
+                                exit_on_error=False, error_msg="container start")
     return 0
 
 
